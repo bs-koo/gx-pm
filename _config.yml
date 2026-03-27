@@ -1,0 +1,11 @@
+title: gx-pm
+description: 공공/SI PM의 AI 운영 체제 — 요구사항 분석부터 감리 대응까지
+remote_theme: pages-themes/cayman@v0.2.0
+plugins:
+  - jekyll-remote-theme
+exclude:
+  - skills
+  - commands
+  - templates
+  - .claude-plugin
+  - "*.json"

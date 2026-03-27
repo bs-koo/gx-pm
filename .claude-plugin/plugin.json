@@ -1,0 +1,24 @@
+{
+  "name": "gx-pm",
+  "description": "공공/SI PM의 AI 운영 체제 — 요구사항 분석부터 테스트 계획, ID 추적, 감리 대응까지. 18개 스킬과 8개 워크플로우로 프로젝트 산출물 작성을 자동화합니다.",
+  "version": "1.0.0",
+  "author": {
+    "name": "SQI"
+  },
+  "homepage": "https://github.com/SQI/gx-pm",
+  "repository": "https://github.com/SQI/gx-pm",
+  "keywords": [
+    "product-manager",
+    "public-sector",
+    "SI",
+    "korean",
+    "requirements",
+    "traceability",
+    "test-plan",
+    "audit",
+    "ERDCloud",
+    "cowork-plugin"
+  ],
+  "skills": "./skills/",
+  "commands": "./commands/"
+}
