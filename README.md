@@ -34,6 +34,16 @@ RFP를 넣으면 요구사항을 뽑아주고, 화면목록표와 프로그램�
 
 ## 설치
 
+### Claude Desktop 앱 (Code 탭)
+
+1. 좌하단 **사용자 지정** 클릭
+2. **개인 플러그인** 옆 **`+`** 버튼 → **플러그인 탐색**
+3. 상단 **개인** 탭 → **`+`** 버튼 → URL에 `bs-koo/gx-pm` 입력 → **추가**
+4. **gx-pm** 탭 선택 → **설치**
+5. 프로젝트에서 `/요구사항정의서` 등 슬래시 커맨드로 사용
+
+### Claude Code CLI
+
 ```bash
 # Claude Code CLI에서 실행
 /plugin marketplace add bs-koo/gx-pm
