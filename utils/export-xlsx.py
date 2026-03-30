@@ -5,7 +5,6 @@ gx-pm 산출물 마크다운 표 → xlsx 변환 유틸리티
 Usage:
     python export-xlsx.py <input.md> [--output output.xlsx]
     python export-xlsx.py --dir <폴더> [--output output.xlsx]
-    python export-xlsx.py --all [--output output.xlsx]
 
 Examples:
     python export-xlsx.py ACT-요구사항정의서.md
@@ -192,6 +191,55 @@ def _header_key(rows: list[list[str]]) -> str:
     return "|".join(h.strip() for h in rows[0])
 
 
+def _reorder_columns(
+    rows: list[list[str]], doc_type: str | None
+) -> list[list[str]]:
+    """DOCUMENT_PROFILES에 정의된 공공 양식 컬럼 순서로 재배열한다.
+
+    프로필에 정의된 컬럼이 마크다운 헤더에 존재하면 해당 순서로 재배열하고,
+    프로필에 없는 추가 컬럼은 뒤에 붙인다.
+    매칭되는 컬럼이 절반 미만이면 재배열하지 않고 원본을 반환한다.
+    """
+    if not doc_type or doc_type not in DOCUMENT_PROFILES or not rows:
+        return rows
+
+    target_columns = DOCUMENT_PROFILES[doc_type]["columns"]
+    header = [h.strip() for h in rows[0]]
+
+    # 마크다운 헤더 → 인덱스 매핑
+    header_index: dict[str, int] = {}
+    for idx, col in enumerate(header):
+        header_index[col] = idx
+
+    # 타겟 컬럼 순서로 인덱스 배열 구성
+    ordered_indices: list[int] = []
+    matched = 0
+    for col in target_columns:
+        if col in header_index:
+            ordered_indices.append(header_index[col])
+            matched += 1
+
+    # 매칭률이 절반 미만이면 재배열 의미 없음 — 원본 반환
+    if matched < len(target_columns) / 2:
+        return rows
+
+    # 프로필에 없는 추가 컬럼을 뒤에 붙인다
+    used = set(ordered_indices)
+    for idx in range(len(header)):
+        if idx not in used:
+            ordered_indices.append(idx)
+
+    # 모든 행에 재배열 적용
+    reordered: list[list[str]] = []
+    for row in rows:
+        new_row = []
+        for idx in ordered_indices:
+            new_row.append(row[idx] if idx < len(row) else "")
+        reordered.append(new_row)
+
+    return reordered
+
+
 def create_xlsx(
     file_tables: list[tuple[str, list[tuple[str, list[str]]]]],
     output_path: str,
@@ -245,8 +293,9 @@ def create_xlsx(
                 # 헤더(첫 행) 제외하고 데이터만 추가
                 merged[key].extend(rows[1:])
 
-        # ── 2단계: 시트 생성 ──
+        # ── 2단계: 컬럼 재배열 + 시트 생성 ──
         for key, rows in merged.items():
+            rows = _reorder_columns(rows, doc_type)
             title = merged_titles[key]
 
             # 시트 이름 결정
