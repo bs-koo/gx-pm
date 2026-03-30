@@ -38,13 +38,13 @@ RFP를 넣으면 요구사항을 뽑아주고, 화면목록표와 프로그램�
 
 ```
 Customize (좌하단) → Browse plugins → Personal → +
-→ "Add marketplace from GitHub" → SQI/gx-pm
+→ "Add marketplace from GitHub" → bs-koo/gx-pm
 ```
 
 ### Claude Code CLI
 
 ```bash
-claude plugin marketplace add SQI/gx-pm
+claude plugin marketplace add bs-koo/gx-pm
 claude plugin install gx-pm@gx-pm
 ```
 
