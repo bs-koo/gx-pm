@@ -360,7 +360,7 @@ def create_xlsx(
         ws.cell(row=1, column=1, value="표 데이터가 없습니다")
 
     wb.save(output_path)
-    return output_path
+    return output_path, len(wb.sheetnames)
 
 
 # ──────────────────────────────────────
@@ -417,8 +417,8 @@ def main():
         text = sys.stdin.read()
         tables = parse_markdown_tables(text)
         out = args.output or "output.xlsx"
-        result = create_xlsx([("stdin", tables)], out)
-        print(f"✅ 생성 완료: {result}")
+        result, total_sheets = create_xlsx([("stdin", tables)], out)
+        print(f"✅ 생성 완료: {result} ({total_sheets}개 시트)")
         return
 
     if not md_files:
@@ -432,8 +432,8 @@ def main():
             tables = parse_markdown_tables(text)
             out = md_file.with_suffix(".xlsx")
             if tables:
-                result = create_xlsx([(md_file.name, tables)], str(out))
-                print(f"✅ {md_file.name} → {result}")
+                result, total_sheets = create_xlsx([(md_file.name, tables)], str(out))
+                print(f"✅ {md_file.name} → {result} ({total_sheets}개 시트)")
             else:
                 print(f"⚠ {md_file.name}: 표가 없어 건너뜁니다")
     else:
@@ -458,12 +458,7 @@ def main():
             prefix = prefix_match.group(1) if prefix_match else "output"
             out = f"{prefix}-산출물.xlsx"
 
-        result = create_xlsx(all_tables, out)
-        # 실제 생성된 시트 수를 파일에서 확인
-        _xl = ensure_openpyxl()
-        _wb = _xl.load_workbook(out)
-        total_sheets = len(_wb.sheetnames)
-        _wb.close()
+        result, total_sheets = create_xlsx(all_tables, out)
         print(f"✅ 생성 완료: {result} ({total_sheets}개 시트)")
 
 
