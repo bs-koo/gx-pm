@@ -34,22 +34,10 @@ RFP를 넣으면 요구사항을 뽑아주고, 화면목록표와 프로그램�
 
 ## 설치
 
-### Claude Desktop 앱 (Cowork / Code 탭)
-
-1. 좌하단 **Customize** 클릭
-2. **플러그인 탐색** → 개인 탭 → **`+`** 버튼
-3. URL에 `bs-koo/gx-pm` 입력 → 추가
-4. gx-pm 탭에서 **설치** 클릭
-
-### Claude Code CLI
-
 ```bash
-# 프롬프트 안에서
-/install-plugin bs-koo/gx-pm
-
-# 또는 터미널에서
-claude plugin marketplace add bs-koo/gx-pm
-claude plugin install gx-pm@gx-pm
+# Claude Code CLI에서 실행
+/plugin marketplace add bs-koo/gx-pm
+/plugin install gx-pm@gx-pm
 ```
 
 ---
