@@ -6,9 +6,9 @@
 
 요구사항 분석부터 테스트 계획, ID 추적, 감리 대응까지
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)]()
-[![Skills](https://img.shields.io/badge/skills-18-green.svg)]()
-[![Commands](https://img.shields.io/badge/commands-8-orange.svg)]()
+[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)]()
+[![Skills](https://img.shields.io/badge/skills-17-green.svg)]()
+[![Commands](https://img.shields.io/badge/commands-10-orange.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 </div>
@@ -17,7 +17,7 @@
 
 ## 이게 뭔가요?
 
-`gx-pm`은 **공공/SI 프로젝트의 PM**을 위한 Claude Cowork 플러그인입니다.
+`gx-pm`은 **공공/SI 프로젝트의 PM**을 위한 Claude Code 플러그인입니다.
 
 RFP를 넣으면 요구사항을 뽑아주고, 화면목록표와 프로그램정의서를 만들어주고, ERDCloud DDL에서 테이블정의서를 변환해주고, 테스트 계획서를 자동 생성하고, 산출물 간 ID가 끊기지 않았는지 추적합니다. 감리가 오면 지적사항 대응 문서까지 만들어줍니다.
 
@@ -34,7 +34,7 @@ RFP를 넣으면 요구사항을 뽑아주고, 화면목록표와 프로그램�
 
 ## 설치
 
-### Claude Cowork (데스크톱)
+### Claude Desktop (Code 탭)
 
 ```
 Customize (좌하단) → Browse plugins → Personal → +
@@ -52,18 +52,55 @@ claude plugin install gx-pm@gx-pm
 
 ## 사용법
 
-PM이 `/pm-` 까지 입력하면 8개 커맨드가 자동완성됩니다.
+**커맨드 이름 = 산출물 이름**입니다. 만들고 싶은 산출물을 그대로 입력하면 됩니다.
 
-| 이렇게 말하면 | 실행되는 커맨드 | 결과물 |
-|--------------|---------------|--------|
-| "RFP에서 요구사항 뽑아줘" | `/pm-analyze` | AN-02 요구사항정의서 |
-| "화면목록 만들어줘" | `/pm-design` | DE-03 화면목록표 + DE-05 프로그램정의서 |
-| "DDL로 테이블정의서 만들어줘" | `/pm-table` | DE-08 테이블정의서 |
-| "테스트 계획서 만들어줘" | `/pm-test` | DE-13 단위테스트계획서 + DE-14 통합테스트시나리오 |
-| "추적매트릭스 확인해줘" | `/pm-trace` | AN-05 추적매트릭스 + 누락 리포트 |
-| "감리 지적사항 대응해줘" | `/pm-audit` | 감리 대응 문서 + 증빙 체크리스트 |
-| "테스트 결과 기입해줘" | `/pm-result` | IM-03 / TE-02 / TE-06 결과서 |
-| "회의록 정리해줘" | `/pm-report` | 회의록 / 주간보고서 |
+| 이렇게 말하면 | 커맨드 | 결과물 |
+|--------------|--------|--------|
+| "요구사항 뽑아줘" | `/요구사항정의서` | AN-02 요구사항정의서 |
+| "화면 설계해줘" | `/화면목록표` | DE-03 화면목록표 |
+| "프로그램 구조 잡아줘" | `/프로그램정의서` | DE-05 프로그램정의서 |
+| "외부 연동 정의해줘" | `/인터페이스정의서` | 인터페이스정의서 |
+| "DDL로 테이블정의서 만들어줘" | `/테이블정의서` | DE-08 테이블정의서 |
+| "단위테스트 계획 세워줘" | `/단위테스트계획서` | DE-13 단위테스트계획서 |
+| "통합테스트 시나리오 만들어줘" | `/통합테스트시나리오` | DE-14 통합테스트시나리오 |
+| "추적매트릭스 확인해줘" | `/추적매트릭스` | AN-05 추적매트릭스 |
+| "감리 지적사항 대응해줘" | `/감리대응` | 감리 대응 문서 + 증빙 체크리스트 |
+| "테스트 결과 기입해줘" | `/테스트결과서` | IM-03 / TE-02 / TE-06 결과서 |
+
+---
+
+## 핵심 기능
+
+### 1. 단계별 승인 루프
+
+모든 커맨드는 산출물을 한 번에 생성하지 않습니다. **각 단계마다 사용자 확인을 받고, 수정 요청이 있으면 반영한 뒤 다시 확인**합니다.
+
+```
+[산출물 생성] → [결과 표시] → 승인? → No → [수정 반영] → [다시 표시] → 승인? → ...
+                                   → Yes → [다음 단계]
+```
+
+### 2. 시안/대안 자동 감지
+
+요구사항에 "1안/2안", "A안/B안" 등 복수 시안이 있으면 **자동 감지하여 사용자에게 선택을 요청**합니다. 선택 전에는 산출물 생성을 시작하지 않습니다.
+
+```
+⚠ 시안 선택이 필요합니다
+
+  1안: 이중 슬라이더 단일 화면 → 화면 5개 예상
+  2안: 쾌적성/온도 별도 메뉴 → 화면 8개 예상
+
+→ 어떤 시안으로 진행할까요? (1/2/병행)
+```
+
+### 3. xlsx 추출
+
+승인된 산출물은 **공공 양식 컬럼 순서에 맞춘 xlsx로 즉시 추출**할 수 있습니다. 실제 산출물 엑셀에 바로 복사-붙여넣기가 가능합니다.
+
+```bash
+# CLI에서 직접 사용할 수도 있습니다
+python utils/export-xlsx.py --dir 결과물/ --output 산출물.xlsx
+```
 
 ---
 
@@ -73,23 +110,29 @@ PM이 `/pm-` 까지 입력하면 8개 커맨드가 자동완성됩니다.
  프로젝트 착수                    개발/시험 중                   감리/변경
  ──────────                    ──────────                   ──────────
 
- /pm-analyze                   /pm-report 회의록             /pm-audit
-   → 요구사항정의서                → 구조화된 회의록              → 대응 문서
-       ↓                                                        ↓
- /pm-design                    /pm-report 주간보고            /pm-trace
-   → 화면목록표                    → 주간보고서                  → 추적매트릭스 갱신
-   → 프로그램정의서                    ↓
-       ↓                       /pm-result
- /pm-table                       → 단위테스트결과서
-   → 테이블정의서 ←→ ERDCloud      → 통합테스트결과서
-       ↓                          → 인수테스트결과서
- /pm-test
-   → 단위테스트계획서
-   → 통합테스트시나리오
+ /요구사항정의서                  /테스트결과서                  /감리대응
+   → AN-02                       → IM-03 단위결과서            → 대응 문서
+       ↓                          → TE-02 통합결과서            → 증빙 체크리스트
+ /화면목록표                      → TE-06 인수결과서                ↓
+   → DE-03                                                  /추적매트릭스
+       ↓                                                      → 매트릭스 갱신
+ /프로그램정의서
+   → DE-05
        ↓
- /pm-trace
-   → 요구사항추적매트릭스
-   → 누락 탐지 리포트
+ /인터페이스정의서
+   → 인터페이스 정의
+       ↓
+ /테이블정의서
+   → DE-08 ←→ ERDCloud
+       ↓
+ /단위테스트계획서
+   → DE-13
+       ↓
+ /통합테스트시나리오
+   → DE-14
+       ↓
+ /추적매트릭스
+   → AN-05 + 누락 탐지
 ```
 
 ---
@@ -107,7 +150,7 @@ PM이 `/pm-` 까지 입력하면 8개 커맨드가 자동완성됩니다.
                       └→ 통합테스트ID  (B-TE-001)
 ```
 
-`/pm-trace`로 언제든 추적 상태를 확인할 수 있습니다:
+`/추적매트릭스`로 언제든 추적 상태를 확인할 수 있습니다:
 
 ```
 ┌─ 제안요청: SFR-027
@@ -126,13 +169,14 @@ PM이 `/pm-` 까지 입력하면 8개 커맨드가 자동완성됩니다.
 
 ## 스킬 상세
 
-### 분석 (3개)
+### 분석 (4개)
 
 | 스킬 | 설명 |
 |------|------|
 | `extract-requirements` | RFP/과업지시서에서 요구사항 추출. ID 자동 부여, 수용여부 초안 |
-| `classify-requirements` | 기능/비기능 분류 + 대/중/소분류 + 공공/SI 5단계 우선순위 |
-| `trace-requirements` | AN-05 추적매트릭스 생성/갱신. 4가지 누락 유형 탐지 |
+| `classify-requirements` | 기능/비기능 분류 + 대/중/소분류 |
+| `trace-requirements` | AN-05 추적매트릭스 생성/갱신. 누락 유형 탐지 |
+| `detect-alternatives` | 시안/대안 자동 감지. 1안/2안, A안/B안 등 패턴 스캔 |
 
 ### 설계 (5개)
 
@@ -141,8 +185,8 @@ PM이 `/pm-` 까지 입력하면 8개 커맨드가 자동완성됩니다.
 | `generate-screen-list` | 요구사항 → DE-03 화면목록표. 화면 유형 추론, ID 자동 부여 |
 | `generate-program-list` | 화면목록 → DE-05 프로그램정의서. eGovFrame/Spring Boot 소스 구조 매핑 |
 | `convert-ddl-to-tablespec` | ERDCloud DDL → DE-08 테이블정의서. 한글 속성명 자동 추론 |
-| `generate-erd-guide` | 요구사항 → ERD 설계 가이드 + DDL 생성. Oracle/PG/MySQL 지원 |
-| `generate-interface-spec` | 외부 연동 식별 → DE-04 인터페이스정의서. REST/SOAP/DB Link/파일/SSO |
+| `generate-erd-guide` | 요구사항 → ERD 설계 가이드 + DDL 생성 |
+| `generate-interface-spec` | 외부 연동 식별 → 인터페이스정의서. REST/SOAP/파일/SSO |
 
 ### 테스트 (4개)
 
@@ -153,21 +197,14 @@ PM이 `/pm-` 까지 입력하면 8개 커맨드가 자동완성됩니다.
 | `fill-unit-test-result` | 계획서 → IM-03 결과서. 3가지 입력 모드, 적합률 자동 산출 |
 | `fill-integration-test-result` | 계획서 → TE-02/TE-06 결과서. 부적합 조치 워크플로우 |
 
-### 보고 (3개)
-
-| 스킬 | 설명 |
-|------|------|
-| `meeting-notes` | 회의록 구조화. 발주처 지시사항/협의사항 자동 추출 |
-| `weekly-report` | 주간보고서. 단계별 진척률, 감리 대응 현황 포함 |
-| `audit-response` | 감리 지적 5가지 유형 분류 → 조치계획 → 증빙 체크리스트 |
-
-### 의사결정 (3개)
+### 의사결정 (4개)
 
 | 스킬 | 설명 |
 |------|------|
 | `prioritize-si` | 공공/SI 5단계 우선순위 (법적필수 > 감리필수 > 과업명시 > 발주처요청 > 품질개선) |
-| `impact-analysis` | 변경 영향도 분석. 직접/연쇄/간접 영향 추적, 작업량 추정, 변경요청서 초안 |
-| `id-trace` | ID 양방향 추적 + 4가지 누락 유형 탐지 + 추적 완료율 계산 |
+| `impact-analysis` | 변경 영향도 분석. 직접/연쇄/간접 영향 추적, 작업량 추정 |
+| `id-trace` | ID 양방향 추적 + 누락 유형 탐지 + 추적 완료율 계산 |
+| `audit-response` | 감리 지적 5가지 유형 분류 → 조치계획 → 증빙 체크리스트 |
 
 ---
 
@@ -179,14 +216,14 @@ ERDCloud는 별도 API가 없으므로 DDL 텍스트 기반으로 양방향 변�
 
 ```
 ERDCloud에서 "모든 테이블 생성 SQL" 내보내기
-  → DDL 텍스트를 /pm-table에 붙여넣기
+  → DDL 텍스트를 /테이블정의서에 붙여넣기
   → DE-08 테이블정의서 자동 생성
 ```
 
 ### 역방향: 요구사항 → ERDCloud
 
 ```
-/pm-table 역방향
+/테이블정의서 역방향
   → 요구사항/화면에서 엔터티 도출
   → DDL 생성 → ERDCloud에 붙여넣기
 ```
@@ -195,7 +232,7 @@ ERDCloud에서 "모든 테이블 생성 SQL" 내보내기
 
 ## 검사기준 자동 매핑
 
-`/pm-test`는 화면 유형을 자동 판별하여 27개 검사기준을 매핑합니다.
+`/단위테스트계획서`는 화면 유형을 자동 판별하여 27개 검사기준을 매핑합니다.
 
 | 화면 유형 | 공통(8) | 조회(4) | 입력(6) | 수정(2) | 삭제(2) | 첨부(3) | 출력(2) |
 |----------|---------|---------|---------|---------|---------|---------|---------|
@@ -209,33 +246,33 @@ ERDCloud에서 "모든 테이블 생성 SQL" 내보내기
 
 ## 감리 대응
 
-`/pm-audit`은 감리 지적사항을 5가지 유형으로 분류하고, 유형별 표준 조치 패턴을 적용합니다.
+`/감리대응`은 감리 지적사항을 5가지 유형으로 분류하고, 유형별 표준 조치 패턴을 적용합니다.
 
 | 유형 | 표준 조치 | 후속 커맨드 |
 |------|---------|------------|
-| 산출물 누락 | 해당 산출물 즉시 작성 | `/pm-design`, `/pm-test` |
-| 내용 미흡 | 산출물 보완 + 검토 이력 | 해당 스킬 재실행 |
-| 추적성 부족 | 추적매트릭스 전면 갱신 | `/pm-trace 전체` |
-| 품질 미달 | 테스트 보강 + 결과서 | `/pm-test`, `/pm-result` |
+| 산출물 누락 | 해당 산출물 즉시 작성 | `/화면목록표`, `/단위테스트계획서` 등 |
+| 내용 미흡 | 산출물 보완 + 검토 이력 | 해당 커맨드 재실행 |
+| 추적성 부족 | 추적매트릭스 전면 갱신 | `/추적매트릭스` |
+| 품질 미달 | 테스트 보강 + 결과서 | `/단위테스트계획서`, `/테스트결과서` |
 | 절차 미준수 | 변경관리 이력 소급 | `impact-analysis` |
 
 ---
 
 ## 산출물 커버리지
 
-| 단계 | 산출물 코드 | 산출물명 | 생성 커맨드 |
-|------|-----------|---------|------------|
-| 분석 | AN-02 | 요구사항정의서 | `/pm-analyze` |
-| 분석 | AN-05 | 요구사항추적매트릭스 | `/pm-trace` |
-| 설계 | DE-03 | 화면목록표 | `/pm-design` |
-| 설계 | DE-04 | 인터페이스정의서 | `/pm-design` |
-| 설계 | DE-05 | 프로그램정의서 | `/pm-design` |
-| 설계 | DE-08 | 테이블정의서 | `/pm-table` |
-| 설계 | DE-13 | 단위테스트계획서 | `/pm-test` |
-| 설계 | DE-14 | 통합테스트계획서 | `/pm-test` |
-| 구현 | IM-03 | 단위테스트결과서 | `/pm-result` |
-| 시험 | TE-02 | 통합테스트결과서 | `/pm-result` |
-| 시험 | TE-06 | 인수테스트결과서 | `/pm-result` |
+| 단계 | 산출물 코드 | 산출물명 | 커맨드 |
+|------|-----------|---------|--------|
+| 분석 | AN-02 | 요구사항정의서 | `/요구사항정의서` |
+| 분석 | AN-05 | 요구사항추적매트릭스 | `/추적매트릭스` |
+| 설계 | DE-03 | 화면목록표 | `/화면목록표` |
+| 설계 | DE-05 | 프로그램정의서 | `/프로그램정의서` |
+| 설계 | - | 인터페이스정의서 | `/인터페이스정의서` |
+| 설계 | DE-08 | 테이블정의서 | `/테이블정의서` |
+| 설계 | DE-13 | 단위테스트계획서 | `/단위테스트계획서` |
+| 설계 | DE-14 | 통합테스트계획서 | `/통합테스트시나리오` |
+| 구현 | IM-03 | 단위테스트결과서 | `/테스트결과서` |
+| 시험 | TE-02 | 통합테스트결과서 | `/테스트결과서` |
+| 시험 | TE-06 | 인수테스트결과서 | `/테스트결과서` |
 
 ---
 
@@ -246,9 +283,21 @@ gx-pm/
 ├── .claude-plugin/
 │   ├── plugin.json            # 플러그인 메타데이터
 │   └── marketplace.json       # 마켓플레이스 등록
-├── skills/                     # 18개 스킬
+├── commands/                   # 10개 산출물 커맨드 (한국어)
+│   ├── 요구사항정의서.md
+│   ├── 화면목록표.md
+│   ├── 프로그램정의서.md
+│   ├── 인터페이스정의서.md
+│   ├── 테이블정의서.md
+│   ├── 단위테스트계획서.md
+│   ├── 통합테스트시나리오.md
+│   ├── 추적매트릭스.md
+│   ├── 감리대응.md
+│   └── 테스트결과서.md
+├── skills/                     # 17개 내부 스킬
 │   ├── extract-requirements/
 │   ├── classify-requirements/
+│   ├── detect-alternatives/
 │   ├── trace-requirements/
 │   ├── generate-screen-list/
 │   ├── generate-program-list/
@@ -259,36 +308,21 @@ gx-pm/
 │   ├── generate-integration-test/
 │   ├── fill-unit-test-result/
 │   ├── fill-integration-test-result/
-│   ├── meeting-notes/
-│   ├── weekly-report/
 │   ├── audit-response/
 │   ├── prioritize-si/
 │   ├── impact-analysis/
 │   └── id-trace/
-├── commands/                   # 8개 워크플로우
-│   ├── pm-analyze.md
-│   ├── pm-design.md
-│   ├── pm-table.md
-│   ├── pm-test.md
-│   ├── pm-trace.md
-│   ├── pm-audit.md
-│   ├── pm-result.md
-│   └── pm-report.md
-├── templates/                  # 9개 산출물 양식
-│   ├── AN-02-requirements-definition.md
-│   ├── AN-05-traceability-matrix.md
-│   ├── DE-03-screen-list.md
-│   ├── DE-05-program-definition.md
-│   ├── DE-08-table-definition.md
-│   ├── DE-13-unit-test-plan.md
-│   ├── DE-14-integration-test-plan.md
+├── templates/                  # 산출물 양식 + 프로토콜
+│   ├── AN-02, AN-05, DE-03, DE-05, DE-08, DE-13, DE-14
 │   ├── inspection-criteria.md
-│   └── id-naming-rules.md
+│   ├── id-naming-rules.md
+│   └── approval-protocol.md
+├── utils/
+│   └── export-xlsx.py          # 마크다운 → xlsx 변환
 ├── README.md
 ├── CLAUDE.md
 ├── CHANGELOG.md
-├── _config.yml                 # GitHub Pages
-└── LICENSE
+└── _config.yml                 # GitHub Pages
 ```
 
 ---
@@ -298,31 +332,31 @@ gx-pm/
 <details>
 <summary>기존 산출물이 있는 프로젝트에서도 사용할 수 있나요?</summary>
 
-네. 기존 산출물의 ID 체계를 자동 감지하여 이어서 채번합니다. `/pm-trace`로 기존 산출물 간 매핑 상태를 먼저 확인하는 것을 권장합니다.
+네. 기존 산출물의 ID 체계를 자동 감지하여 이어서 채번합니다. `/추적매트릭스`로 기존 산출물 간 매핑 상태를 먼저 확인하는 것을 권장합니다.
 </details>
 
 <details>
 <summary>ERDCloud 외 다른 ERD 도구도 지원하나요?</summary>
 
-표준 SQL DDL을 내보낼 수 있는 도구라면 모두 지원합니다. `/pm-table`은 CREATE TABLE 문을 파싱하므로, ERDCloud, DBeaver, DataGrip 등에서 내보낸 DDL을 모두 처리할 수 있습니다.
+표준 SQL DDL을 내보낼 수 있는 도구라면 모두 지원합니다. `/테이블정의서`는 CREATE TABLE 문을 파싱하므로, ERDCloud, DBeaver, DataGrip 등에서 내보낸 DDL을 모두 처리할 수 있습니다.
 </details>
 
 <details>
 <summary>eGovFrame 외 다른 프레임워크도 지원하나요?</summary>
 
-`/pm-design`에서 프레임워크를 선택할 수 있습니다. 현재 eGovFrame과 Spring Boot를 지원하며, 소스파일 구조(Controller/Service/DAO 등)가 프레임워크별로 자동 매핑됩니다.
+`/프로그램정의서`에서 프레임워크를 선택할 수 있습니다. 현재 eGovFrame과 Spring Boot를 지원하며, 소스파일 구조(Controller/Service/DAO 등)가 프레임워크별로 자동 매핑됩니다.
 </details>
 
 <details>
 <summary>감리 대응 시 어떤 산출물을 준비해야 하나요?</summary>
 
-`/pm-audit`에 감리 지적사항을 입력하면 유형별로 필요한 증빙 산출물 체크리스트를 자동 생성합니다. 각 지적사항에 대해 조치계획, 담당자, 완료예정일도 함께 관리할 수 있습니다.
+`/감리대응`에 감리 지적사항을 입력하면 유형별로 필요한 증빙 산출물 체크리스트를 자동 생성합니다. 각 지적사항에 대해 조치계획, 담당자, 완료예정일도 함께 관리할 수 있습니다.
 </details>
 
 <details>
-<summary>pm-skills (phuryn)와 함께 사용할 수 있나요?</summary>
+<summary>xlsx 추출은 어떻게 하나요?</summary>
 
-네. pm-skills는 일반 PM 프레임워크(JTBD, OKR, GTM 등)를 제공하고, gx-pm은 공공/SI 특화 산출물을 제공합니다. 서로 다른 영역을 커버하므로 함께 사용하면 더 강력합니다.
+모든 커맨드 완료 시 "xlsx로 추출할까요?" 선택지가 나옵니다. 선택하면 공공 양식 컬럼 순서에 맞춘 xlsx가 자동 생성되어 산출물 엑셀에 바로 복사-붙여넣기할 수 있습니다. CLI에서 직접 `python utils/export-xlsx.py --dir 결과물/`로도 사용 가능합니다.
 </details>
 
 ---
