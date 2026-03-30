@@ -175,7 +175,7 @@ def is_metadata_table(rows: list[list[str]]) -> bool:
     if len(header) == 2 and header[0] in ("판정", "키워드", "유형"):
         return True
     # 데이터 행이 2개 이하 (헤더 포함 총 3행 이하)이면 의미 없는 소형 표
-    if len(rows) <= 3 and len(header) <= 3:
+    if len(rows) <= 2 and len(header) <= 3:
         return True
     return False
 
