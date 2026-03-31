@@ -60,6 +60,8 @@ ls -R {sourcePath}/src 또는 tree 명령
 
 AskUserQuestion으로 "상세 스캔을 진행할까요?" 확인 후 실행.
 
+**대규모 프로젝트 안전장치**: Level 1에서 파악한 Java 파일 수가 300개를 초과하면, 전체 스캔 대신 업무 영역(패키지)별로 순차 스캔한다. 각 영역 스캔 전 사용자에게 "다음 영역을 스캔할까요?"를 확인받는다. 또한 각 유형(Controller, Service 등)별 스캔 대상 파일 수가 100개를 초과하면, 상위 100개만 스캔하고 나머지는 Level 3에서 필요 시 읽도록 한다.
+
 #### 3-1. Controller 파일 스캔
 
 ```
@@ -238,7 +240,8 @@ Level 1~2로 판단이 안 되는 특정 파일만 전체 읽기.
 
 ## 주의사항
 
-1. **비밀번호, 키 등 민감정보는 수집하지 않는다**:
+1. **비밀번호, 키, 시크릿 등 민감정보는 수집하지 않는다**:
+   - `AWS_ACCESS_KEY`, `JWT_SECRET`, `API_KEY` 등 일반적인 시크릿 패턴 탐지 및 제외
    - `password`, `secret`, `key`, `token`, `credential` 키를 가진 설정값은 수집 대상에서 제외
    - JDBC URL 및 쿼리 파라미터(user, password 등)에 포함된 인증정보 마스킹 (예: `user/****@host:1521/db`, `?user=admin&password=****`)
    - URL 파라미터에 `apiKey`, `token`, `secret` 등이 포함되면 마스킹
