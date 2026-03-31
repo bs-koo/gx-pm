@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.3.0] - 2026-03-31
+
+### Added
+- **`/프로젝트설정` 커맨드**: 프로젝트 프로파일을 1회 설정하면 모든 커맨드가 자동 활용
+  - 프로젝트 유형 4가지: A.신규구축, B.추가개발, C.산출물정비, D.변경관리
+  - 소스코드 경로 (git clone 후 입력), DDL 클립보드 붙여넣기, 기존 산출물 경로
+  - profile.json 파일 저장 → 새 대화에서도 설정 유지
+  - 하나의 작업 폴더에서 여러 프로젝트 관리
+- **프로파일 자동 로드** (`load-project-profile` 스킬): 모든 커맨드의 Step 0에서 프로파일 자동 감지·로드
+- **기존 산출물 감지** (`detect-existing-artifact` 스킬): 산출물 파일이 이미 있으면 이어쓰기/새로쓰기/열기 3택 제공
+- **소스코드 스캔 인덱서** (`scan-source-index` 스킬): 3단계 점진 스캔으로 토큰 최소화 (Level 1 트리 ~2K, Level 2 헤더 ~15K)
+- **소스→프로그램정의서 역생성** (`reverse-scan-source` 스킬): Controller/Service/DAO/JSP 스캔으로 DE-05 역생성
+- **소스→인터페이스정의서 역생성** (`reverse-scan-interfaces` 스킬): HTTP 클라이언트 호출 탐지로 인터페이스 역추출
+- **프로파일 스키마 템플릿** (`templates/project-profile-schema.md`): profile.json 필드 정의·예시
+
+### Changed
+- **승인 프로토콜 확장** (`templates/approval-protocol.md`): 섹션 0 추가 (프로파일 로드 + 기존 산출물 감지 + 유형별 분기)
+- **모든 커맨드 10개에 Step 0 추가**: 프로파일 자동 로드 + 기존 산출물 감지 + A/B/C/D 유형별 분기
+  - 요구사항정의서: 프로젝트 기본 정보 수집 단계 제거 (프로파일이 대체)
+  - 프로그램정의서: 프레임워크 확인 단계 제거 (프로파일이 대체), C유형 시 reverse-scan-source 호출
+  - 인터페이스정의서: C유형 시 reverse-scan-interfaces 호출
+  - 테이블정의서: C유형 시 ddl.sql 자동 로드 또는 Entity 클래스 스캔
+- **DDL 변환 스킬 확장** (`convert-ddl-to-tablespec`): DataGrip/DBeaver DDL 복사 가이드 추가, 대량 DDL(50+테이블) 10개씩 끊어서 승인, Entity 클래스 역추출 경로 추가
+- **CLAUDE.md**: `/프로젝트설정` 커맨드 추가, 프로젝트 프로파일 섹션 추가, 산출물 정비 모드(C유형) 안내 추가
+
 ## [1.2.0] - 2026-03-30
 
 ### Changed
