@@ -4,14 +4,14 @@
     "name": "SQI"
   },
   "metadata": {
-    "description": "공공/SI PM의 AI 운영 체제 — 산출물 이름으로 부르면 만들어주는 10개 커맨드"
+    "description": "공공/SI PM의 AI 운영 체제 — 산출물 이름으로 부르면 만들어주는 11개 커맨드, 소스/DB 역생성 지원"
   },
   "plugins": [
     {
       "name": "gx-pm",
       "source": "./plugins/gx-pm",
-      "description": "공공/SI PM의 AI 운영 체제 — 산출물 이름 한국어 커맨드 10개, 단계별 승인 루프, xlsx 추출. 17개 스킬로 프로젝트 산출물 작성을 자동화합니다.",
-      "version": "1.2.0"
+      "description": "공공/SI PM의 AI 운영 체제 — 산출물 이름 한국어 커맨드 11개, 프로젝트 프로파일, 역방향 생성, 단계별 승인 루프, xlsx 추출. 22개 스킬로 프로젝트 산출물 작성을 자동화합니다.",
+      "version": "1.3.0"
     }
   ]
 }

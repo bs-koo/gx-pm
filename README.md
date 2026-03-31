@@ -6,9 +6,9 @@
 
 요구사항 분석부터 테스트 계획, ID 추적, 감리 대응까지
 
-[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)]()
-[![Skills](https://img.shields.io/badge/skills-17-green.svg)]()
-[![Commands](https://img.shields.io/badge/commands-10-orange.svg)]()
+[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)]()
+[![Skills](https://img.shields.io/badge/skills-22-green.svg)]()
+[![Commands](https://img.shields.io/badge/commands-11-orange.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 </div>
@@ -19,7 +19,9 @@
 
 `gx-pm`은 **공공/SI 프로젝트의 PM**을 위한 Claude Code 플러그인입니다.
 
-RFP를 넣으면 요구사항을 뽑아주고, 화면목록표와 프로그램정의서를 만들어주고, ERDCloud DDL에서 테이블정의서를 변환해주고, 테스트 계획서를 자동 생성하고, 산출물 간 ID가 끊기지 않았는지 추적합니다. 감리가 오면 지적사항 대응 문서까지 만들어줍니다.
+RFP를 넣으면 요구사항을 뽑아주고, 화면목록표와 프로그램정의서를 만들어주고, DDL에서 테이블정의서를 변환해주고, 테스트 계획서를 자동 생성하고, 산출물 간 ID가 끊기지 않았는지 추적합니다. 감리가 오면 지적사항 대응 문서까지 만들어줍니다.
+
+**v1.3.0 신규**: 개발 완료 후 산출물을 맞춰야 할 때, 소스코드와 DB에서 산출물을 **역생성**할 수 있습니다. `/프로젝트설정` 한 번이면 모든 커맨드가 프로젝트 상황에 맞게 자동 동작합니다.
 
 ### 일반 PM 도구와 뭐가 다른가요?
 
@@ -54,10 +56,30 @@ RFP를 넣으면 요구사항을 뽑아주고, 화면목록표와 프로그램�
 
 ## 사용법
 
+### 처음 시작할 때
+
+```
+/프로젝트설정
+```
+
+프로젝트 유형, 기본 정보, 소스코드 경로, DDL을 한 번 설정하면 이후 모든 커맨드가 자동으로 활용합니다. 새 대화를 열어도 설정이 유지됩니다.
+
+### 프로젝트 유형 4가지
+
+| 유형 | 언제 사용 | 커맨드 동작 |
+|------|----------|------------|
+| **A. 신규 구축** | RFP만 있고, 코드 없음 | 정방향 생성 (RFP → 산출물) |
+| **B. 추가 개발** | 기존 시스템에 새 기능 추가 | 기존 산출물에 이어쓰기 |
+| **C. 산출물 정비** | 개발 완료, 산출물 부족 | 소스/DB에서 역생성 |
+| **D. 변경 관리** | 기존 기능 수정 | 변경 대상만 갱신 |
+
+### 커맨드 목록
+
 **커맨드 이름 = 산출물 이름**입니다. 만들고 싶은 산출물을 그대로 입력하면 됩니다.
 
 | 이렇게 말하면 | 커맨드 | 결과물 |
 |--------------|--------|--------|
+| "프로젝트 설정해줘" | `/프로젝트설정` | profile.json (프로젝트 프로파일) |
 | "요구사항 뽑아줘" | `/요구사항정의서` | AN-02 요구사항정의서 |
 | "화면 설계해줘" | `/화면목록표` | DE-03 화면목록표 |
 | "프로그램 구조 잡아줘" | `/프로그램정의서` | DE-05 프로그램정의서 |
@@ -95,7 +117,33 @@ RFP를 넣으면 요구사항을 뽑아주고, 화면목록표와 프로그램�
 → 어떤 시안으로 진행할까요? (1/2/병행)
 ```
 
-### 3. xlsx 추출
+### 3. 기존 산출물 처리
+
+커맨드 실행 시 기존 산출물이 있으면 **3가지 선택지**를 제공합니다:
+
+```
+기존 요구사항정의서를 찾았습니다:
+  B-요구사항정의서.md (35건, 마지막 수정: 1/15)
+
+  1. 이어쓰기 — 기존 유지 + 새 항목 추가 (B-RE-036부터)
+  2. 새로쓰기 — backup/ 폴더에 백업 후 처음부터 재생성
+  3. 열기     — 기존 내용에서 특정 항목만 수정/삭제
+```
+
+### 4. 소스코드/DB에서 역생성 (C유형)
+
+개발 완료 후 산출물을 맞출 때, 소스코드와 DB 스키마에서 산출물을 **자동 역생성**합니다:
+
+| 소스 | 역생성 산출물 | 방식 |
+|------|-------------|------|
+| Controller/Service/DAO/JSP | 프로그램정의서 (DE-05) | 소스 스캔으로 역추출 |
+| DDL (DataGrip/DBeaver 복사) | 테이블정의서 (DE-08) | DDL 파싱 + 한글명 추론 |
+| JPA Entity 클래스 | 테이블정의서 (DE-08) | @Table/@Column 스캔 |
+| HTTP 클라이언트 호출 코드 | 인터페이스정의서 | API 연동 코드 탐지 |
+
+소스코드 스캔은 3단계 점진 스캔으로 **토큰을 99% 절약**합니다 (풀스캔 200만 → 1.7만 토큰).
+
+### 5. xlsx 추출
 
 승인된 산출물은 **공공 양식 컬럼 순서에 맞춘 xlsx로 즉시 추출**할 수 있습니다. 실제 산출물 엑셀에 바로 복사-붙여넣기가 가능합니다.
 
@@ -108,33 +156,30 @@ python utils/export-xlsx.py --dir 결과물/ --output 산출물.xlsx
 
 ## 프로젝트 흐름
 
-```
- 프로젝트 착수                    개발/시험 중                   감리/변경
- ──────────                    ──────────                   ──────────
+### A. 신규 구축 (정방향)
 
- /요구사항정의서                  /테스트결과서                  /감리대응
-   → AN-02                       → IM-03 단위결과서            → 대응 문서
-       ↓                          → TE-02 통합결과서            → 증빙 체크리스트
- /화면목록표                      → TE-06 인수결과서                ↓
-   → DE-03                                                  /추적매트릭스
-       ↓                                                      → 매트릭스 갱신
- /프로그램정의서
-   → DE-05
+```
+ /프로젝트설정 (A유형)
        ↓
- /인터페이스정의서
-   → 인터페이스 정의
+ /요구사항정의서 → /화면목록표 → /프로그램정의서 → /테이블정의서
+       ↓                               ↓               ↓
+ /인터페이스정의서          /단위테스트계획서   /통합테스트시나리오
+                                   ↓               ↓
+                            /추적매트릭스 (누락 탐지)
+                                   ↓
+                            /테스트결과서 → /감리대응
+```
+
+### C. 산출물 정비 (역방향)
+
+```
+ /프로젝트설정 (C유형 + 소스경로 + DDL)
        ↓
- /테이블정의서
-   → DE-08 ←→ ERDCloud
+ /프로그램정의서 ← 소스코드 스캔 역생성
+ /테이블정의서  ← DDL/Entity 역생성
+ /인터페이스정의서 ← API 호출 코드 역추출
        ↓
- /단위테스트계획서
-   → DE-13
-       ↓
- /통합테스트시나리오
-   → DE-14
-       ↓
- /추적매트릭스
-   → AN-05 + 누락 탐지
+ /추적매트릭스 (누락 탐지)
 ```
 
 ---
@@ -152,7 +197,7 @@ python utils/export-xlsx.py --dir 결과물/ --output 산출물.xlsx
                       └→ 통합테스트ID  (B-TE-001)
 ```
 
-`/추적매트릭스`로 언제든 추적 상태를 확인할 수 있습니다:
+`/추적매트릭스`로 언제든 추적 상태를 확인할 수 있습니다 (모든 유형에서 사용 가능):
 
 ```
 ┌─ 제안요청: SFR-027
@@ -186,9 +231,24 @@ python utils/export-xlsx.py --dir 결과물/ --output 산출물.xlsx
 |------|------|
 | `generate-screen-list` | 요구사항 → DE-03 화면목록표. 화면 유형 추론, ID 자동 부여 |
 | `generate-program-list` | 화면목록 → DE-05 프로그램정의서. eGovFrame/Spring Boot 소스 구조 매핑 |
-| `convert-ddl-to-tablespec` | ERDCloud DDL → DE-08 테이블정의서. 한글 속성명 자동 추론 |
+| `convert-ddl-to-tablespec` | DDL → DE-08 테이블정의서. 한글 속성명 자동 추론. DataGrip/DBeaver/ERDCloud 지원. Entity 역추출 가능 |
 | `generate-erd-guide` | 요구사항 → ERD 설계 가이드 + DDL 생성 |
 | `generate-interface-spec` | 외부 연동 식별 → 인터페이스정의서. REST/SOAP/파일/SSO |
+
+### 역방향 생성 (3개) — v1.3.0 신규
+
+| 스킬 | 설명 |
+|------|------|
+| `reverse-scan-source` | 소스코드 Controller/Service/DAO/JSP 스캔 → DE-05 프로그램정의서 역생성 |
+| `reverse-scan-interfaces` | HTTP 클라이언트 호출 탐지 → 인터페이스정의서 역생성 |
+| `scan-source-index` | 소스코드 3단계 점진 스캔 (Level 1 트리 ~2K, Level 2 헤더 ~15K 토큰) |
+
+### 프로젝트 관리 (2개) — v1.3.0 신규
+
+| 스킬 | 설명 |
+|------|------|
+| `load-project-profile` | 프로파일 자동 감지·로드. 모든 커맨드의 Step 0에서 자동 실행 |
+| `detect-existing-artifact` | 기존 산출물 감지 → 이어쓰기/새로쓰기/열기 3택 제공 |
 
 ### 테스트 (4개)
 
@@ -210,24 +270,34 @@ python utils/export-xlsx.py --dir 결과물/ --output 산출물.xlsx
 
 ---
 
-## ERDCloud 연계
+## DB 스키마 연계
 
-ERDCloud는 별도 API가 없으므로 DDL 텍스트 기반으로 양방향 변환합니다.
+DDL 텍스트 기반으로 양방향 변환합니다. DataGrip, DBeaver, ERDCloud 등 DDL을 내보낼 수 있는 도구라면 모두 지원합니다.
 
-### 정방향: ERDCloud → 테이블정의서
+### DDL 복사 방법
+
+| 도구 | 복사 방법 |
+|------|----------|
+| **DataGrip** | 스키마 우클릭 → SQL Scripts → Generate DDL to Clipboard |
+| **DBeaver** | 스키마 우클릭 → Generate SQL → DDL → Ctrl+A → Ctrl+C |
+| **ERDCloud** | SQL 내보내기 → 모든 테이블 생성 SQL |
+
+### 정방향: DDL → 테이블정의서
 
 ```
-ERDCloud에서 "모든 테이블 생성 SQL" 내보내기
-  → DDL 텍스트를 /테이블정의서에 붙여넣기
-  → DE-08 테이블정의서 자동 생성
+DDL 복사 → /테이블정의서에 붙여넣기 → DE-08 자동 생성
 ```
 
-### 역방향: 요구사항 → ERDCloud
+### 역방향: 요구사항 → DDL
 
 ```
-/테이블정의서 역방향
-  → 요구사항/화면에서 엔터티 도출
-  → DDL 생성 → ERDCloud에 붙여넣기
+/테이블정의서 역방향 → 엔터티 도출 → DDL 생성 → ERDCloud에 붙여넣기
+```
+
+### Entity 클래스에서 역추출 (C유형)
+
+```
+소스코드의 @Entity/@Table 어노테이션 스캔 → DE-08 자동 생성
 ```
 
 ---
@@ -285,7 +355,8 @@ gx-pm/
 ├── .claude-plugin/
 │   ├── plugin.json            # 플러그인 메타데이터
 │   └── marketplace.json       # 마켓플레이스 등록
-├── commands/                   # 10개 산출물 커맨드 (한국어)
+├── commands/                   # 11개 커맨드 (한국어)
+│   ├── 프로젝트설정.md         # v1.3.0 신규
 │   ├── 요구사항정의서.md
 │   ├── 화면목록표.md
 │   ├── 프로그램정의서.md
@@ -296,7 +367,12 @@ gx-pm/
 │   ├── 추적매트릭스.md
 │   ├── 감리대응.md
 │   └── 테스트결과서.md
-├── skills/                     # 17개 내부 스킬
+├── skills/                     # 22개 스킬
+│   ├── load-project-profile/   # v1.3.0 신규
+│   ├── detect-existing-artifact/ # v1.3.0 신규
+│   ├── scan-source-index/      # v1.3.0 신규
+│   ├── reverse-scan-source/    # v1.3.0 신규
+│   ├── reverse-scan-interfaces/ # v1.3.0 신규
 │   ├── extract-requirements/
 │   ├── classify-requirements/
 │   ├── detect-alternatives/
@@ -315,6 +391,7 @@ gx-pm/
 │   ├── impact-analysis/
 │   └── id-trace/
 ├── templates/                  # 산출물 양식 + 프로토콜
+│   ├── project-profile-schema.md # v1.3.0 신규
 │   ├── AN-02, AN-05, DE-03, DE-05, DE-08, DE-13, DE-14
 │   ├── inspection-criteria.md
 │   ├── id-naming-rules.md
@@ -332,21 +409,33 @@ gx-pm/
 ## FAQ
 
 <details>
-<summary>기존 산출물이 있는 프로젝트에서도 사용할 수 있나요?</summary>
+<summary>개발이 끝난 프로젝트에서 산출물을 맞출 수 있나요?</summary>
 
-네. 기존 산출물의 ID 체계를 자동 감지하여 이어서 채번합니다. `/추적매트릭스`로 기존 산출물 간 매핑 상태를 먼저 확인하는 것을 권장합니다.
+v1.3.0부터 가능합니다. `/프로젝트설정`에서 **C. 산출물 정비** 유형을 선택하고, 소스코드 경로와 DDL을 입력하면 됩니다. `/프로그램정의서`는 소스코드에서, `/테이블정의서`는 DDL에서, `/인터페이스정의서`는 API 호출 코드에서 산출물을 역생성합니다.
 </details>
 
 <details>
-<summary>ERDCloud 외 다른 ERD 도구도 지원하나요?</summary>
+<summary>기존 산출물이 있는 프로젝트에서도 사용할 수 있나요?</summary>
 
-표준 SQL DDL을 내보낼 수 있는 도구라면 모두 지원합니다. `/테이블정의서`는 CREATE TABLE 문을 파싱하므로, ERDCloud, DBeaver, DataGrip 등에서 내보낸 DDL을 모두 처리할 수 있습니다.
+네. 커맨드 실행 시 기존 산출물을 자동 감지하여 **이어쓰기**(기존 유지 + 추가), **새로쓰기**(백업 후 재생성), **열기**(부분 수정) 중 선택할 수 있습니다. ID 번호는 기존 마지막 번호에 이어서 자동 부여됩니다.
+</details>
+
+<details>
+<summary>여러 프로젝트를 동시에 관리할 수 있나요?</summary>
+
+네. 하나의 작업 폴더에서 여러 프로젝트를 관리합니다. `/프로젝트설정`을 실행하면 기존 프로젝트 목록이 표시되고, 원하는 프로젝트를 선택하거나 새로 생성할 수 있습니다. 프로젝트별로 별도 폴더에 산출물이 저장됩니다.
+</details>
+
+<details>
+<summary>DDL은 어떻게 입력하나요?</summary>
+
+DB 접속정보는 받지 않습니다. DataGrip에서는 스키마 우클릭 → SQL Scripts → Generate DDL to Clipboard, DBeaver에서는 스키마 우클릭 → Generate SQL → DDL로 전체 DDL을 클립보드에 복사한 뒤 붙여넣으면 됩니다.
 </details>
 
 <details>
 <summary>eGovFrame 외 다른 프레임워크도 지원하나요?</summary>
 
-`/프로그램정의서`에서 프레임워크를 선택할 수 있습니다. 현재 eGovFrame과 Spring Boot를 지원하며, 소스파일 구조(Controller/Service/DAO 등)가 프레임워크별로 자동 매핑됩니다.
+`/프로젝트설정`에서 프레임워크를 선택합니다 (eGovFrame / Spring Boot / 기타). 소스파일 구조(Controller/Service/DAO 등)가 프레임워크별로 자동 매핑됩니다.
 </details>
 
 <details>
