@@ -240,7 +240,7 @@ Level 1~2로 판단이 안 되는 특정 파일만 전체 읽기.
 
 1. **비밀번호, 키 등 민감정보는 수집하지 않는다**:
    - `password`, `secret`, `key`, `token`, `credential` 키를 가진 설정값은 수집 대상에서 제외
-   - JDBC URL에 인증정보가 포함된 경우 마스킹 (예: `user/****@host:1521/db`)
+   - JDBC URL 및 쿼리 파라미터(user, password 등)에 포함된 인증정보 마스킹 (예: `user/****@host:1521/db`, `?user=admin&password=****`)
    - URL 파라미터에 `apiKey`, `token`, `secret` 등이 포함되면 마스킹
    - DB 비밀번호, API 키 등은 절대 source-index.json에 저장하지 않는다
 2. **node_modules, target, build 등 빌드 산출물은 제외한다**

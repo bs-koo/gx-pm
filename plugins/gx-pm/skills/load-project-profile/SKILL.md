@@ -20,10 +20,10 @@ description: 작업 폴더에서 프로젝트 프로파일(profile.json)을 탐�
 
 ### Step 1: 프로젝트 폴더 스캔
 
-작업 폴더의 **직속 하위 디렉토리**를 스캔하여 `profile.json`이 존재하는 폴더를 모두 찾는다.
+작업 폴더 자체 및 **직속 하위 디렉토리**를 스캔하여 `profile.json`이 존재하는 폴더를 모두 찾는다.
 
 ```
-Glob 패턴: */profile.json
+Glob 패턴: profile.json, */profile.json
 ```
 
 ### Step 2: 프로젝트 수에 따른 분기

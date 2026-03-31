@@ -33,9 +33,10 @@ description: 실제 소스코드 프로젝트를 스캔하여 DE-05 프로그램
 source-index.json의 `controllers` 데이터를 기반으로:
 
 1. **Controller별 연관 파일 그룹핑**:
-   - Controller 패키지 경로에서 업무 영역 추론
+   - Controller 패키지 경로에서 업무 영역 추론 (패키지 깊이에 따른 유연한 매핑 로직 적용)
      예: `kr.go.energy.ehr.system.authority.web.AuthorityController`
      → 대분류: 시스템관리, 중분류: 권한관리
+   - 패키지 깊이가 얕은 경우(예: `com.example.controller`), 사용자에게 기준 패키지 뎁스를 확인받는다
    - 같은 패키지의 Service, DAO, VO 자동 매칭
    - 같은 업무 영역의 JSP/HTML 파일 매칭
    - 같은 namespace의 Mapper XML 매칭
