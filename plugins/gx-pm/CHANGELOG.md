@@ -6,8 +6,8 @@
 - **모든 커맨드의 AskUserQuestion 도구 사용 강제**: Claude Desktop에서 `[필수 중단점]`에서 텍스트만 출력하고 사용자 입력을 기다리지 않는 오작동 수정
   - `프로젝트설정.md`: 승인 프로토콜 참조 누락 → 추가, 6개 중단점에 AskUserQuestion 명시
   - `테스트결과서.md`: Step 1(유형 선택), Step 3(결과 입력 방식)에 AskUserQuestion 누락 → 추가
-  - 전체 10개 커맨드: 승인 루프 블록에 "AskUserQuestion 도구로 승인을 요청한다" 선행 명시
-  - 전체 10개 커맨드: xlsx 추출 단계에 AskUserQuestion 누락 → 추가
+  - 전체 11개 커맨드: 승인 루프 블록에 "AskUserQuestion 도구로 승인을 요청한다" 선행 명시
+  - 전체 11개 커맨드: xlsx 추출 단계에 AskUserQuestion 누락 → 추가
   - 사용자 입력 블록의 `━━━` 테두리 제거 (표시 전용 블록은 유지)
 
 ## [1.3.0] - 2026-03-31
