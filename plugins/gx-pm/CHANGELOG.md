@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.0] - 2026-08-28
+
+### Added
+- **표준용어 MCP 연계** (`docs/표준용어-mcp-연계.md`, `CLAUDE.md`): `/테이블정의서`·`/프로그램정의서`의 DB 컬럼을 사업부 표준용어사전(`sqi-comn-term` MCP)으로 표준화
+  - 출처 우선순위 기본값 `["BLDG_ENGY","MOIS_STD"]`, `translate_column`(한글→표준영문)·`validate_column`(검증) 프로토콜
+  - ACT 워크드 예시 + MCP 검증(표준 컬럼 PASS, `REGION_CD`→`RGN_CD` 교정)
+  - **스킬·커맨드·템플릿 무변경** — 규칙 문서만 추가
+
 ## [1.3.1] - 2026-04-01
 
 ### Fixed
