@@ -111,3 +111,16 @@
 - **시안이 감지되면 반드시 사용자 선택을 받은 후 산출물을 생성합니다**
 - **각 단계는 사용자 승인 없이 다음 단계로 진행하지 않습니다**
 - xlsx 추출은 `utils/export-xlsx.py` 스크립트를 사용합니다 (openpyxl 자동 설치)
+
+## 표준용어 MCP 연계 (DDL·컬럼)
+
+`/테이블정의서`·`/프로그램정의서`로 DDL·컬럼을 생성할 때, 사업부 표준용어사전 `sqi-comn-term` MCP로 컬럼명을 표준화한다. (gx-pm 스킬·커맨드·템플릿은 수정하지 않으며, 이 규칙만 따른다. gx-pm 스킬은 `allowed-tools` 제한이 없어 실행 중 MCP 호출이 가능하다.)
+
+- **출처 우선순위(기본): `["BLDG_ENGY", "MOIS_STD"]`** — 건물에너지 우선 → 행안부 공통표준 보강. 프로젝트별 조정 가능. (없이 호출하면 MCP가 `setupRequired`만 반환하므로 반드시 지정)
+- **프로토콜**:
+  1. 한글 속성명 → `translate_column(inputs=[…], sourcePriority=["BLDG_ENGY","MOIS_STD"])` → 표준 영문 컬럼명 + 표준 데이터타입.
+  2. 이미 영문 컬럼이 있으면 `validate_column(columnNames=[…], sourcePriority=[…])`로 표준 준수 검증(PASS/PARTIAL/FAIL).
+  3. 결과 처리: `FULL`/`PASS` 그대로 · `PARTIAL`/`AI_SUGGESTED` 표준형 교체 · `FAIL`/`decisionRequired` 임의추정 금지(humanHint 노출·사용자 확인) · `dataTypeCandidates` 다건 사용자 선택 · 미등록 도메인어(예: "쾌적성") 힌트 노출 후 출처 조정/신규 등록.
+  4. DE-08 테이블정의서에 표준 컬럼ID·표준 데이터타입 반영 + **"표준 출처(ctgryNm)" 열** 추가.
+  5. 최초 실행 시 출력 포맷·출처 우선순위를 사용자에게 1회 확인.
+- 상세 프로토콜·워크드 예시·검증 결과: `docs/표준용어-mcp-연계.md`
