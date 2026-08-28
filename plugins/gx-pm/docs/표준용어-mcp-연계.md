@@ -126,4 +126,6 @@ claude mcp list        # 등록 확인
 
 **연결 확인**: `/mcp` 명령으로 상태 확인. 연결이 안 되면 상세에서 `Reconnect`.
 
-> 규칙 적용 흐름: 테이블/DDL 생성 시 `sqi-comn-term` 도구 존재를 먼저 확인 → 없으면 위 설치 → `translate_column`/`validate_column` 수행.
+> **미설치 시 처리 흐름**: 테이블/DDL 생성 시 `sqi-comn-term` 도구 존재를 먼저 확인한다.
+> - **있으면** → `translate_column`/`validate_column` 수행.
+> - **없으면** → ① 위 설치 명령 실행 → ② `claude mcp list` 확인 → ③ **사용자에게 안내**: "MCP를 설치했습니다. `/mcp`에서 `Reconnect` 또는 Claude Code 재시작 후 명령을 다시 실행해 주세요." 새로 추가한 MCP는 현재 세션에 바로 로드되지 않으므로, **재실행 세션부터** 표준화가 적용된다.
