@@ -102,3 +102,28 @@ validate_column(["OBSVTR_NM","OBSRVN_YMD","LAT","LOT","USE_YN","REG_DT","MDFCN_D
   → 표준 컬럼 + 표준 출처 열이 포함된 DE-08 산출
 ```
 또는 `CLAUDE.md`의 규칙이 로드돼 있으면 별도 지시 없이도 적용된다.
+
+
+## 설치 (MCP가 없을 때)
+
+`sqi-comn-term` 도구가 세션에 없으면 설치 후 사용한다. (사업부 "공통표준용어사전 MCP 가이드" 기준, **무인증 MVP** — 헤더/토큰 불필요)
+
+**유저 스코프 (모든 프로젝트, 권장)** — 터미널:
+```
+claude mcp add -s user --transport http sqi-comn-term http://52.78.238.167:8687/api/v1/mcp
+claude mcp list        # 등록 확인
+```
+
+**프로젝트 스코프** — 프로젝트 루트에 `.mcp.json`:
+```json
+{
+  "mcpServers": {
+    "sqi-comn-term": { "type": "http", "url": "http://52.78.238.167:8687/api/v1/mcp" }
+  }
+}
+```
+(사내망/로컬 구동 시 `http://localhost:8080/api/v1/mcp`)
+
+**연결 확인**: `/mcp` 명령으로 상태 확인. 연결이 안 되면 상세에서 `Reconnect`.
+
+> 규칙 적용 흐름: 테이블/DDL 생성 시 `sqi-comn-term` 도구 존재를 먼저 확인 → 없으면 위 설치 → `translate_column`/`validate_column` 수행.
