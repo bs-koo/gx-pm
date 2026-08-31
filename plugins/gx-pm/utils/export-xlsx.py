@@ -96,6 +96,7 @@ DOCUMENT_PROFILES = {
     },
     "총괄테스트계획서": {
         "sheet_name": "TE-01 총괄테스트계획서",
+        "sheet_names": ["TE-01 테스트 레벨", "TE-01 종료기준", "TE-01 추진체제"],
         "columns": [
             ["레벨", "산출물 코드", "대상", "수행 주체", "검증 대상 요구사항"],
             ["기준", "목표치", "비고"],
@@ -104,6 +105,7 @@ DOCUMENT_PROFILES = {
     },
     "단위테스트계획서": {
         "sheet_name": "DE-13 단위테스트계획서",
+        "sheet_names": ["DE-13 단위테스트계획", "DE-13 테스트케이스"],
         "columns": [
             # 시트 1 — 검사기준 체크리스트 (뒤의 27개 검사항목 컬럼은 가변)
             ["기능구분ID", "기능구분명", "기능ID", "기능명",
@@ -280,6 +282,26 @@ def _header_key(rows: list[list[str]]) -> str:
     return "|".join(h.strip() for h in rows[0])
 
 
+def _matched_set_index(rows: list[list[str]], doc_type: str | None) -> int | None:
+    """이 표가 산출물 본문 표라면 매칭된 컬럼 세트의 인덱스를, 아니면 None 을 반환한다.
+
+    프로필 컬럼 세트와 절반 이상 일치하면 본문 표다.
+    근거·통계 같은 보조 표는 산출물 시트명을 물려받지 않고 자기 제목을 쓴다.
+    """
+    if not doc_type or doc_type not in DOCUMENT_PROFILES or not rows:
+        return None
+    header = {h.strip() for h in rows[0]}
+    best: int | None = None
+    best_ratio = 0.0
+    for index, target in enumerate(DOCUMENT_PROFILES[doc_type]["columns"]):
+        if not target:
+            continue
+        ratio = len([c for c in target if c in header]) / len(target)
+        if ratio >= 0.5 and ratio > best_ratio:
+            best, best_ratio = index, ratio
+    return best
+
+
 def _reorder_columns(
     rows: list[list[str]], doc_type: str | None
 ) -> list[list[str]]:
@@ -393,9 +415,18 @@ def create_xlsx(
             title = merged_titles[key]
 
             # 시트 이름 결정
-            if doc_type and doc_type in DOCUMENT_PROFILES:
-                base_name = DOCUMENT_PROFILES[doc_type]["sheet_name"]
+            set_index = _matched_set_index(rows, doc_type)
+            if set_index is not None:
+                # 본문 데이터 표 — 공공 양식 시트명을 쓴다
+                profile = DOCUMENT_PROFILES[doc_type]
+                names = profile.get("sheet_names")
+                base_name = (
+                    names[set_index]
+                    if names and set_index < len(names)
+                    else profile["sheet_name"]
+                )
             elif title:
+                # 근거·통계 등 보조 표 — 마크다운 제목을 시트명으로 쓴다
                 base_name = title
             else:
                 base_name = "Data"

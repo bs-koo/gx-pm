@@ -74,5 +74,38 @@ class ParseMarkdownTablesTest(unittest.TestCase):
         self.assertEqual(tables[0][0], "조치 절차")
 
 
+class MatchedSetIndexTest(unittest.TestCase):
+    def setUp(self):
+        self.mod = load_export_module()
+
+    def test_본문_표는_매칭된_컬럼_세트_인덱스를_반환한다(self):
+        rows = [["기능구분ID", "기능구분명", "기능ID", "기능명",
+                 "화면ID", "화면명", "사용자구분", "단위테스트ID"]]
+        self.assertEqual(self.mod._matched_set_index(rows, "단위테스트계획서"), 0)
+
+    def test_두번째_컬럼_세트도_구분한다(self):
+        rows = [["화면ID", "화면명", "단위테스트ID", "테스트케이스ID", "요구사항ID",
+                 "검사기준 항목", "설계기법", "구분", "사전조건", "입력 데이터"]]
+        self.assertEqual(self.mod._matched_set_index(rows, "단위테스트계획서"), 1)
+
+    def test_보조_표는_None_을_반환한다(self):
+        rows = [["경계값", "값", "출처"]]
+        self.assertIsNone(self.mod._matched_set_index(rows, "단위테스트계획서"))
+
+    def test_산출물_유형이_없으면_None_을_반환한다(self):
+        rows = [["결함ID", "심각도"]]
+        self.assertIsNone(self.mod._matched_set_index(rows, None))
+
+
+class SheetNamingTest(unittest.TestCase):
+    def setUp(self):
+        self.mod = load_export_module()
+
+    def test_컬럼_세트별로_다른_시트명을_준다(self):
+        names = self.mod.DOCUMENT_PROFILES["단위테스트계획서"]["sheet_names"]
+        self.assertEqual(names[0], "DE-13 단위테스트계획")
+        self.assertEqual(names[1], "DE-13 테스트케이스")
+
+
 if __name__ == "__main__":
     unittest.main()
