@@ -275,6 +275,61 @@ class CommandStructureTest(unittest.TestCase):
                 )
 
 
+PIPELINE_ARTIFACTS = {
+    "gx-spec": [
+        "gx-요구사항정의서",
+        "gx-화면목록표",
+        "gx-프로그램정의서",
+        "gx-인터페이스정의서",
+        "gx-테이블정의서",
+    ],
+    "gx-testplan": [
+        "gx-총괄테스트계획서",
+        "gx-단위테스트계획서",
+        "gx-통합테스트시나리오",
+        "gx-시스템테스트",
+    ],
+}
+
+
+class PipelineCommandTest(unittest.TestCase):
+    """파이프라인은 묶은 산출물을 빠짐없이 만들고, 게이트를 2개 유지해야 한다."""
+
+    def _본문(self, 이름: str) -> str:
+        return (PLUGIN_ROOT / "commands" / f"{이름}.md").read_text(encoding="utf-8")
+
+    def test_파이프라인이_구성_산출물_커맨드를_모두_참조한다(self):
+        for 이름, 산출물들 in PIPELINE_ARTIFACTS.items():
+            if 이름 not in command_names():
+                continue  # 아직 만들지 않은 파이프라인은 건너뛴다
+            본문 = self._본문(이름)
+            for 산출물 in 산출물들:
+                with self.subTest(파이프라인=이름, 산출물=산출물):
+                    self.assertIn(f"`/{산출물}`", 본문)
+
+    def test_파이프라인에_필수_중단점이_2개_있다(self):
+        for 이름 in PIPELINE_ARTIFACTS:
+            if 이름 not in command_names():
+                continue
+            with self.subTest(파이프라인=이름):
+                게이트 = re.findall(
+                    r"^### Step \d+:.*\[필수 중단점", self._본문(이름), re.M
+                )
+                self.assertEqual(
+                    len(게이트), 2,
+                    f"게이트가 2개가 아닙니다: {게이트}",
+                )
+
+    def test_파이프라인이_규약_템플릿을_참조한다(self):
+        for 이름 in PIPELINE_ARTIFACTS:
+            if 이름 not in command_names():
+                continue
+            with self.subTest(파이프라인=이름):
+                본문 = self._본문(이름)
+                self.assertIn("templates/pipeline-protocol.md", 본문)
+                self.assertIn("templates/prerequisites.md", 본문)
+
+
 class VersionConsistencyTest(unittest.TestCase):
     """버전과 개수 표기가 10개 지점에 흩어져 있어 한쪽만 갱신되기 쉽다.
 
