@@ -23,3 +23,7 @@ Thumbs.db
 # Python
 __pycache__/
 *.pyc
+
+# SDD 작업공간
+.superpowers/
+.sdd-tmp/

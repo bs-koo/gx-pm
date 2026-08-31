@@ -82,6 +82,8 @@
   - `helpers.PLUGIN_ROOT: Path` — `plugins/gx-pm` 절대 경로
   - `helpers.load_export_module() -> ModuleType` — `utils/export-xlsx.py`를 `gx_export_xlsx` 이름으로 로드
   - `helpers.read_docs() -> list[tuple[Path, str]]` — `.omc` 제외한 모든 `.md`의 (경로, 본문)
+  - `helpers.REPO_ROOT: Path` — 저장소 루트 (marketplace.json·README 검사용)
+  - `helpers.skill_names()` / `command_names()` / `template_names()` `-> set[str]` — Task 4가 사용한다
 
 - [ ] **Step 1: 로더 헬퍼를 작성한다**
 
@@ -243,11 +245,32 @@ class ParseMarkdownTablesTest(unittest.TestCase):
         tables = self.mod.parse_markdown_tables(md)
         self.assertEqual(tables[0][0], "제약 출처 추적")
 
-    def test_짧은_라벨_라인은_제목으로_쓴다(self):
+    def test_볼드_라벨_라인은_제목으로_쓴다(self):
         md = "**부적합 목록**\n\n| 결함ID | 심각도 |\n|---|---|\n| B-DF-001 | Major |\n"
         tables = self.mod.parse_markdown_tables(md)
         self.assertEqual(tables[0][0], "**부적합 목록**")
+
+    def test_글머리표_항목은_표_제목으로_쓰지_않는다(self):
+        md = (
+            "### 결함 현황\n\n"
+            "- 조치율 50%\n\n"
+            "| 결함ID | 상태 |\n|---|---|\n| B-DF-001 | Open |\n"
+        )
+        tables = self.mod.parse_markdown_tables(md)
+        self.assertEqual(tables[0][0], "결함 현황")
+
+    def test_번호목록_항목은_표_제목으로_쓰지_않는다(self):
+        md = (
+            "### 조치 절차\n\n"
+            "1. 원인 분석\n\n"
+            "| 단계 | 내용 |\n|---|---|\n| 1 | 분석 |\n"
+        )
+        tables = self.mod.parse_markdown_tables(md)
+        self.assertEqual(tables[0][0], "조치 절차")
 ```
+
+> 볼드 라벨과 글머리표를 함께 검증한다. `*` 로 시작한다는 이유만으로 건너뛰면
+> `**부적합 목록**` 이 사라지고, 공백을 요구하지 않으면 `- 조치율 50%` 가 시트명이 된다.
 
 - [ ] **Step 2: 실행해서 실패를 확인한다**
 
@@ -281,8 +304,10 @@ Expected: `test_산문_문단은_표_제목으로_쓰지_않는다` FAIL —
                     if candidate.startswith("#"):
                         table_title = candidate.lstrip("#").strip()
                         break
-                    # 인용문·목록·표는 제목이 아니다 — 계속 거슬러 올라간다
-                    if candidate.startswith((">", "|", "-", "*", "1.")):
+                    # 인용문·표·목록은 제목이 아니다 — 계속 거슬러 올라간다.
+                    # 목록 마커는 뒤에 공백이 온다("- 항목"). 공백이 없으면
+                    # 볼드 강조("**부적합 목록**")이므로 라벨로 인정한다.
+                    if candidate.startswith((">", "|")) or _BULLET_PREFIX.match(candidate):
                         continue
                     # 산문 한 줄이 시트명이 되는 것을 막는다.
                     # 짧고 문장으로 끝나지 않는 라인만 라벨로 인정한다.
@@ -291,10 +316,18 @@ Expected: `test_산문_문단은_표_제목으로_쓰지_않는다` FAIL —
                         break
 ```
 
+`parse_markdown_tables` 정의보다 앞, 모듈 상단의 `import re` 아래에 상수를 추가한다:
+
+```python
+# 목록 표지는 마커 뒤에 공백이 온다("- 항목", "1. 항목").
+# 공백을 요구해야 볼드 강조("**부적합 목록**")를 목록으로 오인하지 않는다.
+_BULLET_PREFIX = re.compile(r"^([-*+]|\d+\.)\s")
+```
+
 - [ ] **Step 4: 실행해서 통과를 확인한다**
 
 Run: `cd plugins/gx-pm && python -m unittest discover -s tests -v`
-Expected: `Ran 6 tests ... OK`
+Expected: `Ran 8 tests ... OK`
 
 - [ ] **Step 5: 커밋**
 
@@ -449,7 +482,7 @@ Expected: `Ran 12 tests ... OK`
 
 ```bash
 cd plugins/gx-pm
-mkdir -p /tmp/gxdry && cat > "/tmp/gxdry/B-단위테스트계획서.md" <<'MD'
+mkdir -p .sdd-tmp && cat > ".sdd-tmp/B-단위테스트계획서.md" <<'MD'
 ## 단위테스트계획
 
 | 기능구분ID | 기능구분명 | 기능ID | 기능명 | 화면ID | 화면명 | 사용자구분 | 단위테스트ID |
@@ -464,16 +497,17 @@ mkdir -p /tmp/gxdry && cat > "/tmp/gxdry/B-단위테스트계획서.md" <<'MD'
 |---|---|---|---|
 | A_01_01_010 | 2 | 3 | 1 |
 MD
-python utils/export-xlsx.py --dir /tmp/gxdry --output /tmp/gxdry/out.xlsx
+python utils/export-xlsx.py --dir .sdd-tmp --output .sdd-tmp/out.xlsx
 python -c "
 import openpyxl
-wb = openpyxl.load_workbook('/tmp/gxdry/out.xlsx')
+wb = openpyxl.load_workbook('.sdd-tmp/out.xlsx')
 print(wb.sheetnames)
 assert 'DE-13 단위테스트계획' in wb.sheetnames, wb.sheetnames
 assert '케이스 생성 요약' in wb.sheetnames, wb.sheetnames
 assert not any(n.endswith('_1') for n in wb.sheetnames), wb.sheetnames
 print('시트명 분리 확인')
 "
+rm -rf .sdd-tmp
 ```
 
 Expected: `['DE-13 단위테스트계획', '케이스 생성 요약']` 출력 후 `시트명 분리 확인`
@@ -601,7 +635,7 @@ Expected: 전부 PASS (main 상태가 이미 정합하므로)
 같은 파일에 이어서 작성한다:
 
 ```python
-def specs_only(docs: list[tuple, ...]) -> list:
+def specs_only(docs: list) -> list:
     """규칙 검사 대상 문서만 남긴다.
 
     CHANGELOG 는 '무엇을 고쳤는지' 설명하느라 과거의 잘못된 표기를 그대로 인용한다.
