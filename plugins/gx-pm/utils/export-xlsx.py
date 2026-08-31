@@ -297,24 +297,41 @@ def _header_key(rows: list[list[str]]) -> str:
     return "|".join(h.strip() for h in rows[0])
 
 
-def _matched_set_index(rows: list[list[str]], doc_type: str | None) -> int | None:
-    """이 표가 산출물 본문 표라면 매칭된 컬럼 세트의 인덱스를, 아니면 None 을 반환한다.
+# 프로필 컬럼과 이만큼 일치해야 산출물 본문 표로 본다.
+# 미만이면 근거·통계 같은 보조 표이므로 시트명도 컬럼 순서도 물려받지 않는다.
+_MATCH_THRESHOLD = 0.5
 
-    프로필 컬럼 세트와 절반 이상 일치하면 본문 표다.
-    근거·통계 같은 보조 표는 산출물 시트명을 물려받지 않고 자기 제목을 쓴다.
+
+def _best_column_set(
+    header: list[str], doc_type: str | None
+) -> tuple[int | None, list[str]]:
+    """헤더에 가장 잘 맞는 프로필 컬럼 세트의 (인덱스, 컬럼 목록)을 돌려준다.
+
+    시트명 결정(_matched_set_index)과 컬럼 재배열(_reorder_columns)이 같은 판단을
+    필요로 한다. 두 벌로 두면 한쪽 임계값만 고쳤을 때 시트가 A 세트의 이름을 달고
+    B 세트의 순서로 나온다 — 판단은 여기 한 곳에만 둔다.
     """
-    if not doc_type or doc_type not in DOCUMENT_PROFILES or not rows:
-        return None
-    header = {h.strip() for h in rows[0]}
-    best: int | None = None
+    if not doc_type or doc_type not in DOCUMENT_PROFILES or not header:
+        return None, []
+    있는_컬럼 = set(header)
+    best_index: int | None = None
+    best_columns: list[str] = []
     best_ratio = 0.0
     for index, target in enumerate(DOCUMENT_PROFILES[doc_type]["columns"]):
         if not target:
             continue
-        ratio = len([c for c in target if c in header]) / len(target)
-        if ratio >= 0.5 and ratio > best_ratio:
-            best, best_ratio = index, ratio
-    return best
+        ratio = len([c for c in target if c in 있는_컬럼]) / len(target)
+        if ratio >= _MATCH_THRESHOLD and ratio > best_ratio:
+            best_index, best_columns, best_ratio = index, target, ratio
+    return best_index, best_columns
+
+
+def _matched_set_index(rows: list[list[str]], doc_type: str | None) -> int | None:
+    """이 표가 산출물 본문 표라면 매칭된 컬럼 세트의 인덱스를, 아니면 None 을 반환한다."""
+    if not rows:
+        return None
+    index, _ = _best_column_set([h.strip() for h in rows[0]], doc_type)
+    return index
 
 
 def _reorder_columns(
@@ -326,33 +343,23 @@ def _reorder_columns(
     프로필에 없는 추가 컬럼은 뒤에 붙인다.
     매칭되는 컬럼이 절반 미만이면 재배열하지 않고 원본을 반환한다.
     """
-    if not doc_type or doc_type not in DOCUMENT_PROFILES or not rows:
+    if not rows:
         return rows
 
-    column_sets = DOCUMENT_PROFILES[doc_type]["columns"]
     header = [h.strip() for h in rows[0]]
+
+    # 산출물이 여러 시트 구조를 가질 수 있으므로 가장 잘 맞는 컬럼 세트를 고른다.
+    # 판단은 _best_column_set 한 곳에만 있다 — 시트명 결정과 같은 세트를 쓴다.
+    _, target_columns = _best_column_set(header, doc_type)
+    if not target_columns:
+        return rows
 
     # 마크다운 헤더 → 인덱스 매핑
     header_index: dict[str, int] = {}
     for idx, col in enumerate(header):
         header_index[col] = idx
 
-    # 산출물이 여러 시트 구조를 가질 수 있으므로 가장 잘 맞는 컬럼 세트를 고른다
-    best_indices: list[int] = []
-    best_ratio = 0.0
-    for target_columns in column_sets:
-        if not target_columns:
-            continue
-        indices = [header_index[c] for c in target_columns if c in header_index]
-        ratio = len(indices) / len(target_columns)
-        if ratio > best_ratio:
-            best_ratio, best_indices = ratio, indices
-
-    # 매칭률이 절반 미만이면 재배열 의미 없음 — 원본 반환
-    if best_ratio < 0.5:
-        return rows
-
-    ordered_indices = list(best_indices)
+    ordered_indices = [header_index[c] for c in target_columns if c in header_index]
 
     # 프로필에 없는 추가 컬럼을 뒤에 붙인다
     used = set(ordered_indices)
