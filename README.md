@@ -8,7 +8,7 @@
 
 [![Version](https://img.shields.io/badge/version-1.5.1-blue.svg)]()
 [![Skills](https://img.shields.io/badge/skills-26-green.svg)]()
-[![Commands](https://img.shields.io/badge/commands-15-orange.svg)]()
+[![Commands](https://img.shields.io/badge/commands-16-orange.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 </div>

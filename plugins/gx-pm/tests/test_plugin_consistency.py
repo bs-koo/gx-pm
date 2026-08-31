@@ -88,13 +88,8 @@ class CrossReferenceTest(unittest.TestCase):
 
     def test_백틱으로_참조된_커맨드가_모두_존재한다(self):
         # CHANGELOG 는 개명 대응표에서 구 이름을 인용하므로 검사 대상에서 뺀다.
-        # gx-spec·gx-testplan 은 templates/pipeline-protocol.md 규약을 따르는 파이프라인
-        # 커맨드로, 후속 작업에서 생성될 예정이라 아직 commands/ 에 없다 (미리 참조만 배선됨).
-        예정된_파이프라인_커맨드 = {"gx-spec", "gx-testplan"}
         for path, text in self.specs:
             for match in re.finditer(r"`/(gx-[가-힣A-Za-z-]+)`", text):
-                if match.group(1) in 예정된_파이프라인_커맨드:
-                    continue
                 with self.subTest(문서=path.relative_to(PLUGIN_ROOT), 커맨드=match.group(1)):
                     self.assertIn(match.group(1), self.commands)
 
