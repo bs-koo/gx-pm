@@ -117,6 +117,30 @@ class CrossReferenceTest(unittest.TestCase):
             "커맨드에서 호출되지 않는 스킬이 있습니다 — 배선 누락입니다",
         )
 
+    def test_모든_커맨드가_사용자에게_도달_가능하다(self):
+        """스킬 배선 검사(test_모든_스킬이_어느_커맨드에서든_호출된다)의 대칭 짝.
+
+        '참조된 커맨드가 존재하는가'만 검사하고 '존재하는 커맨드가 안내되는가'를
+        검사하지 않으면, v1.5.0 처럼 발견 경로가 없는 커맨드가 생긴다.
+
+        형제 커맨드끼리의 상호 참조는 발견 경로가 아니다. 아무 커맨드도 실행해본 적 없는
+        사용자가 보는 것은 진입점 3종뿐이므로, 그 합집합이 전체 커맨드를 덮어야 한다.
+        """
+        진입점 = ("gx-프로젝트설정", "gx-spec", "gx-testplan")
+        도달가능 = set()
+        for 이름 in 진입점:
+            path = PLUGIN_ROOT / "commands" / f"{이름}.md"
+            self.assertTrue(path.exists(), f"진입점 커맨드가 없습니다: {이름}")
+            text = path.read_text(encoding="utf-8")
+            for match in re.finditer(r"`/(gx-[가-힣A-Za-z-]+)`", text):
+                if match.group(1) != 이름:
+                    도달가능.add(match.group(1))
+        self.assertEqual(
+            self.commands - 도달가능, set(),
+            "진입점(프로젝트설정·파이프라인 2종)에서 안내되지 않는 커맨드가 있습니다 "
+            "— 신규 사용자가 도달할 수 없습니다",
+        )
+
 
 class LegacyReferenceTest(unittest.TestCase):
     def setUp(self):
