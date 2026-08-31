@@ -9,7 +9,7 @@ description: 테스트 결과의 부적합 항목을 결함ID로 등록·추적�
 결과서의 부적합 항목은 결함ID로 이 대장을 참조하고, 조치·재테스트 이력은 대장에만 기록한다.
 
 **호출 시점**: `fill-unit-test-result` · `fill-integration-test-result` · `generate-system-test`에서
-부적합 판정이 나올 때마다. 또는 `/결함관리대장` 커맨드로 단독 실행.
+부적합 판정이 나올 때마다. 또는 `/gx-결함관리대장` 커맨드로 단독 실행.
 
 ---
 

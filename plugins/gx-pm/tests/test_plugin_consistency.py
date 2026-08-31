@@ -12,10 +12,51 @@ from helpers import (
     PLUGIN_ROOT,
     REPO_ROOT,
     command_names,
+    doc_label,
     read_docs,
     skill_names,
     template_names,
 )
+
+
+def specs_only(docs: list) -> list:
+    """규칙 검사 대상 문서만 남긴다.
+
+    CHANGELOG 는 '무엇을 고쳤는지' 설명하느라 과거의 잘못된 표기를 그대로 인용한다.
+    (예: "/pm-design 참조 9곳 제거", "SCR-001 → EHR_01_01_020")
+    이력 문서를 규칙으로 검사하면 고친 사실을 적었다는 이유로 실패한다.
+    """
+    return [(path, text) for path, text in docs if path.name != "CHANGELOG.md"]
+
+
+class CommandNamingTest(unittest.TestCase):
+    """커맨드는 자동완성에서 한 덩어리로 보여야 한다 (v2.0.0 개명)."""
+
+    def test_모든_커맨드가_gx_접두를_쓴다(self):
+        for name in sorted(command_names()):
+            with self.subTest(커맨드=name):
+                self.assertTrue(
+                    name.startswith("gx-"),
+                    "커맨드 파일명은 gx- 로 시작해야 합니다",
+                )
+
+    def test_gx_접두가_중복되지_않는다(self):
+        for path, text in read_docs():
+            with self.subTest(문서=doc_label(path)):
+                self.assertNotIn(
+                    "gx-gx-", text,
+                    "일괄 치환이 두 번 적용됐습니다",
+                )
+
+    def test_접두어_없는_커맨드_참조가_남아있지_않다(self):
+        구커맨드 = re.compile(r"`/(?!gx-)[가-힣]+`")
+        for path, text in specs_only(read_docs()):
+            with self.subTest(문서=doc_label(path)):
+                남은것 = 구커맨드.findall(text)
+                self.assertEqual(
+                    남은것, [],
+                    f"개명되지 않은 커맨드 참조: {남은것}",
+                )
 
 
 class SkillFrontmatterTest(unittest.TestCase):
@@ -33,6 +74,7 @@ class SkillFrontmatterTest(unittest.TestCase):
 class CrossReferenceTest(unittest.TestCase):
     def setUp(self):
         self.docs = read_docs()
+        self.specs = specs_only(self.docs)
         self.skills = skill_names()
         self.commands = command_names()
         self.templates = template_names()
@@ -42,25 +84,26 @@ class CrossReferenceTest(unittest.TestCase):
         for path, text in self.docs:
             for match in pattern.finditer(text):
                 name = match.group(1) or match.group(2)
-                with self.subTest(문서=path.relative_to(PLUGIN_ROOT), 스킬=name):
+                with self.subTest(문서=doc_label(path), 스킬=name):
                     self.assertIn(name, self.skills)
 
     def test_백틱으로_참조된_커맨드가_모두_존재한다(self):
-        for path, text in self.docs:
-            for match in re.finditer(r"`/([가-힣]+)`", text):
-                with self.subTest(문서=path.relative_to(PLUGIN_ROOT), 커맨드=match.group(1)):
+        # CHANGELOG 는 개명 대응표에서 구 이름을 인용하므로 검사 대상에서 뺀다.
+        for path, text in self.specs:
+            for match in re.finditer(r"`/(gx-[가-힣A-Za-z-]+)`", text):
+                with self.subTest(문서=doc_label(path), 커맨드=match.group(1)):
                     self.assertIn(match.group(1), self.commands)
 
     def test_참조된_템플릿_경로가_모두_존재한다(self):
         for path, text in self.docs:
             for match in re.finditer(r"templates/([A-Za-z0-9\-]+\.md)", text):
-                with self.subTest(문서=path.relative_to(PLUGIN_ROOT), 템플릿=match.group(1)):
+                with self.subTest(문서=doc_label(path), 템플릿=match.group(1)):
                     self.assertIn(match.group(1), self.templates)
 
     def test_참조된_스킬_경로가_모두_존재한다(self):
         for path, text in self.docs:
             for match in re.finditer(r"skills/([a-z0-9-]+)/SKILL\.md", text):
-                with self.subTest(문서=path.relative_to(PLUGIN_ROOT), 스킬=match.group(1)):
+                with self.subTest(문서=doc_label(path), 스킬=match.group(1)):
                     self.assertIn(match.group(1), self.skills)
 
     def test_모든_스킬이_어느_커맨드에서든_호출된다(self):
@@ -75,15 +118,29 @@ class CrossReferenceTest(unittest.TestCase):
             "커맨드에서 호출되지 않는 스킬이 있습니다 — 배선 누락입니다",
         )
 
+    def test_모든_커맨드가_사용자에게_도달_가능하다(self):
+        """스킬 배선 검사(test_모든_스킬이_어느_커맨드에서든_호출된다)의 대칭 짝.
 
-def specs_only(docs: list) -> list:
-    """규칙 검사 대상 문서만 남긴다.
+        '참조된 커맨드가 존재하는가'만 검사하고 '존재하는 커맨드가 안내되는가'를
+        검사하지 않으면, v1.5.0 처럼 발견 경로가 없는 커맨드가 생긴다.
 
-    CHANGELOG 는 '무엇을 고쳤는지' 설명하느라 과거의 잘못된 표기를 그대로 인용한다.
-    (예: "/pm-design 참조 9곳 제거", "SCR-001 → EHR_01_01_020")
-    이력 문서를 규칙으로 검사하면 고친 사실을 적었다는 이유로 실패한다.
-    """
-    return [(path, text) for path, text in docs if path.name != "CHANGELOG.md"]
+        형제 커맨드끼리의 상호 참조는 발견 경로가 아니다. 아무 커맨드도 실행해본 적 없는
+        사용자가 보는 것은 진입점 3종뿐이므로, 그 합집합이 전체 커맨드를 덮어야 한다.
+        """
+        진입점 = ("gx-프로젝트설정", "gx-spec", "gx-testplan")
+        도달가능 = set()
+        for 이름 in 진입점:
+            path = PLUGIN_ROOT / "commands" / f"{이름}.md"
+            self.assertTrue(path.exists(), f"진입점 커맨드가 없습니다: {이름}")
+            text = path.read_text(encoding="utf-8")
+            for match in re.finditer(r"`/(gx-[가-힣A-Za-z-]+)`", text):
+                if match.group(1) != 이름:
+                    도달가능.add(match.group(1))
+        self.assertEqual(
+            self.commands - 도달가능, set(),
+            "진입점(프로젝트설정·파이프라인 2종)에서 안내되지 않는 커맨드가 있습니다 "
+            "— 신규 사용자가 도달할 수 없습니다",
+        )
 
 
 class LegacyReferenceTest(unittest.TestCase):
@@ -92,7 +149,7 @@ class LegacyReferenceTest(unittest.TestCase):
 
     def test_존재하지_않는_pm_커맨드를_안내하지_않는다(self):
         for path, text in self.docs:
-            with self.subTest(문서=path.relative_to(PLUGIN_ROOT)):
+            with self.subTest(문서=doc_label(path)):
                 self.assertNotIn(
                     "/pm-", text,
                     "구 커맨드(/pm-design·/pm-test·/pm-trace) 참조가 남아 있습니다",
@@ -102,11 +159,91 @@ class LegacyReferenceTest(unittest.TestCase):
         # 화면ID 는 {접두}_{xx}_{xx}_{xxx}, 시나리오ID 는 {시스템코드}-TE-{순번}
         forbidden = re.compile(r"\bSCR-\d|\bSC-\d|\bSN-\d")
         for path, text in self.docs:
-            with self.subTest(문서=path.relative_to(PLUGIN_ROOT)):
+            with self.subTest(문서=doc_label(path)):
                 self.assertIsNone(
                     forbidden.search(text),
                     "규칙을 벗어난 예시 ID 가 있습니다 (SCR-·SC-·SN-)",
                 )
+
+
+class PrerequisiteRegistryTest(unittest.TestCase):
+    """선행조건은 templates/prerequisites.md 가 정본이다.
+
+    커맨드를 추가하면서 선행조건 정의를 빠뜨리면 Step 0 검사가 비어버린다.
+    """
+
+    def setUp(self):
+        self.text = (PLUGIN_ROOT / "templates" / "prerequisites.md").read_text(
+            encoding="utf-8"
+        )
+        self.listed = set(re.findall(r"^\|\s*`/(gx-[가-힣A-Za-z-]+)`\s*\|", self.text, re.M))
+
+    def test_모든_커맨드가_레지스트리에_있다(self):
+        self.assertEqual(
+            command_names() - self.listed, set(),
+            "선행조건이 정의되지 않은 커맨드가 있습니다",
+        )
+
+    def test_레지스트리에_없는_커맨드가_실려있지_않다(self):
+        self.assertEqual(
+            self.listed - command_names(), set(),
+            "존재하지 않는 커맨드가 레지스트리에 있습니다",
+        )
+
+    def test_하드와_소프트_구분이_정의돼_있다(self):
+        self.assertIn("하드", self.text)
+        self.assertIn("소프트", self.text)
+        self.assertIn("진행 중단", self.text)
+
+
+class PipelineProtocolTest(unittest.TestCase):
+    """파이프라인 실행 규약은 templates/pipeline-protocol.md 가 정본이다."""
+
+    def setUp(self):
+        self.text = (PLUGIN_ROOT / "templates" / "pipeline-protocol.md").read_text(
+            encoding="utf-8"
+        )
+
+    def test_이월_금지_항목이_명시돼_있다(self):
+        self.assertIn("이월 금지", self.text)
+        self.assertIn("시안", self.text)
+        self.assertIn("화면ID", self.text)
+
+    def test_파생_ID가_모두_재생성_파급_규칙에_있다(self):
+        """§재생성 파급 규칙 표 **안에서만** 검사한다.
+
+        파일 전체를 substring 으로 훑으면 §이월 금지 항목의 산문
+        ("화면ID가 바뀌면 PG_·U_·TC_ 가 전부 재채번된다") 이 조건을 채워버려,
+        이 테스트가 지킨다고 선언한 파급 표가 통째로 사라져도 통과한다.
+        """
+        rules = (PLUGIN_ROOT / "templates" / "id-naming-rules.md").read_text(
+            encoding="utf-8"
+        )
+        파생 = re.findall(r"\|\s*`(\w+_)`\s*\|[^|]*\|\s*\*\*화면ID", rules)
+        self.assertEqual(
+            set(파생), {"PG_", "U_", "TC_"},
+            "id-naming-rules.md 의 화면ID 파생 목록이 바뀌었습니다",
+        )
+
+        구간 = re.search(
+            r"^## 재생성 파급 규칙$(.*?)(?=^## |\Z)", self.text, re.M | re.S
+        )
+        self.assertIsNotNone(
+            구간,
+            "pipeline-protocol.md 에서 '## 재생성 파급 규칙' 절을 찾지 못했습니다 "
+            "— 절이 삭제됐거나 제목이 바뀌었습니다",
+        )
+        표 = 구간.group(1)
+        for 접두 in 파생:
+            with self.subTest(접두=접두):
+                self.assertIn(
+                    접두, 표,
+                    f"화면ID 파생 ID `{접두}` 가 재생성 파급 규칙 표에 없습니다 "
+                    "— 화면ID 변경 시 무엇을 다시 만들지 규정되지 않습니다",
+                )
+
+    def test_중단_후_재개_규칙이_있다(self):
+        self.assertIn("detect-existing-artifact", self.text)
 
 
 class DocumentCodeTest(unittest.TestCase):
@@ -118,13 +255,13 @@ class DocumentCodeTest(unittest.TestCase):
     def test_테이블정의서는_DE_08_이다(self):
         wrong = re.compile(r"테이블정의서\s*\(?DE-09|DE-09\s*테이블정의서")
         for path, text in self.docs:
-            with self.subTest(문서=path.relative_to(PLUGIN_ROOT)):
+            with self.subTest(문서=doc_label(path)):
                 self.assertIsNone(wrong.search(text), "테이블정의서는 DE-08 입니다")
 
     def test_인터페이스정의서는_DE_04_이다(self):
         wrong = re.compile(r"인터페이스정의서\s*\|\s*DE-07|DE-07\s*인터페이스정의서")
         for path, text in self.docs:
-            with self.subTest(문서=path.relative_to(PLUGIN_ROOT)):
+            with self.subTest(문서=doc_label(path)):
                 self.assertIsNone(wrong.search(text), "인터페이스정의서는 DE-04 입니다")
 
 
@@ -146,6 +283,91 @@ class CommandStructureTest(unittest.TestCase):
                     len(numbers), len(set(numbers)),
                     f"Step 번호가 중복됩니다: {numbers}",
                 )
+
+    def test_커맨드가_선행조건_템플릿을_참조한다(self):
+        for path in sorted((PLUGIN_ROOT / "commands").glob("*.md")):
+            if path.stem == "gx-프로젝트설정":
+                continue  # 프로파일 자체를 만드는 커맨드라 선행조건이 없다
+            with self.subTest(커맨드=path.stem):
+                text = path.read_text(encoding="utf-8")
+                self.assertIn("templates/prerequisites.md", text)
+
+    def test_커맨드가_파이프라인_규약을_참조한다(self):
+        for path in sorted((PLUGIN_ROOT / "commands").glob("*.md")):
+            if path.stem == "gx-프로젝트설정":
+                continue  # 파이프라인에 들어가지 않는다
+            with self.subTest(커맨드=path.stem):
+                text = path.read_text(encoding="utf-8")
+                self.assertIn("templates/pipeline-protocol.md", text)
+
+    def test_다음_제안의_커맨드가_백틱으로_감싸져_있다(self):
+        맨커맨드 = re.compile(r"(?<![`/\w])/gx-[가-힣A-Za-z-]+")
+        for path in sorted((PLUGIN_ROOT / "commands").glob("*.md")):
+            text = path.read_text(encoding="utf-8")
+            # H1 제목(# /gx-... — 설명)은 예외
+            본문 = "\n".join(
+                line for line in text.splitlines() if not line.startswith("# /")
+            )
+            with self.subTest(커맨드=path.stem):
+                self.assertEqual(
+                    맨커맨드.findall(본문), [],
+                    "백틱 없는 커맨드 참조가 있습니다 — 도달 가능성 검사가 놓칩니다",
+                )
+
+
+PIPELINE_ARTIFACTS = {
+    "gx-spec": [
+        "gx-요구사항정의서",
+        "gx-화면목록표",
+        "gx-프로그램정의서",
+        "gx-인터페이스정의서",
+        "gx-테이블정의서",
+    ],
+    "gx-testplan": [
+        "gx-총괄테스트계획서",
+        "gx-단위테스트계획서",
+        "gx-통합테스트시나리오",
+        "gx-시스템테스트",
+    ],
+}
+
+
+class PipelineCommandTest(unittest.TestCase):
+    """파이프라인은 묶은 산출물을 빠짐없이 만들고, 게이트를 2개 유지해야 한다."""
+
+    def _본문(self, 이름: str) -> str:
+        return (PLUGIN_ROOT / "commands" / f"{이름}.md").read_text(encoding="utf-8")
+
+    def test_파이프라인이_구성_산출물_커맨드를_모두_참조한다(self):
+        for 이름, 산출물들 in PIPELINE_ARTIFACTS.items():
+            if 이름 not in command_names():
+                continue  # 아직 만들지 않은 파이프라인은 건너뛴다
+            본문 = self._본문(이름)
+            for 산출물 in 산출물들:
+                with self.subTest(파이프라인=이름, 산출물=산출물):
+                    self.assertIn(f"`/{산출물}`", 본문)
+
+    def test_파이프라인에_필수_중단점이_2개_있다(self):
+        for 이름 in PIPELINE_ARTIFACTS:
+            if 이름 not in command_names():
+                continue
+            with self.subTest(파이프라인=이름):
+                게이트 = re.findall(
+                    r"^### Step \d+:.*\[필수 중단점", self._본문(이름), re.M
+                )
+                self.assertEqual(
+                    len(게이트), 2,
+                    f"게이트가 2개가 아닙니다: {게이트}",
+                )
+
+    def test_파이프라인이_규약_템플릿을_참조한다(self):
+        for 이름 in PIPELINE_ARTIFACTS:
+            if 이름 not in command_names():
+                continue
+            with self.subTest(파이프라인=이름):
+                본문 = self._본문(이름)
+                self.assertIn("templates/pipeline-protocol.md", 본문)
+                self.assertIn("templates/prerequisites.md", 본문)
 
 
 class VersionConsistencyTest(unittest.TestCase):
@@ -178,6 +400,38 @@ class VersionConsistencyTest(unittest.TestCase):
         )
         self.assertEqual(
             int(re.search(r"commands-(\d+)-orange", self.readme).group(1)), self.command_count
+        )
+
+    def test_README_디렉토리_트리의_개수가_실제와_같다(self):
+        """배지는 test_README_배지가_실제_스킬_커맨드_수와_같다 가 지키지만,
+
+        '## 디렉토리 구조' 트리의 commands/·skills/ 주석 숫자는 어떤 테스트도
+        보지 않아 배지가 고쳐진 뒤에도(v1.4.0~v2.0.0 T7 이전) 11개/22개로
+        방치됐었다. 트리 자체를 다시 세지는 않는다 — 주석 숫자만 실제 개수와
+        비교해, 파일을 추가/삭제하고 이 주석을 깜빡했을 때 여기서 걸리게 한다.
+        """
+        commands_match = re.search(r"commands/\s*#\s*(\d+)개 커맨드", self.readme)
+        self.assertIsNotNone(
+            commands_match,
+            "README '## 디렉토리 구조' 트리에서 'commands/ ... #N개 커맨드' 주석을 찾지 못했습니다",
+        )
+        self.assertEqual(
+            int(commands_match.group(1)),
+            self.command_count,
+            "README 디렉토리 트리의 commands/ 개수 주석이 실제 커맨드 수와 다릅니다 "
+            "— 커맨드를 추가/삭제했다면 트리의 주석과 파일 목록도 함께 갱신하세요",
+        )
+
+        skills_match = re.search(r"skills/\s*#\s*(\d+)개 스킬", self.readme)
+        self.assertIsNotNone(
+            skills_match,
+            "README '## 디렉토리 구조' 트리에서 'skills/ ... #N개 스킬' 주석을 찾지 못했습니다",
+        )
+        self.assertEqual(
+            int(skills_match.group(1)),
+            self.skill_count,
+            "README 디렉토리 트리의 skills/ 개수 주석이 실제 스킬 수와 다릅니다 "
+            "— 스킬을 추가/삭제했다면 트리의 주석과 디렉터리 목록도 함께 갱신하세요",
         )
 
     def test_설명문의_스킬_커맨드_수가_실제와_같다(self):
