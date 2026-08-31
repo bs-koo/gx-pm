@@ -191,5 +191,39 @@ class VersionConsistencyTest(unittest.TestCase):
                 )
 
 
+class BoundaryRuleTest(unittest.TestCase):
+    """드라이런에서 놓친 4건(영값·통과 측 경계·하위 정밀도)의 재발을 막는다.
+
+    마크다운 규칙이라 실행 검증은 불가능하다. 규칙 섹션이 삭제되지 않도록
+    존재만 고정한다.
+    """
+
+    def setUp(self):
+        self.text = (
+            PLUGIN_ROOT / "skills" / "design-test-cases" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+
+    def test_경계값_도출이_3유형으로_나뉘어_있다(self):
+        for heading in ("유형 A", "유형 B", "유형 C"):
+            with self.subTest(유형=heading):
+                self.assertIn(heading, self.text)
+
+    def test_영값_케이스_규칙이_있다(self):
+        self.assertIn("영값", self.text)
+
+    def test_통과_측_경계_규칙과_연산자표가_있다(self):
+        self.assertIn("isBefore", self.text)
+        self.assertIn("경계 정확히 일치", self.text)
+
+    def test_하위_정밀도_전개_규칙이_있다(self):
+        self.assertIn("나노초", self.text)
+
+    def test_제약_출처에_도메인_검증_코드가_있다(self):
+        self.assertIn("도메인 검증 코드", self.text)
+
+    def test_검증_조건_순차_검사_규칙이_있다(self):
+        self.assertIn("먼저 걸리는 조건", self.text)
+
+
 if __name__ == "__main__":
     unittest.main()
