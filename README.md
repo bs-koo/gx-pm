@@ -6,7 +6,7 @@
 
 요구사항 분석부터 테스트 계획, ID 추적, 감리 대응까지
 
-[![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-1.5.1-blue.svg)]()
 [![Skills](https://img.shields.io/badge/skills-26-green.svg)]()
 [![Commands](https://img.shields.io/badge/commands-14-orange.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
