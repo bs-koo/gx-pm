@@ -19,6 +19,10 @@ import io
 import argparse
 from pathlib import Path
 
+# 목록 표지는 마커 뒤에 공백이 온다("- 항목", "1. 항목").
+# 공백을 요구해야 볼드 강조("**부적합 목록**")를 목록으로 오인하지 않는다.
+_BULLET_PREFIX = re.compile(r"^([-*+]|\d+\.)\s")
+
 # Windows cp949 인코딩 문제 방지
 if sys.stdout.encoding and sys.stdout.encoding.lower().startswith("cp"):
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -92,6 +96,7 @@ DOCUMENT_PROFILES = {
     },
     "총괄테스트계획서": {
         "sheet_name": "TE-01 총괄테스트계획서",
+        "sheet_names": ["TE-01 테스트 레벨", "TE-01 종료기준", "TE-01 추진체제"],
         "columns": [
             ["레벨", "산출물 코드", "대상", "수행 주체", "검증 대상 요구사항"],
             ["기준", "목표치", "비고"],
@@ -100,6 +105,7 @@ DOCUMENT_PROFILES = {
     },
     "단위테스트계획서": {
         "sheet_name": "DE-13 단위테스트계획서",
+        "sheet_names": ["DE-13 단위테스트계획", "DE-13 테스트케이스"],
         "columns": [
             # 시트 1 — 검사기준 체크리스트 (뒤의 27개 검사항목 컬럼은 가변)
             ["기능구분ID", "기능구분명", "기능ID", "기능명",
@@ -208,15 +214,37 @@ def parse_markdown_tables(text: str) -> list[tuple[str, list[str]]]:
         stripped = line.strip()
         if stripped.startswith("|") and stripped.endswith("|"):
             if not current_table:
-                # 표 직전의 제목(### 등)을 찾는다
-                for j in range(i - 1, max(i - 6, -1), -1):
+                # 표 직전의 제목(### 등)을 찾는다.
+                # 코드펜스(``` / ~~~) 블록은 여는/닫는 펜스 사이를 통째로
+                # 건너뛴다 — 탐색 창(budget)도 소모하지 않는다. 코드 블록이
+                # 길어도 그 위의 상위 헤딩까지 거슬러 올라갈 수 있어야 한다.
+                j = i - 1
+                budget = 30
+                while j >= 0 and budget > 0:
                     candidate = lines[j].strip()
+                    if candidate.startswith(("```", "~~~")):
+                        fence = candidate[:3]
+                        j -= 1
+                        while j >= 0 and not lines[j].strip().startswith(fence):
+                            j -= 1
+                        j -= 1
+                        continue
+                    budget -= 1
                     if candidate.startswith("#"):
                         table_title = candidate.lstrip("#").strip()
                         break
-                    if candidate and not candidate.startswith("|"):
+                    # 인용문·표·목록은 제목이 아니다 — 계속 거슬러 올라간다.
+                    # 목록 마커는 뒤에 공백이 온다("- 항목"). 공백이 없으면
+                    # 볼드 강조("**부적합 목록**")이므로 라벨로 인정한다.
+                    if candidate.startswith((">", "|")) or _BULLET_PREFIX.match(candidate):
+                        j -= 1
+                        continue
+                    # 산문 한 줄이 시트명이 되는 것을 막는다.
+                    # 짧고 문장으로 끝나지 않는 라인만 라벨로 인정한다.
+                    if candidate and len(candidate) <= 30 and not candidate.endswith((".", "다", "요", "!", "?")):
                         table_title = candidate
                         break
+                    j -= 1
             current_table.append(stripped)
         else:
             if current_table:
@@ -267,6 +295,26 @@ def _header_key(rows: list[list[str]]) -> str:
     if not rows:
         return ""
     return "|".join(h.strip() for h in rows[0])
+
+
+def _matched_set_index(rows: list[list[str]], doc_type: str | None) -> int | None:
+    """이 표가 산출물 본문 표라면 매칭된 컬럼 세트의 인덱스를, 아니면 None 을 반환한다.
+
+    프로필 컬럼 세트와 절반 이상 일치하면 본문 표다.
+    근거·통계 같은 보조 표는 산출물 시트명을 물려받지 않고 자기 제목을 쓴다.
+    """
+    if not doc_type or doc_type not in DOCUMENT_PROFILES or not rows:
+        return None
+    header = {h.strip() for h in rows[0]}
+    best: int | None = None
+    best_ratio = 0.0
+    for index, target in enumerate(DOCUMENT_PROFILES[doc_type]["columns"]):
+        if not target:
+            continue
+        ratio = len([c for c in target if c in header]) / len(target)
+        if ratio >= 0.5 and ratio > best_ratio:
+            best, best_ratio = index, ratio
+    return best
 
 
 def _reorder_columns(
@@ -382,9 +430,18 @@ def create_xlsx(
             title = merged_titles[key]
 
             # 시트 이름 결정
-            if doc_type and doc_type in DOCUMENT_PROFILES:
-                base_name = DOCUMENT_PROFILES[doc_type]["sheet_name"]
+            set_index = _matched_set_index(rows, doc_type)
+            if set_index is not None:
+                # 본문 데이터 표 — 공공 양식 시트명을 쓴다
+                profile = DOCUMENT_PROFILES[doc_type]
+                names = profile.get("sheet_names")
+                base_name = (
+                    names[set_index]
+                    if names and set_index < len(names)
+                    else profile["sheet_name"]
+                )
             elif title:
+                # 근거·통계 등 보조 표 — 마크다운 제목을 시트명으로 쓴다
                 base_name = title
             else:
                 base_name = "Data"
