@@ -22,5 +22,57 @@ class LoaderTest(unittest.TestCase):
                     self.assertIsInstance(column_set, list)
 
 
+class ParseMarkdownTablesTest(unittest.TestCase):
+    def setUp(self):
+        self.mod = load_export_module()
+
+    def test_헤딩을_표_제목으로_쓴다(self):
+        md = "### 케이스 생성 요약\n\n| 화면ID | 계 |\n|---|---|\n| A | 3 |\n"
+        tables = self.mod.parse_markdown_tables(md)
+        self.assertEqual(len(tables), 1)
+        self.assertEqual(tables[0][0], "케이스 생성 요약")
+
+    def test_산문_문단은_표_제목으로_쓰지_않는다(self):
+        md = (
+            "### 목표치 미확정 항목\n\n"
+            "목표치는 전부 발주처(또는 PM) 협의가 필요하다.\n\n"
+            "| ID | 항목 |\n|---|---|\n| B-ST-001 | 응답시간 |\n"
+        )
+        tables = self.mod.parse_markdown_tables(md)
+        self.assertEqual(tables[0][0], "목표치 미확정 항목")
+
+    def test_인용문은_표_제목으로_쓰지_않는다(self):
+        md = (
+            "### 제약 출처 추적\n\n"
+            "> 테이블정의서가 없어 도메인 코드에서 도출했다.\n\n"
+            "| 경계값 | 출처 |\n|---|---|\n| 20자 | 정책 상수 |\n"
+        )
+        tables = self.mod.parse_markdown_tables(md)
+        self.assertEqual(tables[0][0], "제약 출처 추적")
+
+    def test_볼드_라벨_라인은_제목으로_쓴다(self):
+        md = "**부적합 목록**\n\n| 결함ID | 심각도 |\n|---|---|\n| B-DF-001 | Major |\n"
+        tables = self.mod.parse_markdown_tables(md)
+        self.assertEqual(tables[0][0], "**부적합 목록**")
+
+    def test_글머리표_항목은_표_제목으로_쓰지_않는다(self):
+        md = (
+            "### 결함 현황\n\n"
+            "- 조치율 50%\n\n"
+            "| 결함ID | 상태 |\n|---|---|\n| B-DF-001 | Open |\n"
+        )
+        tables = self.mod.parse_markdown_tables(md)
+        self.assertEqual(tables[0][0], "결함 현황")
+
+    def test_번호목록_항목은_표_제목으로_쓰지_않는다(self):
+        md = (
+            "### 조치 절차\n\n"
+            "1. 원인 분석\n\n"
+            "| 단계 | 내용 |\n|---|---|\n| 1 | 분석 |\n"
+        )
+        tables = self.mod.parse_markdown_tables(md)
+        self.assertEqual(tables[0][0], "조치 절차")
+
+
 if __name__ == "__main__":
     unittest.main()

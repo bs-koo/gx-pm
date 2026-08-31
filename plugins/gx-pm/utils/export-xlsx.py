@@ -19,6 +19,10 @@ import io
 import argparse
 from pathlib import Path
 
+# 목록 표지는 마커 뒤에 공백이 온다("- 항목", "1. 항목").
+# 공백을 요구해야 볼드 강조("**부적합 목록**")를 목록으로 오인하지 않는다.
+_BULLET_PREFIX = re.compile(r"^([-*+]|\d+\.)\s")
+
 # Windows cp949 인코딩 문제 방지
 if sys.stdout.encoding and sys.stdout.encoding.lower().startswith("cp"):
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -214,7 +218,14 @@ def parse_markdown_tables(text: str) -> list[tuple[str, list[str]]]:
                     if candidate.startswith("#"):
                         table_title = candidate.lstrip("#").strip()
                         break
-                    if candidate and not candidate.startswith("|"):
+                    # 인용문·표·목록은 제목이 아니다 — 계속 거슬러 올라간다.
+                    # 목록 마커는 뒤에 공백이 온다("- 항목"). 공백이 없으면
+                    # 볼드 강조("**부적합 목록**")이므로 라벨로 인정한다.
+                    if candidate.startswith((">", "|")) or _BULLET_PREFIX.match(candidate):
+                        continue
+                    # 산문 한 줄이 시트명이 되는 것을 막는다.
+                    # 짧고 문장으로 끝나지 않는 라인만 라벨로 인정한다.
+                    if candidate and len(candidate) <= 30 and not candidate.endswith((".", "다", "요", "!", "?")):
                         table_title = candidate
                         break
             current_table.append(stripped)
