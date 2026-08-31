@@ -19,3 +19,7 @@ Thumbs.db
 # Generated outputs
 *.xlsx
 *.hwp
+
+# Python
+__pycache__/
+*.pyc
