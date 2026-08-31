@@ -18,6 +18,46 @@ from helpers import (
 )
 
 
+def specs_only(docs: list) -> list:
+    """규칙 검사 대상 문서만 남긴다.
+
+    CHANGELOG 는 '무엇을 고쳤는지' 설명하느라 과거의 잘못된 표기를 그대로 인용한다.
+    (예: "/pm-design 참조 9곳 제거", "SCR-001 → EHR_01_01_020")
+    이력 문서를 규칙으로 검사하면 고친 사실을 적었다는 이유로 실패한다.
+    """
+    return [(path, text) for path, text in docs if path.name != "CHANGELOG.md"]
+
+
+class CommandNamingTest(unittest.TestCase):
+    """커맨드는 자동완성에서 한 덩어리로 보여야 한다 (v2.0.0 개명)."""
+
+    def test_모든_커맨드가_gx_접두를_쓴다(self):
+        for name in sorted(command_names()):
+            with self.subTest(커맨드=name):
+                self.assertTrue(
+                    name.startswith("gx-"),
+                    "커맨드 파일명은 gx- 로 시작해야 합니다",
+                )
+
+    def test_gx_접두가_중복되지_않는다(self):
+        for path, text in read_docs():
+            with self.subTest(문서=path.relative_to(PLUGIN_ROOT)):
+                self.assertNotIn(
+                    "gx-gx-", text,
+                    "일괄 치환이 두 번 적용됐습니다",
+                )
+
+    def test_접두어_없는_커맨드_참조가_남아있지_않다(self):
+        구커맨드 = re.compile(r"`/(?!gx-)[가-힣]+`")
+        for path, text in specs_only(read_docs()):
+            with self.subTest(문서=path.relative_to(PLUGIN_ROOT)):
+                남은것 = 구커맨드.findall(text)
+                self.assertEqual(
+                    남은것, [],
+                    f"개명되지 않은 커맨드 참조: {남은것}",
+                )
+
+
 class SkillFrontmatterTest(unittest.TestCase):
     def test_스킬_프론트매터_name_이_디렉터리명과_같다(self):
         for skill_dir in sorted((PLUGIN_ROOT / "skills").iterdir()):
@@ -33,6 +73,7 @@ class SkillFrontmatterTest(unittest.TestCase):
 class CrossReferenceTest(unittest.TestCase):
     def setUp(self):
         self.docs = read_docs()
+        self.specs = specs_only(self.docs)
         self.skills = skill_names()
         self.commands = command_names()
         self.templates = template_names()
@@ -46,8 +87,9 @@ class CrossReferenceTest(unittest.TestCase):
                     self.assertIn(name, self.skills)
 
     def test_백틱으로_참조된_커맨드가_모두_존재한다(self):
-        for path, text in self.docs:
-            for match in re.finditer(r"`/([가-힣]+)`", text):
+        # CHANGELOG 는 개명 대응표에서 구 이름을 인용하므로 검사 대상에서 뺀다.
+        for path, text in self.specs:
+            for match in re.finditer(r"`/(gx-[가-힣A-Za-z-]+)`", text):
                 with self.subTest(문서=path.relative_to(PLUGIN_ROOT), 커맨드=match.group(1)):
                     self.assertIn(match.group(1), self.commands)
 
@@ -74,16 +116,6 @@ class CrossReferenceTest(unittest.TestCase):
             self.skills - used, set(),
             "커맨드에서 호출되지 않는 스킬이 있습니다 — 배선 누락입니다",
         )
-
-
-def specs_only(docs: list) -> list:
-    """규칙 검사 대상 문서만 남긴다.
-
-    CHANGELOG 는 '무엇을 고쳤는지' 설명하느라 과거의 잘못된 표기를 그대로 인용한다.
-    (예: "/pm-design 참조 9곳 제거", "SCR-001 → EHR_01_01_020")
-    이력 문서를 규칙으로 검사하면 고친 사실을 적었다는 이유로 실패한다.
-    """
-    return [(path, text) for path, text in docs if path.name != "CHANGELOG.md"]
 
 
 class LegacyReferenceTest(unittest.TestCase):
