@@ -27,3 +27,6 @@ __pycache__/
 # SDD 작업공간
 .superpowers/
 .sdd-tmp/
+
+# Windows `> nul` 리다이렉트 잔재 (nul 은 예약 장치명이라 실수로 파일이 생긴다)
+nul

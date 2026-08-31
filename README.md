@@ -412,83 +412,88 @@ DDL 복사 → /gx-테이블정의서에 붙여넣기 → DE-08 자동 생성
 ## 디렉토리 구조
 
 ```
-gx-pm/
+gx-pm/                                      # 저장소 루트
 ├── .claude-plugin/
-│   ├── plugin.json            # 플러그인 메타데이터
-│   └── marketplace.json       # 마켓플레이스 등록
-├── commands/                   # 16개 커맨드 (한국어)
-│   ├── gx-spec.md              # v2.0.0 신규
-│   ├── gx-testplan.md          # v2.0.0 신규
-│   ├── gx-프로젝트설정.md
-│   ├── gx-요구사항정의서.md
-│   ├── gx-화면목록표.md
-│   ├── gx-프로그램정의서.md
-│   ├── gx-인터페이스정의서.md
-│   ├── gx-테이블정의서.md
-│   ├── gx-총괄테스트계획서.md
-│   ├── gx-단위테스트계획서.md
-│   ├── gx-통합테스트시나리오.md
-│   ├── gx-시스템테스트.md
-│   ├── gx-테스트결과서.md
-│   ├── gx-결함관리대장.md
-│   ├── gx-추적매트릭스.md
-│   └── gx-감리대응.md
-├── skills/                     # 26개 스킬
-│   ├── extract-requirements/
-│   ├── classify-requirements/
-│   ├── trace-requirements/
-│   ├── detect-alternatives/
-│   ├── generate-screen-list/
-│   ├── generate-program-list/
-│   ├── convert-ddl-to-tablespec/
-│   ├── generate-erd-guide/
-│   ├── generate-interface-spec/
-│   ├── reverse-scan-source/
-│   ├── reverse-scan-interfaces/
-│   ├── scan-source-index/
-│   ├── load-project-profile/
-│   ├── detect-existing-artifact/
-│   ├── generate-master-test-plan/
-│   ├── generate-unit-test-plan/
-│   ├── design-test-cases/
-│   ├── generate-integration-test/
-│   ├── generate-system-test/
-│   ├── fill-unit-test-result/
-│   ├── fill-integration-test-result/
-│   ├── manage-defects/
-│   ├── prioritize-si/
-│   ├── impact-analysis/
-│   ├── id-trace/
-│   └── audit-response/
-├── templates/                  # 산출물 양식 + 프로토콜
-│   ├── prerequisites.md        # v2.0.0 신규
-│   ├── pipeline-protocol.md    # v2.0.0 신규
-│   ├── project-profile-schema.md
-│   ├── AN-02-requirements-definition.md
-│   ├── AN-05-traceability-matrix.md
-│   ├── DE-03-screen-list.md
-│   ├── DE-05-program-definition.md
-│   ├── DE-08-table-definition.md
-│   ├── DE-13-unit-test-plan.md
-│   ├── DE-14-integration-test-plan.md
-│   ├── DF-01-defect-log.md
-│   ├── ST-01-system-test.md
-│   ├── TE-01-master-test-plan.md
-│   ├── inspection-criteria.md
-│   ├── id-naming-rules.md
-│   └── approval-protocol.md
-├── utils/
-│   └── export-xlsx.py          # 마크다운 → xlsx 변환
-├── tests/                      # unittest 계약 테스트
-│   ├── helpers.py
-│   ├── test_export_xlsx.py
-│   └── test_plugin_consistency.py
-├── docs/
-│   └── 표준용어-mcp-연계.md     # 표준용어 MCP 연계 규칙
+│   └── marketplace.json                   # 마켓플레이스 등록
+├── .github/workflows/
+│   └── test.yml                           # CI — 계약 테스트 실행
+├── plugins/gx-pm/                          # 플러그인 본체
+│   ├── .claude-plugin/
+│   │   └── plugin.json                    # 플러그인 메타데이터
+│   ├── commands/                          # 16개 커맨드 (한국어)
+│   │   ├── gx-spec.md                      # v2.0.0 신규
+│   │   ├── gx-testplan.md                  # v2.0.0 신규
+│   │   ├── gx-감리대응.md
+│   │   ├── gx-결함관리대장.md
+│   │   ├── gx-단위테스트계획서.md
+│   │   ├── gx-시스템테스트.md
+│   │   ├── gx-요구사항정의서.md
+│   │   ├── gx-인터페이스정의서.md
+│   │   ├── gx-총괄테스트계획서.md
+│   │   ├── gx-추적매트릭스.md
+│   │   ├── gx-테스트결과서.md
+│   │   ├── gx-테이블정의서.md
+│   │   ├── gx-통합테스트시나리오.md
+│   │   ├── gx-프로그램정의서.md
+│   │   ├── gx-프로젝트설정.md
+│   │   └── gx-화면목록표.md
+│   ├── skills/                            # 26개 스킬
+│   │   ├── audit-response/
+│   │   ├── classify-requirements/
+│   │   ├── convert-ddl-to-tablespec/
+│   │   ├── design-test-cases/
+│   │   ├── detect-alternatives/
+│   │   ├── detect-existing-artifact/
+│   │   ├── extract-requirements/
+│   │   ├── fill-integration-test-result/
+│   │   ├── fill-unit-test-result/
+│   │   ├── generate-erd-guide/
+│   │   ├── generate-integration-test/
+│   │   ├── generate-interface-spec/
+│   │   ├── generate-master-test-plan/
+│   │   ├── generate-program-list/
+│   │   ├── generate-screen-list/
+│   │   ├── generate-system-test/
+│   │   ├── generate-unit-test-plan/
+│   │   ├── id-trace/
+│   │   ├── impact-analysis/
+│   │   ├── load-project-profile/
+│   │   ├── manage-defects/
+│   │   ├── prioritize-si/
+│   │   ├── reverse-scan-interfaces/
+│   │   ├── reverse-scan-source/
+│   │   ├── scan-source-index/
+│   │   └── trace-requirements/
+│   ├── templates/                         # 산출물 양식 + 정본 규약 16종
+│   │   ├── pipeline-protocol.md            # v2.0.0 신규
+│   │   ├── prerequisites.md                # v2.0.0 신규
+│   │   ├── AN-02-requirements-definition.md
+│   │   ├── AN-05-traceability-matrix.md
+│   │   ├── DE-03-screen-list.md
+│   │   ├── DE-05-program-definition.md
+│   │   ├── DE-08-table-definition.md
+│   │   ├── DE-13-unit-test-plan.md
+│   │   ├── DE-14-integration-test-plan.md
+│   │   ├── DF-01-defect-log.md
+│   │   ├── ST-01-system-test.md
+│   │   ├── TE-01-master-test-plan.md
+│   │   ├── approval-protocol.md
+│   │   ├── id-naming-rules.md
+│   │   ├── inspection-criteria.md
+│   │   └── project-profile-schema.md
+│   ├── utils/
+│   │   └── export-xlsx.py                 # 마크다운 → xlsx 변환
+│   ├── tests/                             # unittest 계약 테스트
+│   │   ├── helpers.py
+│   │   ├── test_export_xlsx.py
+│   │   └── test_plugin_consistency.py
+│   ├── docs/
+│   │   └── 표준용어-mcp-연계.md
+│   ├── CLAUDE.md                          # 플러그인 지침 (세션마다 로드)
+│   └── CHANGELOG.md
+├── docs/superpowers/                       # 설계서 · 구현 계획서
 ├── README.md
-├── CLAUDE.md
-├── CHANGELOG.md
-└── _config.yml                 # GitHub Pages
+└── _config.yml                            # GitHub Pages
 ```
 
 ---

@@ -1,6 +1,6 @@
 import unittest
 
-from helpers import load_export_module
+from helpers import load_export_module, read_docs
 
 
 class LoaderTest(unittest.TestCase):
@@ -126,6 +126,31 @@ class MatchedSetIndexTest(unittest.TestCase):
         rows = [["결함ID", "심각도"]]
         self.assertIsNone(self.mod._matched_set_index(rows, None))
 
+    def test_시트명_세트와_재배열_세트가_어긋나지_않는다(self):
+        """종전에는 같은 판단이 두 벌이었다.
+
+        시트명은 `_matched_set_index`, 컬럼 순서는 `_reorder_columns` 가 각자
+        "가장 잘 맞는 세트" 를 다시 계산했다. 한쪽 임계값만 고치면 시트가
+        A 세트의 이름을 달고 B 세트의 순서로 나온다 — 눈으로만 보이는 고장이다.
+        지금은 둘 다 `_best_column_set` 하나를 쓴다.
+
+        컬럼 순서를 뒤집어 넣어 재배열이 실제로 일어나게 만든 뒤 검사한다.
+        """
+        for 산출물, 프로필 in self.mod.DOCUMENT_PROFILES.items():
+            for 세트번호, 컬럼들 in enumerate(프로필["columns"]):
+                if not 컬럼들:
+                    continue
+                뒤집힌 = list(reversed(컬럼들))
+                rows = [뒤집힌, ["x"] * len(뒤집힌)]
+                with self.subTest(산출물=산출물, 세트=세트번호):
+                    골라진 = self.mod._matched_set_index(rows, 산출물)
+                    self.assertIsNotNone(골라진, "완전 일치인데 본문 표로 보지 않았습니다")
+                    self.assertEqual(
+                        self.mod._reorder_columns(rows, 산출물)[0],
+                        list(프로필["columns"][골라진]),
+                        "재배열이 시트명과 다른 컬럼 세트를 썼습니다",
+                    )
+
 
 class SheetNamingTest(unittest.TestCase):
     def setUp(self):
@@ -135,6 +160,35 @@ class SheetNamingTest(unittest.TestCase):
         names = self.mod.DOCUMENT_PROFILES["단위테스트계획서"]["sheet_names"]
         self.assertEqual(names[0], "DE-13 단위테스트계획")
         self.assertEqual(names[1], "DE-13 테스트케이스")
+
+
+class ProfileColumnBindingTest(unittest.TestCase):
+    """DOCUMENT_PROFILES 의 컬럼명과 문서가 따로 놀지 않게 묶는다.
+
+    프로필 컬럼은 xlsx 재배열의 기준이고, 그 이름을 실제로 만들어 내는 것은
+    스킬·템플릿 문서다. 한쪽에서 컬럼명을 바꾸면 매칭률이 임계값 아래로 떨어져
+    **조용히** 재배열이 멈추고 사용자는 원본 순서를 받는다. 예외도 오류도 없다.
+
+    검사 강도를 여기까지로 정한 이유:
+    문서가 컬럼을 세 가지 모양으로 적는다 — 표 헤더 행, `| 컬럼 | 설명 |` 서술표,
+    산문. 더 엄격한 기준(헤더 행에 완전히 등장할 것)은 축약 예시를 쓰는 정당한
+    스킬 문서를 오탐한다. 실측으로 확인함(엄격 기준 12건 오탐, 이 기준 0건).
+    """
+
+    def setUp(self):
+        self.mod = load_export_module()
+        self.문서 = "".join(text for _, text in read_docs())
+
+    def test_모든_프로필_컬럼이_문서에_존재한다(self):
+        for 산출물, 프로필 in self.mod.DOCUMENT_PROFILES.items():
+            for 세트번호, 컬럼들 in enumerate(프로필["columns"]):
+                for 컬럼 in 컬럼들:
+                    with self.subTest(산출물=산출물, 세트=세트번호, 컬럼=컬럼):
+                        self.assertIn(
+                            컬럼, self.문서,
+                            f"프로필이 기대하는 컬럼 '{컬럼}' 을 어떤 문서도 만들지 않습니다 "
+                            "— 오타이거나, 문서에서 이름이 바뀌었는데 프로필이 안 따라왔습니다",
+                        )
 
 
 if __name__ == "__main__":

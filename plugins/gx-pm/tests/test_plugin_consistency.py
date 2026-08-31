@@ -80,11 +80,20 @@ class CrossReferenceTest(unittest.TestCase):
         self.commands = command_names()
         self.templates = template_names()
 
+    # "gx-pm 스킬은 allowed-tools 제한이 없다" 처럼 플러그인 이름 자체를 가리키는 문장이 있다.
+    # 스킬 디렉터리가 아니므로 검사 대상이 아니다.
+    스킬_아닌_이름 = {"gx-pm"}
+
     def test_참조된_스킬이_모두_존재한다(self):
-        pattern = re.compile(r"\*\*([a-z][a-z0-9-]{4,})\*\*\s*스킬|`([a-z][a-z0-9-]{4,})`\s*스킬")
+        # 굵게·백틱뿐 아니라 **평문 참조도** 잡는다.
+        # 종전 정규식은 `**name** 스킬` 과 `` `name` 스킬`` 만 봐서,
+        # 평문으로만 적힌 참조 6곳이 검사 밖에 있었다.
+        pattern = re.compile(r"(?<![\w-])(?:\*\*|`)?([a-z][a-z0-9-]{4,})(?:\*\*|`)?\s*스킬")
         for path, text in self.docs:
             for match in pattern.finditer(text):
-                name = match.group(1) or match.group(2)
+                name = match.group(1)
+                if name in self.스킬_아닌_이름:
+                    continue
                 with self.subTest(문서=doc_label(path), 스킬=name):
                     self.assertIn(name, self.skills)
 
@@ -139,7 +148,7 @@ class CrossReferenceTest(unittest.TestCase):
                     도달가능.add(match.group(1))
         self.assertEqual(
             self.commands - 도달가능, set(),
-            "진입점(프로젝트설정·파이프라인 2종)에서 안내되지 않는 커맨드가 있습니다 "
+            f"진입점({', '.join(진입점)})에서 안내되지 않는 커맨드가 있습니다 "
             "— 신규 사용자가 도달할 수 없습니다",
         )
 
