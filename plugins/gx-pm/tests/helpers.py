@@ -60,6 +60,26 @@ def doc_label(path: Path) -> Path:
         return path.relative_to(REPO_ROOT)
 
 
+def strip_fences(text: str) -> str:
+    """``` 코드펜스 안을 걷어낸다.
+
+    펜스 안은 사용자에게 그대로 출력되는 메시지라 백틱이 리터럴로 렌더링된다.
+    거기까지 백틱을 강요하면 사용자 화면에 백틱이 노출된다 — 규약이 아니라 사고다.
+    """
+    남긴줄: list[str] = []
+    열린펜스: str | None = None
+    for line in text.splitlines():
+        표시 = line.strip()
+        if 열린펜스 is None:
+            if 표시.startswith(("```", "~~~")):
+                열린펜스 = 표시[:3]
+                continue
+            남긴줄.append(line)
+        elif 표시.startswith(열린펜스):
+            열린펜스 = None
+    return "\n".join(남긴줄)
+
+
 def skill_names() -> set[str]:
     return {d.name for d in (PLUGIN_ROOT / "skills").iterdir() if d.is_dir()}
 

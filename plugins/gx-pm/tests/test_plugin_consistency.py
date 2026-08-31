@@ -15,6 +15,7 @@ from helpers import (
     doc_label,
     read_docs,
     skill_names,
+    strip_fences,
     template_names,
 )
 
@@ -310,7 +311,7 @@ class CommandStructureTest(unittest.TestCase):
             )
             with self.subTest(커맨드=path.stem):
                 self.assertEqual(
-                    맨커맨드.findall(본문), [],
+                    맨커맨드.findall(strip_fences(본문)), [],
                     "백틱 없는 커맨드 참조가 있습니다 — 도달 가능성 검사가 놓칩니다",
                 )
 
@@ -358,6 +359,56 @@ class PipelineCommandTest(unittest.TestCase):
                 self.assertEqual(
                     len(게이트), 2,
                     f"게이트가 2개가 아닙니다: {게이트}",
+                )
+
+    def test_필수_중단점이_게이트_단계에만_붙어_있다(self):
+        """개수만 세면 라벨을 엉뚱한 Step 으로 옮겨도 통과한다.
+
+        게이트는 '무엇을 확정하는가' 로 이름이 붙는다 — 게이트 1 은 ID·종료기준 확정,
+        게이트 2 는 일괄 검토다. 저장·xlsx 처럼 판단이 없는 단계로 라벨이 옮겨 붙으면
+        사용자가 멈춰서 확인할 지점이 사라지는데, 개수는 그대로라 아무도 모른다.
+        """
+        for 이름 in PIPELINE_ARTIFACTS:
+            if 이름 not in command_names():
+                continue
+            제목들 = re.findall(
+                r"^### Step \d+:(.*?)\[필수 중단점\]", self._본문(이름), re.M
+            )
+            with self.subTest(파이프라인=이름):
+                self.assertEqual(
+                    len(제목들), 2,
+                    f"[필수 중단점] 이 2개가 아닙니다: {제목들}",
+                )
+                for 순번, 제목 in enumerate(제목들, start=1):
+                    self.assertIn(
+                        f"게이트 {순번}", 제목,
+                        f"{순번}번째 [필수 중단점] 이 '게이트 {순번}' 단계가 아닙니다 "
+                        f"— 라벨이 판단 없는 단계로 옮겨졌습니다: {제목.strip()!r}",
+                    )
+
+    def test_파이프라인_산출물이_파생_순서대로_나온다(self):
+        """산출물 순서는 이 기능의 전제다.
+
+        화면목록표가 확정돼야 `PG_`·`U_`·`TC_` 가 파생되고, 총괄 테스트계획서의
+        종료기준이 확정돼야 뒤 3종의 판정 기준이 정해진다. 참조 '존재' 만 검사하면
+        순서를 뒤집어도 통과하는데, 뒤집힌 순서는 파이프라인을 무의미하게 만든다.
+        """
+        for 이름, 산출물들 in PIPELINE_ARTIFACTS.items():
+            if 이름 not in command_names():
+                continue
+            본문 = self._본문(이름)
+            with self.subTest(파이프라인=이름):
+                위치 = []
+                for 산출물 in 산출물들:
+                    자리 = 본문.find(f"`/{산출물}`")
+                    self.assertNotEqual(
+                        자리, -1, f"산출물 참조가 없습니다: {산출물}"
+                    )
+                    위치.append((자리, 산출물))
+                self.assertEqual(
+                    [산출물 for _, 산출물 in sorted(위치)], 산출물들,
+                    "산출물이 파생 순서대로 등장하지 않습니다 "
+                    f"— PIPELINE_ARTIFACTS[{이름!r}] 순서와 어긋납니다",
                 )
 
     def test_파이프라인이_규약_템플릿을_참조한다(self):
