@@ -214,9 +214,22 @@ def parse_markdown_tables(text: str) -> list[tuple[str, list[str]]]:
         stripped = line.strip()
         if stripped.startswith("|") and stripped.endswith("|"):
             if not current_table:
-                # 표 직전의 제목(### 등)을 찾는다
-                for j in range(i - 1, max(i - 6, -1), -1):
+                # 표 직전의 제목(### 등)을 찾는다.
+                # 코드펜스(``` / ~~~) 블록은 여는/닫는 펜스 사이를 통째로
+                # 건너뛴다 — 탐색 창(budget)도 소모하지 않는다. 코드 블록이
+                # 길어도 그 위의 상위 헤딩까지 거슬러 올라갈 수 있어야 한다.
+                j = i - 1
+                budget = 30
+                while j >= 0 and budget > 0:
                     candidate = lines[j].strip()
+                    if candidate.startswith(("```", "~~~")):
+                        fence = candidate[:3]
+                        j -= 1
+                        while j >= 0 and not lines[j].strip().startswith(fence):
+                            j -= 1
+                        j -= 1
+                        continue
+                    budget -= 1
                     if candidate.startswith("#"):
                         table_title = candidate.lstrip("#").strip()
                         break
@@ -224,12 +237,14 @@ def parse_markdown_tables(text: str) -> list[tuple[str, list[str]]]:
                     # 목록 마커는 뒤에 공백이 온다("- 항목"). 공백이 없으면
                     # 볼드 강조("**부적합 목록**")이므로 라벨로 인정한다.
                     if candidate.startswith((">", "|")) or _BULLET_PREFIX.match(candidate):
+                        j -= 1
                         continue
                     # 산문 한 줄이 시트명이 되는 것을 막는다.
                     # 짧고 문장으로 끝나지 않는 라인만 라벨로 인정한다.
                     if candidate and len(candidate) <= 30 and not candidate.endswith((".", "다", "요", "!", "?")):
                         table_title = candidate
                         break
+                    j -= 1
             current_table.append(stripped)
         else:
             if current_table:

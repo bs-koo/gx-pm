@@ -92,7 +92,7 @@ class LegacyReferenceTest(unittest.TestCase):
 
     def test_존재하지_않는_pm_커맨드를_안내하지_않는다(self):
         for path, text in self.docs:
-            with self.subTest(문서=path.name):
+            with self.subTest(문서=path.relative_to(PLUGIN_ROOT)):
                 self.assertNotIn(
                     "/pm-", text,
                     "구 커맨드(/pm-design·/pm-test·/pm-trace) 참조가 남아 있습니다",
@@ -102,7 +102,7 @@ class LegacyReferenceTest(unittest.TestCase):
         # 화면ID 는 {접두}_{xx}_{xx}_{xxx}, 시나리오ID 는 {시스템코드}-TE-{순번}
         forbidden = re.compile(r"\bSCR-\d|\bSC-\d|\bSN-\d")
         for path, text in self.docs:
-            with self.subTest(문서=path.name):
+            with self.subTest(문서=path.relative_to(PLUGIN_ROOT)):
                 self.assertIsNone(
                     forbidden.search(text),
                     "규칙을 벗어난 예시 ID 가 있습니다 (SCR-·SC-·SN-)",
@@ -118,13 +118,13 @@ class DocumentCodeTest(unittest.TestCase):
     def test_테이블정의서는_DE_08_이다(self):
         wrong = re.compile(r"테이블정의서\s*\(?DE-09|DE-09\s*테이블정의서")
         for path, text in self.docs:
-            with self.subTest(문서=path.name):
+            with self.subTest(문서=path.relative_to(PLUGIN_ROOT)):
                 self.assertIsNone(wrong.search(text), "테이블정의서는 DE-08 입니다")
 
     def test_인터페이스정의서는_DE_04_이다(self):
         wrong = re.compile(r"인터페이스정의서\s*\|\s*DE-07|DE-07\s*인터페이스정의서")
         for path, text in self.docs:
-            with self.subTest(문서=path.name):
+            with self.subTest(문서=path.relative_to(PLUGIN_ROOT)):
                 self.assertIsNone(wrong.search(text), "인터페이스정의서는 DE-04 입니다")
 
 
@@ -133,7 +133,10 @@ class CommandStructureTest(unittest.TestCase):
         for path in sorted((PLUGIN_ROOT / "commands").glob("*.md")):
             with self.subTest(커맨드=path.name):
                 text = path.read_text(encoding="utf-8")
-                self.assertTrue(text.startswith("---\ndescription:"))
+                self.assertTrue(
+                    text.startswith("---\ndescription:"),
+                    "description 프론트매터가 없거나 순서가 다릅니다",
+                )
 
     def test_커맨드의_Step_번호가_중복되지_않는다(self):
         for path in sorted((PLUGIN_ROOT / "commands").glob("*.md")):
@@ -206,7 +209,7 @@ class BoundaryRuleTest(unittest.TestCase):
     def test_경계값_도출이_3유형으로_나뉘어_있다(self):
         for heading in ("유형 A", "유형 B", "유형 C"):
             with self.subTest(유형=heading):
-                self.assertIn(heading, self.text)
+                self.assertIn(heading, self.text, f"{heading} 절이 없습니다")
 
     def test_영값_케이스_규칙이_있다(self):
         self.assertIn("영값", self.text)

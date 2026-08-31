@@ -73,6 +73,31 @@ class ParseMarkdownTablesTest(unittest.TestCase):
         tables = self.mod.parse_markdown_tables(md)
         self.assertEqual(tables[0][0], "조치 절차")
 
+    def test_긴_산문은_종결어미가_없어도_제목으로_쓰지_않는다(self):
+        # 32자, 종결어미 아님 — 길이 가드로만 걸러진다.
+        # 이 단언이 없으면 <= 30 을 <= 100 으로 되돌려도 테스트가 통과한다.
+        md = (
+            "### 근거\n\n"
+            "본 계획은 발주처 협의 결과와 감리 지적사항을 반영하여 수립한 것임\n\n"
+            "| A | B |\n|---|---|\n| 1 | 2 |\n"
+        )
+        self.assertEqual(self.mod.parse_markdown_tables(md)[0][0], "근거")
+
+    def test_코드펜스는_표_제목으로_쓰지_않는다(self):
+        md = (
+            "### 결함 상태 흐름\n\n"
+            "```\n"
+            "Open -> Assigned -> Fixed\n"
+            "```\n\n"
+            "| 상태 | 의미 |\n|---|---|\n| Open | 등록됨 |\n"
+        )
+        self.assertEqual(self.mod.parse_markdown_tables(md)[0][0], "결함 상태 흐름")
+
+    def test_긴_코드블록_뒤에도_상위_헤딩을_찾는다(self):
+        body = "\n".join(f"line {i}" for i in range(12))
+        md = f"### 상태 흐름\n\n```\n{body}\n```\n\n| A | B |\n|---|---|\n| 1 | 2 |\n"
+        self.assertEqual(self.mod.parse_markdown_tables(md)[0][0], "상태 흐름")
+
 
 class MatchedSetIndexTest(unittest.TestCase):
     def setUp(self):
@@ -91,6 +116,11 @@ class MatchedSetIndexTest(unittest.TestCase):
     def test_보조_표는_None_을_반환한다(self):
         rows = [["경계값", "값", "출처"]]
         self.assertIsNone(self.mod._matched_set_index(rows, "단위테스트계획서"))
+
+    def test_일부만_겹치는_보조_표도_None_을_반환한다(self):
+        # 교집합 1/8 = 0.125 — 0.5 임계값이 실제로 하중을 받는지 본다.
+        # 이 단언이 없으면 임계값을 0 으로 되돌려도 테스트가 통과한다.
+        self.assertIsNone(self.mod._matched_set_index([["화면ID", "계"]], "단위테스트계획서"))
 
     def test_산출물_유형이_없으면_None_을_반환한다(self):
         rows = [["결함ID", "심각도"]]
