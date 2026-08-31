@@ -141,6 +141,66 @@ class LegacyReferenceTest(unittest.TestCase):
                 )
 
 
+class PrerequisiteRegistryTest(unittest.TestCase):
+    """선행조건은 templates/prerequisites.md 가 정본이다.
+
+    커맨드를 추가하면서 선행조건 정의를 빠뜨리면 Step 0 검사가 비어버린다.
+    """
+
+    def setUp(self):
+        self.text = (PLUGIN_ROOT / "templates" / "prerequisites.md").read_text(
+            encoding="utf-8"
+        )
+        self.listed = set(re.findall(r"^\|\s*`/(gx-[가-힣A-Za-z-]+)`\s*\|", self.text, re.M))
+
+    def test_모든_커맨드가_레지스트리에_있다(self):
+        self.assertEqual(
+            command_names() - self.listed, set(),
+            "선행조건이 정의되지 않은 커맨드가 있습니다",
+        )
+
+    def test_레지스트리에_없는_커맨드가_실려있지_않다(self):
+        self.assertEqual(
+            self.listed - command_names(), set(),
+            "존재하지 않는 커맨드가 레지스트리에 있습니다",
+        )
+
+    def test_하드와_소프트_구분이_정의돼_있다(self):
+        self.assertIn("하드", self.text)
+        self.assertIn("소프트", self.text)
+        self.assertIn("진행 중단", self.text)
+
+
+class PipelineProtocolTest(unittest.TestCase):
+    """파이프라인 실행 규약은 templates/pipeline-protocol.md 가 정본이다."""
+
+    def setUp(self):
+        self.text = (PLUGIN_ROOT / "templates" / "pipeline-protocol.md").read_text(
+            encoding="utf-8"
+        )
+
+    def test_이월_금지_항목이_명시돼_있다(self):
+        self.assertIn("이월 금지", self.text)
+        self.assertIn("시안", self.text)
+        self.assertIn("화면ID", self.text)
+
+    def test_파생_ID가_모두_재생성_파급_규칙에_있다(self):
+        rules = (PLUGIN_ROOT / "templates" / "id-naming-rules.md").read_text(
+            encoding="utf-8"
+        )
+        파생 = re.findall(r"\|\s*`(\w+_)`\s*\|[^|]*\|\s*\*\*화면ID", rules)
+        self.assertEqual(
+            set(파생), {"PG_", "U_", "TC_"},
+            "id-naming-rules.md 의 화면ID 파생 목록이 바뀌었습니다",
+        )
+        for 접두 in 파생:
+            with self.subTest(접두=접두):
+                self.assertIn(접두, self.text)
+
+    def test_중단_후_재개_규칙이_있다(self):
+        self.assertIn("detect-existing-artifact", self.text)
+
+
 class DocumentCodeTest(unittest.TestCase):
     """산출물 코드 정본은 CLAUDE.md 의 '산출물 범위' 표다."""
 
