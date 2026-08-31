@@ -381,6 +381,38 @@ class VersionConsistencyTest(unittest.TestCase):
             int(re.search(r"commands-(\d+)-orange", self.readme).group(1)), self.command_count
         )
 
+    def test_README_디렉토리_트리의_개수가_실제와_같다(self):
+        """배지는 test_README_배지가_실제_스킬_커맨드_수와_같다 가 지키지만,
+
+        '## 디렉토리 구조' 트리의 commands/·skills/ 주석 숫자는 어떤 테스트도
+        보지 않아 배지가 고쳐진 뒤에도(v1.4.0~v2.0.0 T7 이전) 11개/22개로
+        방치됐었다. 트리 자체를 다시 세지는 않는다 — 주석 숫자만 실제 개수와
+        비교해, 파일을 추가/삭제하고 이 주석을 깜빡했을 때 여기서 걸리게 한다.
+        """
+        commands_match = re.search(r"commands/\s*#\s*(\d+)개 커맨드", self.readme)
+        self.assertIsNotNone(
+            commands_match,
+            "README '## 디렉토리 구조' 트리에서 'commands/ ... #N개 커맨드' 주석을 찾지 못했습니다",
+        )
+        self.assertEqual(
+            int(commands_match.group(1)),
+            self.command_count,
+            "README 디렉토리 트리의 commands/ 개수 주석이 실제 커맨드 수와 다릅니다 "
+            "— 커맨드를 추가/삭제했다면 트리의 주석과 파일 목록도 함께 갱신하세요",
+        )
+
+        skills_match = re.search(r"skills/\s*#\s*(\d+)개 스킬", self.readme)
+        self.assertIsNotNone(
+            skills_match,
+            "README '## 디렉토리 구조' 트리에서 'skills/ ... #N개 스킬' 주석을 찾지 못했습니다",
+        )
+        self.assertEqual(
+            int(skills_match.group(1)),
+            self.skill_count,
+            "README 디렉토리 트리의 skills/ 개수 주석이 실제 스킬 수와 다릅니다 "
+            "— 스킬을 추가/삭제했다면 트리의 주석과 디렉터리 목록도 함께 갱신하세요",
+        )
+
     def test_설명문의_스킬_커맨드_수가_실제와_같다(self):
         for label, description in [
             ("plugin.json", self.plugin_json["description"]),
