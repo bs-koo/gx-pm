@@ -42,25 +42,25 @@ class CrossReferenceTest(unittest.TestCase):
         for path, text in self.docs:
             for match in pattern.finditer(text):
                 name = match.group(1) or match.group(2)
-                with self.subTest(문서=path.name, 스킬=name):
+                with self.subTest(문서=path.relative_to(PLUGIN_ROOT), 스킬=name):
                     self.assertIn(name, self.skills)
 
     def test_백틱으로_참조된_커맨드가_모두_존재한다(self):
         for path, text in self.docs:
             for match in re.finditer(r"`/([가-힣]+)`", text):
-                with self.subTest(문서=path.name, 커맨드=match.group(1)):
+                with self.subTest(문서=path.relative_to(PLUGIN_ROOT), 커맨드=match.group(1)):
                     self.assertIn(match.group(1), self.commands)
 
     def test_참조된_템플릿_경로가_모두_존재한다(self):
         for path, text in self.docs:
             for match in re.finditer(r"templates/([A-Za-z0-9\-]+\.md)", text):
-                with self.subTest(문서=path.name, 템플릿=match.group(1)):
+                with self.subTest(문서=path.relative_to(PLUGIN_ROOT), 템플릿=match.group(1)):
                     self.assertIn(match.group(1), self.templates)
 
     def test_참조된_스킬_경로가_모두_존재한다(self):
         for path, text in self.docs:
             for match in re.finditer(r"skills/([a-z0-9-]+)/SKILL\.md", text):
-                with self.subTest(문서=path.name, 스킬=match.group(1)):
+                with self.subTest(문서=path.relative_to(PLUGIN_ROOT), 스킬=match.group(1)):
                     self.assertIn(match.group(1), self.skills)
 
     def test_모든_스킬이_어느_커맨드에서든_호출된다(self):
