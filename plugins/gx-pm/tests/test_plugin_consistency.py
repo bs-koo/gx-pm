@@ -12,6 +12,7 @@ from helpers import (
     PLUGIN_ROOT,
     REPO_ROOT,
     command_names,
+    doc_label,
     read_docs,
     skill_names,
     template_names,
@@ -41,7 +42,7 @@ class CommandNamingTest(unittest.TestCase):
 
     def test_gx_접두가_중복되지_않는다(self):
         for path, text in read_docs():
-            with self.subTest(문서=path.relative_to(PLUGIN_ROOT)):
+            with self.subTest(문서=doc_label(path)):
                 self.assertNotIn(
                     "gx-gx-", text,
                     "일괄 치환이 두 번 적용됐습니다",
@@ -50,7 +51,7 @@ class CommandNamingTest(unittest.TestCase):
     def test_접두어_없는_커맨드_참조가_남아있지_않다(self):
         구커맨드 = re.compile(r"`/(?!gx-)[가-힣]+`")
         for path, text in specs_only(read_docs()):
-            with self.subTest(문서=path.relative_to(PLUGIN_ROOT)):
+            with self.subTest(문서=doc_label(path)):
                 남은것 = 구커맨드.findall(text)
                 self.assertEqual(
                     남은것, [],
@@ -83,26 +84,26 @@ class CrossReferenceTest(unittest.TestCase):
         for path, text in self.docs:
             for match in pattern.finditer(text):
                 name = match.group(1) or match.group(2)
-                with self.subTest(문서=path.relative_to(PLUGIN_ROOT), 스킬=name):
+                with self.subTest(문서=doc_label(path), 스킬=name):
                     self.assertIn(name, self.skills)
 
     def test_백틱으로_참조된_커맨드가_모두_존재한다(self):
         # CHANGELOG 는 개명 대응표에서 구 이름을 인용하므로 검사 대상에서 뺀다.
         for path, text in self.specs:
             for match in re.finditer(r"`/(gx-[가-힣A-Za-z-]+)`", text):
-                with self.subTest(문서=path.relative_to(PLUGIN_ROOT), 커맨드=match.group(1)):
+                with self.subTest(문서=doc_label(path), 커맨드=match.group(1)):
                     self.assertIn(match.group(1), self.commands)
 
     def test_참조된_템플릿_경로가_모두_존재한다(self):
         for path, text in self.docs:
             for match in re.finditer(r"templates/([A-Za-z0-9\-]+\.md)", text):
-                with self.subTest(문서=path.relative_to(PLUGIN_ROOT), 템플릿=match.group(1)):
+                with self.subTest(문서=doc_label(path), 템플릿=match.group(1)):
                     self.assertIn(match.group(1), self.templates)
 
     def test_참조된_스킬_경로가_모두_존재한다(self):
         for path, text in self.docs:
             for match in re.finditer(r"skills/([a-z0-9-]+)/SKILL\.md", text):
-                with self.subTest(문서=path.relative_to(PLUGIN_ROOT), 스킬=match.group(1)):
+                with self.subTest(문서=doc_label(path), 스킬=match.group(1)):
                     self.assertIn(match.group(1), self.skills)
 
     def test_모든_스킬이_어느_커맨드에서든_호출된다(self):
@@ -148,7 +149,7 @@ class LegacyReferenceTest(unittest.TestCase):
 
     def test_존재하지_않는_pm_커맨드를_안내하지_않는다(self):
         for path, text in self.docs:
-            with self.subTest(문서=path.relative_to(PLUGIN_ROOT)):
+            with self.subTest(문서=doc_label(path)):
                 self.assertNotIn(
                     "/pm-", text,
                     "구 커맨드(/pm-design·/pm-test·/pm-trace) 참조가 남아 있습니다",
@@ -158,7 +159,7 @@ class LegacyReferenceTest(unittest.TestCase):
         # 화면ID 는 {접두}_{xx}_{xx}_{xxx}, 시나리오ID 는 {시스템코드}-TE-{순번}
         forbidden = re.compile(r"\bSCR-\d|\bSC-\d|\bSN-\d")
         for path, text in self.docs:
-            with self.subTest(문서=path.relative_to(PLUGIN_ROOT)):
+            with self.subTest(문서=doc_label(path)):
                 self.assertIsNone(
                     forbidden.search(text),
                     "규칙을 벗어난 예시 ID 가 있습니다 (SCR-·SC-·SN-)",
@@ -209,6 +210,12 @@ class PipelineProtocolTest(unittest.TestCase):
         self.assertIn("화면ID", self.text)
 
     def test_파생_ID가_모두_재생성_파급_규칙에_있다(self):
+        """§재생성 파급 규칙 표 **안에서만** 검사한다.
+
+        파일 전체를 substring 으로 훑으면 §이월 금지 항목의 산문
+        ("화면ID가 바뀌면 PG_·U_·TC_ 가 전부 재채번된다") 이 조건을 채워버려,
+        이 테스트가 지킨다고 선언한 파급 표가 통째로 사라져도 통과한다.
+        """
         rules = (PLUGIN_ROOT / "templates" / "id-naming-rules.md").read_text(
             encoding="utf-8"
         )
@@ -217,9 +224,23 @@ class PipelineProtocolTest(unittest.TestCase):
             set(파생), {"PG_", "U_", "TC_"},
             "id-naming-rules.md 의 화면ID 파생 목록이 바뀌었습니다",
         )
+
+        구간 = re.search(
+            r"^## 재생성 파급 규칙$(.*?)(?=^## |\Z)", self.text, re.M | re.S
+        )
+        self.assertIsNotNone(
+            구간,
+            "pipeline-protocol.md 에서 '## 재생성 파급 규칙' 절을 찾지 못했습니다 "
+            "— 절이 삭제됐거나 제목이 바뀌었습니다",
+        )
+        표 = 구간.group(1)
         for 접두 in 파생:
             with self.subTest(접두=접두):
-                self.assertIn(접두, self.text)
+                self.assertIn(
+                    접두, 표,
+                    f"화면ID 파생 ID `{접두}` 가 재생성 파급 규칙 표에 없습니다 "
+                    "— 화면ID 변경 시 무엇을 다시 만들지 규정되지 않습니다",
+                )
 
     def test_중단_후_재개_규칙이_있다(self):
         self.assertIn("detect-existing-artifact", self.text)
@@ -234,13 +255,13 @@ class DocumentCodeTest(unittest.TestCase):
     def test_테이블정의서는_DE_08_이다(self):
         wrong = re.compile(r"테이블정의서\s*\(?DE-09|DE-09\s*테이블정의서")
         for path, text in self.docs:
-            with self.subTest(문서=path.relative_to(PLUGIN_ROOT)):
+            with self.subTest(문서=doc_label(path)):
                 self.assertIsNone(wrong.search(text), "테이블정의서는 DE-08 입니다")
 
     def test_인터페이스정의서는_DE_04_이다(self):
         wrong = re.compile(r"인터페이스정의서\s*\|\s*DE-07|DE-07\s*인터페이스정의서")
         for path, text in self.docs:
-            with self.subTest(문서=path.relative_to(PLUGIN_ROOT)):
+            with self.subTest(문서=doc_label(path)):
                 self.assertIsNone(wrong.search(text), "인터페이스정의서는 DE-04 입니다")
 
 

@@ -34,13 +34,30 @@ def read_docs() -> list[tuple[Path, str]]:
     """플러그인의 모든 마크다운 문서를 (경로, 본문) 쌍으로 반환한다.
 
     .omc 는 런타임 상태 디렉터리라 검사 대상이 아니다.
+    저장소 루트 README 도 포함한다 — 사용자의 첫 접점이라 다른 문서와 같은
+    계약 검사(개명·백틱·정본 참조 등)를 받아야 한다.
     """
     docs = []
     for path in sorted(PLUGIN_ROOT.rglob("*.md")):
         if ".omc" in path.parts:
             continue
         docs.append((path, path.read_text(encoding="utf-8")))
+    root_readme = REPO_ROOT / "README.md"
+    if root_readme.exists():
+        docs.append((root_readme, root_readme.read_text(encoding="utf-8")))
     return docs
+
+
+def doc_label(path: Path) -> Path:
+    """read_docs() 가 반환한 경로를 subTest 표시용 상대경로로 변환한다.
+
+    저장소 루트 README 는 PLUGIN_ROOT 바깥(REPO_ROOT 직속)이라
+    path.relative_to(PLUGIN_ROOT) 가 ValueError 를 던진다.
+    """
+    try:
+        return path.relative_to(PLUGIN_ROOT)
+    except ValueError:
+        return path.relative_to(REPO_ROOT)
 
 
 def skill_names() -> set[str]:
