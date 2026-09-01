@@ -144,7 +144,7 @@ class ScreenSplitRuleTest(unittest.TestCase):
 
 - [ ] **Step 2: 실패를 확인한다**
 
-Run: `python -m unittest tests.test_plugin_consistency.ScreenSplitRuleTest -v`
+Run: `python -m unittest discover -s tests -k ScreenSplitRuleTest -v`
 Expected: 3건 모두 FAIL — `_표_행` 의 `assertIsNotNone(시작, ...)` 에서 "표의 머리행을 찾지 못했습니다"
 
 - [ ] **Step 3: SKILL.md Step 3 에 판정표와 유형표를 넣는다**
@@ -191,7 +191,7 @@ Expected: 3건 모두 FAIL — `_표_행` 의 `assertIsNotNone(시작, ...)` 에
 
 - [ ] **Step 4: 통과를 확인한다**
 
-Run: `python -m unittest tests.test_plugin_consistency.ScreenSplitRuleTest -v`
+Run: `python -m unittest discover -s tests -k ScreenSplitRuleTest -v`
 Expected: 3건 PASS
 
 Run: `python -m unittest discover -s tests -q`
@@ -283,7 +283,7 @@ PG_·U_·TC_ 가 전부 거기서 파생된다. detect-alternatives 는 말해�
 
 - [ ] **Step 2: 실패를 확인한다**
 
-Run: `python -m unittest tests.test_plugin_consistency.ScreenSplitRuleTest -v`
+Run: `python -m unittest discover -s tests -k ScreenSplitRuleTest -v`
 Expected: 새 2건 FAIL (`해당 행의 … 열` 표기 없음 / `화면 분리 기준:` 없음), Task 1 의 3건은 PASS
 
 - [ ] **Step 3: SKILL.md 에 정책 질문과 기록 규칙을 넣는다**
@@ -334,7 +334,7 @@ Task 1 이 넣은 `#### 3-2` 유형표 **다음**, `화면 수 추론 기준:` *
 
 - [ ] **Step 4: 통과를 확인한다**
 
-Run: `python -m unittest tests.test_plugin_consistency.ScreenSplitRuleTest -v`
+Run: `python -m unittest discover -s tests -k ScreenSplitRuleTest -v`
 Expected: 5건 PASS
 
 Run: `python -m unittest discover -s tests -q`
@@ -413,7 +413,7 @@ AskUserQuestion 을 한 번만 부르고 선택지별 화면 수를 양쪽 다 �
 
 - [ ] **Step 2: 실패를 확인한다**
 
-Run: `python -m unittest tests.test_plugin_consistency.PipelineProtocolTest -v`
+Run: `python -m unittest discover -s tests -k PipelineProtocolTest -v`
 Expected: `test_이월_금지_항목에_화면_분리_미결정이_있다` FAIL — "이월 금지 항목이 4개가 아닙니다: ['시안/대안 감지 중단점', 'ID 확정 게이트', '입력 수집 중단점']"
 
 - [ ] **Step 3: `templates/pipeline-protocol.md` 를 고친다**
@@ -513,12 +513,12 @@ Expected: `test_이월_금지_항목에_화면_분리_미결정이_있다` FAIL 
 
 - [ ] **Step 6: 통과와 회귀를 함께 확인한다**
 
-Run: `python -m unittest tests.test_plugin_consistency.PipelineProtocolTest -v`
+Run: `python -m unittest discover -s tests -k PipelineProtocolTest -v`
 Expected: 4건 PASS
 
 게이트 개수가 그대로인지 반드시 확인한다 — 이 태스크가 낼 수 있는 유일한 회귀다:
 
-Run: `python -m unittest tests.test_plugin_consistency.PipelineCommandTest -v`
+Run: `python -m unittest discover -s tests -k PipelineCommandTest -v`
 Expected: 5건 PASS, 특히 `test_파이프라인에_필수_중단점이_2개_있다` 와 `test_필수_중단점이_게이트_단계에만_붙어_있다`
 
 Run: `python -m unittest discover -s tests -q`
