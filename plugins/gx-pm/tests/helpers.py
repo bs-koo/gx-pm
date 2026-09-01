@@ -43,8 +43,9 @@ def read_docs() -> list[tuple[Path, str]]:
     for path in sorted(PLUGIN_ROOT.rglob("*.md")):
         if ".omc" in path.parts:
             continue
-        if "fixtures" in path.parts:
-            continue  # 픽스처는 검사 대상이 아니라 검사 도구다
+        if path.relative_to(PLUGIN_ROOT).parts[:2] == ("tests", "fixtures"):
+            continue  # tests/fixtures 는 검사 대상이 아니라 검사 도구다 — 다른 위치의
+            # "fixtures" 디렉터리(있다면)는 여전히 검사 대상이어야 한다
         docs.append((path, path.read_text(encoding="utf-8")))
     root_readme = REPO_ROOT / "README.md"
     if root_readme.exists():

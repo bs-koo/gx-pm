@@ -40,10 +40,7 @@ argument-hint: "<RFP 텍스트 또는 파일>"
 
 **extract-requirements** → **classify-requirements** 스킬 순차 적용:
 
-추출 규칙:
-- "ㅇ", "o"로 시작하는 기능 항목 식별
-- "~해야 한다", "~를 제공한다", "~기능을 구현한다" 패턴 식별
-- 번호가 매겨진 기능 목록, "기능 요구사항"/"비기능 요구사항" 섹션 항목
+추출 규칙은 `skills/extract-requirements/SKILL.md` Step 2 가 정본이다 — 여기서 복제하지 않는다.
 
 분류 규칙:
 - 기능/비기능 분류, 대분류/중분류/소분류 자동 분류

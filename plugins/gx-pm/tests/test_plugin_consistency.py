@@ -310,6 +310,21 @@ class CommandStructureTest(unittest.TestCase):
                 text = path.read_text(encoding="utf-8")
                 self.assertIn("templates/pipeline-protocol.md", text)
 
+    def test_커맨드가_추출_패턴을_복제하지_않는다(self):
+        """gx-요구사항정의서 커맨드가 extract-requirements 의 추출 규칙을 복제하면,
+
+        Claude 는 커맨드를 먼저 읽으므로 거기서 규칙을 다 찾았다고 여기고
+        SKILL.md 의 표 인식 규칙(다섯 번째 패턴)에 도달하지 못한다 — 표 형식
+        요구사항 추출 기능이 정의만 있고 런타임에는 죽는다.
+        """
+        path = PLUGIN_ROOT / "commands" / "gx-요구사항정의서.md"
+        text = path.read_text(encoding="utf-8")
+        self.assertNotIn(
+            "추출 규칙:", text,
+            "커맨드가 추출 규칙을 복제하고 있습니다 — "
+            "skills/extract-requirements/SKILL.md Step 2 를 참조로 바꾸세요",
+        )
+
     def test_다음_제안의_커맨드가_백틱으로_감싸져_있다(self):
         맨커맨드 = re.compile(r"(?<![`/\w])/gx-[가-힣A-Za-z-]+")
         for path in sorted((PLUGIN_ROOT / "commands").glob("*.md")):
