@@ -609,6 +609,45 @@ class ScreenSplitRuleTest(unittest.TestCase):
             f"— 기존 화면ID가 바뀌면 후속 산출물이 전부 재채번됩니다: {D행[0][1]!r}",
         )
 
+    def test_기록_규칙이_DE_03_의_실제_컬럼을_지목한다(self):
+        """기록 규칙이 없는 컬럼을 지목하면 xlsx 추출에서 조용히 사라진다.
+
+        화면 수의 근거는 감리 대상이고 xlsx 가 납품물이다. 규칙이 지목한 컬럼명과
+        templates/DE-03-screen-list.md 의 컬럼 목록을 묶어 갈라질 수 없게 한다.
+        """
+        칸 = re.search(r"해당 행의 `([^`]+)` 열", self._step3())
+        self.assertIsNotNone(
+            칸,
+            "기록 규칙에서 '해당 행의 `{컬럼}` 열' 표기를 Step 3 안에서 찾지 못했습니다 "
+            "— 기록할 자리가 정의되지 않았습니다",
+        )
+        컬럼 = 칸.group(1)
+        템플릿 = (
+            PLUGIN_ROOT / "templates" / "DE-03-screen-list.md"
+        ).read_text(encoding="utf-8")
+        헤더 = re.findall(r"^\|\s*([^|]+?)\s*\|", 템플릿, re.M)
+        self.assertIn(
+            컬럼, 헤더,
+            f"기록 규칙이 지목한 `{컬럼}` 이 DE-03 템플릿의 컬럼이 아닙니다 "
+            "— 기록해도 xlsx 추출에서 사라집니다",
+        )
+
+    def test_이미_기록된_기준은_다시_묻지_않는다(self):
+        """재질문 금지 규칙이 없으면 이어쓰기·재실행 때마다 같은 것을 다시 묻는다.
+
+        B(추가 개발)와 D(변경 관리)가 기존 기준을 따른다는 §3-2 의 규정도
+        '기록된 기준을 읽는다' 는 이 규칙 위에 서 있다.
+        """
+        step3 = self._step3()
+        self.assertIn(
+            "화면 분리 기준:", step3,
+            "기록 형식 '화면 분리 기준:' 이 Step 3 에 없습니다",
+        )
+        self.assertRegex(
+            step3, r"이미 있으면[^\n]*묻지 않는다",
+            "재질문 금지 규칙이 없습니다 — 재실행 때마다 같은 것을 다시 묻게 됩니다",
+        )
+
 
 class BoundaryRuleTest(unittest.TestCase):
     """드라이런에서 놓친 4건(영값·통과 측 경계·하위 정밀도)의 재발을 막는다.
