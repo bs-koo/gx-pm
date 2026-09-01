@@ -1,8 +1,14 @@
 """추출 규칙이 문서에만 있고 동작하지 않는 것을 막는다.
 
 `design-test-cases` 의 경계값 규칙처럼, 마크다운에 적힌 규칙은 아무도 시험하지 않으면
-적혀만 있고 동작하지 않는다. 여기서는 문서에 실린 정규식을 **그대로 뽑아** 픽스처에
-적용한다. 문서의 규칙과 시험하는 규칙이 같은 문자열이라 둘이 갈라질 수 없다.
+적혀만 있고 동작하지 않는다. 여기서는 문서에 실린 정규식을 **그대로 뽑아** 픽스처와
+"판정 예시" 목록에 적용한다.
+
+이 장치가 갈라질 수 없게 고정하는 것은 **정규식 리터럴** 과 **판정 예시 목록**, 둘뿐이다.
+정규식을 고치면 이 파일의 시험이 잡고, 판정 예시를 고치면 `test_문서의_판정_예시가_정규식과_일치한다`
+가 잡는다. 그 둘을 감싼 산문(표 단위/행 단위 의미론, 중복 제거 절차 등)은 이 장치가 지키지
+않는다 — 산문과 정규식이 어긋나도 이 스위트는 통과하며, 산문의 정확성은 테스트가 아니라
+리뷰의 몫이다.
 """
 
 import re
@@ -29,6 +35,24 @@ def 문서에서_정규식을_뽑는다() -> str:
     return 펜스[0].strip()
 
 
+def 문서에서_판정_예시를_뽑는다() -> tuple[list[str], list[str]]:
+    """SKILL.md 의 '판정 예시' 절에서 뽑는다/뽑지 않는다 목록을 꺼낸다.
+
+    문서에 적힌 예시를 그대로 시험 입력으로 쓴다. 사람이 읽는 예시와 정규식이
+    어긋나면 여기서 걸린다 — 산문에 짐을 지우는 유일한 지점이다.
+    """
+    text = SKILL.read_text(encoding="utf-8")
+    절 = re.search(r"#### 판정 예시(.*?)(?=\n#### |\n### |\Z)", text, re.S)
+    if 절 is None:
+        raise AssertionError("SKILL.md 에서 '#### 판정 예시' 절을 찾지 못했습니다")
+    본문 = 절.group(1)
+    if "**뽑지 않는다**" not in 본문:
+        raise AssertionError("판정 예시 절에 '**뽑지 않는다**' 소제목이 없습니다")
+    앞, 뒤 = 본문.split("**뽑지 않는다**", 1)
+    뽑기 = lambda s: re.findall(r"^- `([^`]+)`", s, re.M)
+    return 뽑기(앞), 뽑기(뒤)
+
+
 class ExtractRuleTest(unittest.TestCase):
     def setUp(self):
         self.패턴 = re.compile(문서에서_정규식을_뽑는다())
@@ -43,18 +67,6 @@ class ExtractRuleTest(unittest.TestCase):
         self.assertEqual(
             찾음, 기대_ID,
             "문서에 적힌 정규식이 픽스처의 요구사항 ID 를 기대대로 뽑지 못합니다",
-        )
-
-    def test_요구사항이_아닌_표에서는_아무것도_안_뽑는다(self):
-        오탐 = [
-            line.strip()
-            for line in self.픽스처.splitlines()
-            if self.패턴.match(line.strip())
-            and not any(i in line for i in 기대_ID)
-        ]
-        self.assertEqual(
-            오탐, [],
-            "판정표·오류응답표처럼 요구사항이 아닌 표에서 추출됐습니다",
         )
 
     def test_ID_표기_변형과_근접_오답을_가른다(self):
@@ -91,6 +103,30 @@ class ExtractRuleTest(unittest.TestCase):
                     "요구사항 ID 가 아닌 것을 뽑았습니다",
                 )
 
+    def test_문서의_판정_예시가_정규식과_일치한다(self):
+        """문서가 약속한 판정과 정규식의 실제 동작이 같은지 대조한다.
+
+        픽스처에는 BR·NFR·SFR 뿐이라, 픽스처만으로는 규칙이 그 셋 밖으로
+        일반화되는지 전혀 증명되지 않는다. 정규식을 `(?:BR|NFR|SFR)` 로
+        하드코딩해도 전체 스위트가 통과한다 — 이 테스트가 그 구멍을 막는다.
+        """
+        뽑는다, 뽑지_않는다 = 문서에서_판정_예시를_뽑는다()
+        self.assertGreaterEqual(len(뽑는다), 5, "'뽑는다' 예시가 너무 적습니다")
+        self.assertGreaterEqual(len(뽑지_않는다), 5, "'뽑지 않는다' 예시가 너무 적습니다")
+
+        for 줄 in 뽑는다:
+            with self.subTest(뽑는다=줄):
+                self.assertIsNotNone(
+                    self.패턴.match(줄.strip()),
+                    "문서가 뽑는다고 적었는데 정규식이 놓칩니다",
+                )
+        for 줄 in 뽑지_않는다:
+            with self.subTest(뽑지_않는다=줄):
+                self.assertIsNone(
+                    self.패턴.match(줄.strip()),
+                    "문서가 뽑지 않는다고 적었는데 정규식이 뽑습니다",
+                )
+
 
 class ExtractRuleDocTest(unittest.TestCase):
     """뽑은 행을 어떻게 다루는지가 문서에 있어야 한다.
@@ -105,8 +141,8 @@ class ExtractRuleDocTest(unittest.TestCase):
     def test_중복_제거_규칙이_있다(self):
         self.assertIn("중복 제거", self.text)
         self.assertIn(
-            "1건", self.text,
-            "같은 원문 ID 를 몇 건으로 셀지가 적혀 있지 않습니다",
+            "같은 원문 ID 는 요구사항 **1건**으로 센다", self.text,
+            "중복 제거 규칙이 몇 건으로 세라고 말하지 않습니다",
         )
 
     def test_기능_비기능_판정_순서가_있다(self):
