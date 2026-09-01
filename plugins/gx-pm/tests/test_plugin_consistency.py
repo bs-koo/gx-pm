@@ -219,6 +219,33 @@ class PipelineProtocolTest(unittest.TestCase):
         self.assertIn("시안", self.text)
         self.assertIn("화면ID", self.text)
 
+    def test_이월_금지_항목에_화면_분리_미결정이_있다(self):
+        """§이월 금지 항목 **절 안에서만** 검사한다.
+
+        파일 전체를 substring 으로 훑으면 §재생성 파급 규칙의 '화면ID' 표기가
+        조건을 채워버려, 이 항목이 이월 금지 목록에서 통째로 빠져도 통과한다.
+        빠지면 /gx-spec 이 이 중단점을 게이트 1 로 미뤄도 아무도 모른다 —
+        그때는 화면ID가 이미 채번된 뒤라 되돌리는 비용이 전건 재채번이다.
+        """
+        구간 = re.search(
+            r"^## 이월 금지 항목$(.*?)(?=^## |\Z)", self.text, re.M | re.S
+        )
+        self.assertIsNotNone(
+            구간,
+            "pipeline-protocol.md 에서 '## 이월 금지 항목' 절을 찾지 못했습니다 "
+            "— 절이 삭제됐거나 제목이 바뀌었습니다",
+        )
+        절 = 구간.group(1)
+        항목 = re.findall(r"^\d+\. \*\*(.+?)\*\*", 절, re.M)
+        self.assertEqual(
+            len(항목), 4,
+            f"이월 금지 항목이 4개가 아닙니다: {항목}",
+        )
+        self.assertTrue(
+            any("화면 분리" in v for v in 항목),
+            f"'화면 분리' 미결정 중단점이 이월 금지 항목에 없습니다: {항목}",
+        )
+
     def test_파생_ID가_모두_재생성_파급_규칙에_있다(self):
         """§재생성 파급 규칙 표 **안에서만** 검사한다.
 
@@ -309,6 +336,37 @@ class CommandStructureTest(unittest.TestCase):
             with self.subTest(커맨드=path.stem):
                 text = path.read_text(encoding="utf-8")
                 self.assertIn("templates/pipeline-protocol.md", text)
+
+    def test_커맨드가_추출_패턴을_복제하지_않는다(self):
+        """gx-요구사항정의서 커맨드가 extract-requirements 의 추출 규칙을 복제하면,
+
+        Claude 는 커맨드를 먼저 읽으므로 거기서 규칙을 다 찾았다고 여기고
+        SKILL.md 의 표 인식 규칙(다섯 번째 패턴)에 도달하지 못한다 — 표 형식
+        요구사항 추출 기능이 정의만 있고 런타임에는 죽는다.
+        """
+        path = PLUGIN_ROOT / "commands" / "gx-요구사항정의서.md"
+        text = path.read_text(encoding="utf-8")
+        self.assertNotIn(
+            "추출 규칙:", text,
+            "커맨드가 추출 규칙을 복제하고 있습니다 — "
+            "skills/extract-requirements/SKILL.md Step 2 를 참조로 바꾸세요",
+        )
+
+    def test_화면목록표_커맨드가_유형별_동작을_복제하지_않는다(self):
+        """유형별 동작의 정본은 skills/generate-screen-list/SKILL.md §3-2 다.
+
+        커맨드에 동작을 축약해 적어두면 §3-2 가 바뀔 때 조용히 낡는다.
+        최종 리뷰 전 실제로 그렇게 적혀 있어 한 번 걷어냈다 — 다시 들어오는 것을 막는다.
+        커맨드는 '유형별 동작은 스킬 Step 3 이 정본이다' 라고만 적는다.
+        """
+        text = (PLUGIN_ROOT / "commands" / "gx-화면목록표.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn(
+            "묻지 않는다", text,
+            "커맨드가 유형별 동작을 복제하고 있습니다 — "
+            "skills/generate-screen-list/SKILL.md §3-2 를 참조로 두세요",
+        )
 
     def test_다음_제안의_커맨드가_백틱으로_감싸져_있다(self):
         맨커맨드 = re.compile(r"(?<![`/\w])/gx-[가-힣A-Za-z-]+")
@@ -506,6 +564,171 @@ class VersionConsistencyTest(unittest.TestCase):
                 self.assertEqual(
                     int(re.search(r"커맨드 (\d+)개", description).group(1)), self.command_count
                 )
+
+
+class ScreenSplitRuleTest(unittest.TestCase):
+    """화면 분리 미결정 규칙의 정본은 generate-screen-list/SKILL.md Step 3 다.
+
+    문서가 화면 수를 말하지 않는데 추론표를 그냥 적용하면, 그 수가 화면ID가 되고
+    pipeline-protocol.md §재생성 파급 규칙이 통째로 발동한다 — PG_·U_·TC_ 전건이
+    나중에 재채번된다. 그래서 '추정 전에 판정한다' 는 규칙이 문서에 살아 있어야 한다.
+    """
+
+    def setUp(self):
+        self.text = (
+            PLUGIN_ROOT / "skills" / "generate-screen-list" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+
+    def _step3(self) -> str:
+        구간 = re.search(r"^### Step 3:(.*?)(?=^### |\Z)", self.text, re.M | re.S)
+        self.assertIsNotNone(
+            구간,
+            "generate-screen-list/SKILL.md 에서 '### Step 3:' 절을 찾지 못했습니다 "
+            "— 절이 삭제됐거나 제목이 바뀌었습니다",
+        )
+        return 구간.group(1)
+
+    def _표_행(self, 머리조건) -> list[list[str]]:
+        """머리행 조건을 만족하는 표의 본문 행을 (구분선 제외) 반환한다."""
+        줄들 = self._step3().splitlines()
+        시작 = next(
+            (
+                i
+                for i, l in enumerate(줄들)
+                if l.strip().startswith("|") and 머리조건(l)
+            ),
+            None,
+        )
+        self.assertIsNotNone(시작, "표의 머리행을 찾지 못했습니다")
+        행: list[list[str]] = []
+        for l in 줄들[시작 + 1 :]:
+            if not l.strip().startswith("|"):
+                break
+            칸 = [c.strip() for c in l.strip().strip("|").split("|")]
+            if set("".join(칸)) <= set("-: "):
+                continue  # 구분선
+            행.append(칸)
+        return 행
+
+    def test_미결정_판정이_양쪽으로_나뉘어_있다(self):
+        """한쪽만 있으면 판정이 아니라 목록이다.
+
+        '미결정이다' 만 있으면 무엇이 결정된 것인지 알 수 없어 전건이 미결정이 되고,
+        '결정돼 있다' 만 있으면 판정 자체가 사라진다.
+        """
+        행 = self._표_행(lambda l: "미결정이다" in l and "결정돼 있다" in l)
+        self.assertGreaterEqual(
+            len(행), 3,
+            f"미결정 판정표의 본문 행이 3개 미만입니다: {len(행)}개",
+        )
+        for 왼, 오 in (r[:2] for r in 행):
+            with self.subTest(행=왼[:20]):
+                self.assertTrue(왼, "판정표 '미결정이다' 칸이 비어 있습니다")
+                self.assertTrue(오, "판정표 '결정돼 있다' 칸이 비어 있습니다")
+
+    def test_프로젝트_유형_네_가지의_동작이_모두_정의돼_있다(self):
+        """A·B·C·D 중 하나라도 빠지면 그 유형은 규칙 없이 실행된다."""
+        행 = self._표_행(lambda l: "유형" in l and "동작" in l and "근거" in l)
+        유형들 = [r[0] for r in 행]
+        for 유형 in ("A", "B", "C", "D"):
+            with self.subTest(유형=유형):
+                self.assertTrue(
+                    any(f"**{유형}**" in v for v in 유형들),
+                    f"유형 {유형} 의 동작이 정의돼 있지 않습니다: {유형들}",
+                )
+
+    def test_D_유형은_화면_분리를_묻지_않는다(self):
+        """D(변경 관리)에서 화면 분리를 물으면 답에 따라 기존 화면ID가 바뀔 수 있다.
+
+        화면ID가 바뀌면 PG_·U_·TC_ 전건이 재채번된다 — 운영 중 시스템의 변경 건에서
+        그 파급은 변경 범위를 통째로 벗어난다.
+        """
+        행 = self._표_행(lambda l: "유형" in l and "동작" in l and "근거" in l)
+        D행 = [r for r in 행 if "**D**" in r[0]]
+        self.assertEqual(len(D행), 1, f"유형 D 행이 1개가 아닙니다: {len(D행)}개")
+        self.assertIn(
+            "묻지 않는다", D행[0][1],
+            "D(변경 관리)가 화면 분리를 묻게 돼 있습니다 "
+            f"— 기존 화면ID가 바뀌면 후속 산출물이 전부 재채번됩니다: {D행[0][1]!r}",
+        )
+
+    def test_A_와_C_유형은_화면_분리를_묻는다(self):
+        """D 만 고정돼 있고 A·C 는 무방비였다.
+
+        A 행의 '묻는다' 를 '묻지 않는다' 로 바꿔도 전 스위트가 통과했다.
+        A(신규 구축)는 이 기능의 주 대상이다 — RFP 밖에 화면 분리의 근거가 없으므로
+        묻지 않으면 조용히 추정하게 되고, 그것이 이 판정이 막으려던 일이다.
+        """
+        행 = self._표_행(lambda l: "유형" in l and "동작" in l and "근거" in l)
+        for 유형 in ("A", "C"):
+            with self.subTest(유형=유형):
+                해당 = [r for r in 행 if f"**{유형}**" in r[0]]
+                self.assertEqual(
+                    len(해당), 1, f"유형 {유형} 행이 1개가 아닙니다: {len(해당)}개"
+                )
+                self.assertIn(
+                    "묻는다", 해당[0][1],
+                    f"유형 {유형} 가 화면 분리를 묻지 않게 돼 있습니다 "
+                    f"— 근거 없이 화면 수를 추정하게 됩니다: {해당[0][1]!r}",
+                )
+
+    def test_미결정_판정이_추론표보다_앞선다(self):
+        """'추정하기 전에 판정한다' 가 이 규칙의 전부다 (설계서 §2.1).
+
+        판정 블록을 통째로 추론표 뒤로 옮겨도 다른 테스트는 전부 통과한다 —
+        표가 존재하는지만 보고 순서는 아무도 보지 않기 때문이다. 뒤에 있으면
+        Claude 는 추론표로 화면 수를 먼저 정한 뒤에 판정을 읽는다. 이미 추정한
+        뒤라 판정이 아무 일도 하지 않는다.
+        """
+        step3 = self._step3()
+        판정 = step3.find("미결정이다")
+        추론 = step3.find("요구사항 패턴")
+        self.assertNotEqual(판정, -1, "미결정 판정표를 찾지 못했습니다")
+        self.assertNotEqual(추론, -1, "화면 수 추론표를 찾지 못했습니다")
+        self.assertLess(
+            판정, 추론,
+            "미결정 판정이 화면 수 추론표보다 뒤에 있습니다 "
+            "— 추정한 뒤에 판정하면 판정이 아무 일도 하지 않습니다",
+        )
+
+    def test_기록_규칙이_DE_03_의_실제_컬럼을_지목한다(self):
+        """기록 규칙이 없는 컬럼을 지목하면 xlsx 추출에서 조용히 사라진다.
+
+        화면 수의 근거는 감리 대상이고 xlsx 가 납품물이다. 규칙이 지목한 컬럼명과
+        templates/DE-03-screen-list.md 의 컬럼 목록을 묶어 갈라질 수 없게 한다.
+        """
+        칸 = re.search(r"해당 행의 `([^`]+)` 열", self._step3())
+        self.assertIsNotNone(
+            칸,
+            "기록 규칙에서 '해당 행의 `{컬럼}` 열' 표기를 Step 3 안에서 찾지 못했습니다 "
+            "— 기록할 자리가 정의되지 않았습니다",
+        )
+        컬럼 = 칸.group(1)
+        템플릿 = (
+            PLUGIN_ROOT / "templates" / "DE-03-screen-list.md"
+        ).read_text(encoding="utf-8")
+        헤더 = re.findall(r"^\|\s*([^|]+?)\s*\|", 템플릿, re.M)
+        self.assertIn(
+            컬럼, 헤더,
+            f"기록 규칙이 지목한 `{컬럼}` 이 DE-03 템플릿의 컬럼이 아닙니다 "
+            "— 기록해도 xlsx 추출에서 사라집니다",
+        )
+
+    def test_이미_기록된_기준은_다시_묻지_않는다(self):
+        """재질문 금지 규칙이 없으면 이어쓰기·재실행 때마다 같은 것을 다시 묻는다.
+
+        B(추가 개발)와 D(변경 관리)가 기존 기준을 따른다는 §3-2 의 규정도
+        '기록된 기준을 읽는다' 는 이 규칙 위에 서 있다.
+        """
+        step3 = self._step3()
+        self.assertIn(
+            "화면 분리 기준:", step3,
+            "기록 형식 '화면 분리 기준:' 이 Step 3 에 없습니다",
+        )
+        self.assertRegex(
+            step3, r"이미 있으면[^\n]*묻지 않는다",
+            "재질문 금지 규칙이 없습니다 — 재실행 때마다 같은 것을 다시 묻게 됩니다",
+        )
 
 
 class BoundaryRuleTest(unittest.TestCase):
