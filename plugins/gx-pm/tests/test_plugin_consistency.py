@@ -523,6 +523,93 @@ class VersionConsistencyTest(unittest.TestCase):
                 )
 
 
+class ScreenSplitRuleTest(unittest.TestCase):
+    """화면 분리 미결정 규칙의 정본은 generate-screen-list/SKILL.md Step 3 다.
+
+    문서가 화면 수를 말하지 않는데 추론표를 그냥 적용하면, 그 수가 화면ID가 되고
+    pipeline-protocol.md §재생성 파급 규칙이 통째로 발동한다 — PG_·U_·TC_ 전건이
+    나중에 재채번된다. 그래서 '추정 전에 판정한다' 는 규칙이 문서에 살아 있어야 한다.
+    """
+
+    def setUp(self):
+        self.text = (
+            PLUGIN_ROOT / "skills" / "generate-screen-list" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+
+    def _step3(self) -> str:
+        구간 = re.search(r"^### Step 3:(.*?)(?=^### |\Z)", self.text, re.M | re.S)
+        self.assertIsNotNone(
+            구간,
+            "generate-screen-list/SKILL.md 에서 '### Step 3:' 절을 찾지 못했습니다 "
+            "— 절이 삭제됐거나 제목이 바뀌었습니다",
+        )
+        return 구간.group(1)
+
+    def _표_행(self, 머리조건) -> list[list[str]]:
+        """머리행 조건을 만족하는 표의 본문 행을 (구분선 제외) 반환한다."""
+        줄들 = self._step3().splitlines()
+        시작 = next(
+            (
+                i
+                for i, l in enumerate(줄들)
+                if l.strip().startswith("|") and 머리조건(l)
+            ),
+            None,
+        )
+        self.assertIsNotNone(시작, "표의 머리행을 찾지 못했습니다")
+        행: list[list[str]] = []
+        for l in 줄들[시작 + 1 :]:
+            if not l.strip().startswith("|"):
+                break
+            칸 = [c.strip() for c in l.strip().strip("|").split("|")]
+            if set("".join(칸)) <= set("-: "):
+                continue  # 구분선
+            행.append(칸)
+        return 행
+
+    def test_미결정_판정이_양쪽으로_나뉘어_있다(self):
+        """한쪽만 있으면 판정이 아니라 목록이다.
+
+        '미결정이다' 만 있으면 무엇이 결정된 것인지 알 수 없어 전건이 미결정이 되고,
+        '결정돼 있다' 만 있으면 판정 자체가 사라진다.
+        """
+        행 = self._표_행(lambda l: "미결정이다" in l and "결정돼 있다" in l)
+        self.assertGreaterEqual(
+            len(행), 3,
+            f"미결정 판정표의 본문 행이 3개 미만입니다: {len(행)}개",
+        )
+        for 왼, 오 in (r[:2] for r in 행):
+            with self.subTest(행=왼[:20]):
+                self.assertTrue(왼, "판정표 '미결정이다' 칸이 비어 있습니다")
+                self.assertTrue(오, "판정표 '결정돼 있다' 칸이 비어 있습니다")
+
+    def test_프로젝트_유형_네_가지의_동작이_모두_정의돼_있다(self):
+        """A·B·C·D 중 하나라도 빠지면 그 유형은 규칙 없이 실행된다."""
+        행 = self._표_행(lambda l: "유형" in l and "동작" in l and "근거" in l)
+        유형들 = [r[0] for r in 행]
+        for 유형 in ("A", "B", "C", "D"):
+            with self.subTest(유형=유형):
+                self.assertTrue(
+                    any(f"**{유형}**" in v for v in 유형들),
+                    f"유형 {유형} 의 동작이 정의돼 있지 않습니다: {유형들}",
+                )
+
+    def test_D_유형은_화면_분리를_묻지_않는다(self):
+        """D(변경 관리)에서 화면 분리를 물으면 답에 따라 기존 화면ID가 바뀔 수 있다.
+
+        화면ID가 바뀌면 PG_·U_·TC_ 전건이 재채번된다 — 운영 중 시스템의 변경 건에서
+        그 파급은 변경 범위를 통째로 벗어난다.
+        """
+        행 = self._표_행(lambda l: "유형" in l and "동작" in l and "근거" in l)
+        D행 = [r for r in 행 if "**D**" in r[0]]
+        self.assertEqual(len(D행), 1, f"유형 D 행이 1개가 아닙니다: {len(D행)}개")
+        self.assertIn(
+            "묻지 않는다", D행[0][1],
+            "D(변경 관리)가 화면 분리를 묻게 돼 있습니다 "
+            f"— 기존 화면ID가 바뀌면 후속 산출물이 전부 재채번됩니다: {D행[0][1]!r}",
+        )
+
+
 class BoundaryRuleTest(unittest.TestCase):
     """드라이런에서 놓친 4건(영값·통과 측 경계·하위 정밀도)의 재발을 막는다.
 
