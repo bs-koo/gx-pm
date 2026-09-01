@@ -92,5 +92,43 @@ class ExtractRuleTest(unittest.TestCase):
                 )
 
 
+class ExtractRuleDocTest(unittest.TestCase):
+    """뽑은 행을 어떻게 다루는지가 문서에 있어야 한다.
+
+    규칙이 없으면 같은 요구사항이 2건으로 세어지거나(중복), 업무 규칙이
+    비기능으로 분류되거나, 원문 ID 가 사라져 추적이 끊긴다.
+    """
+
+    def setUp(self):
+        self.text = SKILL.read_text(encoding="utf-8")
+
+    def test_중복_제거_규칙이_있다(self):
+        self.assertIn("중복 제거", self.text)
+        self.assertIn(
+            "1건", self.text,
+            "같은 원문 ID 를 몇 건으로 셀지가 적혀 있지 않습니다",
+        )
+
+    def test_기능_비기능_판정_순서가_있다(self):
+        for 조각 in ("NFR", "QE", "QR"):
+            with self.subTest(조각=조각):
+                self.assertIn(조각, self.text)
+        self.assertIn(
+            "업무 규칙은 기능", self.text,
+            "BR 같은 업무 규칙이 기능으로 분류된다는 근거가 없습니다",
+        )
+
+    def test_원문_ID_보존_위치가_있다(self):
+        self.assertIn(
+            "과업지시서 BR-01", self.text,
+            "원문 ID 를 근거 열에 어떻게 적는지 예시가 없습니다",
+        )
+        self.assertIn(
+            "제안요청ID 열에 넣지 않는다", self.text,
+            "원문 ID 를 제안요청ID 열에 넣지 말라는 금지가 없습니다 "
+            "— SFR- 체계가 무너집니다",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
