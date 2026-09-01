@@ -219,6 +219,33 @@ class PipelineProtocolTest(unittest.TestCase):
         self.assertIn("시안", self.text)
         self.assertIn("화면ID", self.text)
 
+    def test_이월_금지_항목에_화면_분리_미결정이_있다(self):
+        """§이월 금지 항목 **절 안에서만** 검사한다.
+
+        파일 전체를 substring 으로 훑으면 §재생성 파급 규칙의 '화면ID' 표기가
+        조건을 채워버려, 이 항목이 이월 금지 목록에서 통째로 빠져도 통과한다.
+        빠지면 /gx-spec 이 이 중단점을 게이트 1 로 미뤄도 아무도 모른다 —
+        그때는 화면ID가 이미 채번된 뒤라 되돌리는 비용이 전건 재채번이다.
+        """
+        구간 = re.search(
+            r"^## 이월 금지 항목$(.*?)(?=^## |\Z)", self.text, re.M | re.S
+        )
+        self.assertIsNotNone(
+            구간,
+            "pipeline-protocol.md 에서 '## 이월 금지 항목' 절을 찾지 못했습니다 "
+            "— 절이 삭제됐거나 제목이 바뀌었습니다",
+        )
+        절 = 구간.group(1)
+        항목 = re.findall(r"^\d+\. \*\*(.+?)\*\*", 절, re.M)
+        self.assertEqual(
+            len(항목), 4,
+            f"이월 금지 항목이 4개가 아닙니다: {항목}",
+        )
+        self.assertTrue(
+            any("화면 분리" in v for v in 항목),
+            f"'화면 분리' 미결정 중단점이 이월 금지 항목에 없습니다: {항목}",
+        )
+
     def test_파생_ID가_모두_재생성_파급_규칙에_있다(self):
         """§재생성 파급 규칙 표 **안에서만** 검사한다.
 
