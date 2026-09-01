@@ -30,3 +30,6 @@ __pycache__/
 
 # Windows `> nul` 리다이렉트 잔재 (nul 은 예약 장치명이라 실수로 파일이 생긴다)
 nul
+
+# Cygwin/MSYS bash 크래시 덤프
+*.stackdump

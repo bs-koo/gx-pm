@@ -352,6 +352,22 @@ class CommandStructureTest(unittest.TestCase):
             "skills/extract-requirements/SKILL.md Step 2 를 참조로 바꾸세요",
         )
 
+    def test_화면목록표_커맨드가_유형별_동작을_복제하지_않는다(self):
+        """유형별 동작의 정본은 skills/generate-screen-list/SKILL.md §3-2 다.
+
+        커맨드에 동작을 축약해 적어두면 §3-2 가 바뀔 때 조용히 낡는다.
+        최종 리뷰 전 실제로 그렇게 적혀 있어 한 번 걷어냈다 — 다시 들어오는 것을 막는다.
+        커맨드는 '유형별 동작은 스킬 Step 3 이 정본이다' 라고만 적는다.
+        """
+        text = (PLUGIN_ROOT / "commands" / "gx-화면목록표.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn(
+            "묻지 않는다", text,
+            "커맨드가 유형별 동작을 복제하고 있습니다 — "
+            "skills/generate-screen-list/SKILL.md §3-2 를 참조로 두세요",
+        )
+
     def test_다음_제안의_커맨드가_백틱으로_감싸져_있다(self):
         맨커맨드 = re.compile(r"(?<![`/\w])/gx-[가-힣A-Za-z-]+")
         for path in sorted((PLUGIN_ROOT / "commands").glob("*.md")):
@@ -634,6 +650,45 @@ class ScreenSplitRuleTest(unittest.TestCase):
             "묻지 않는다", D행[0][1],
             "D(변경 관리)가 화면 분리를 묻게 돼 있습니다 "
             f"— 기존 화면ID가 바뀌면 후속 산출물이 전부 재채번됩니다: {D행[0][1]!r}",
+        )
+
+    def test_A_와_C_유형은_화면_분리를_묻는다(self):
+        """D 만 고정돼 있고 A·C 는 무방비였다.
+
+        A 행의 '묻는다' 를 '묻지 않는다' 로 바꿔도 전 스위트가 통과했다.
+        A(신규 구축)는 이 기능의 주 대상이다 — RFP 밖에 화면 분리의 근거가 없으므로
+        묻지 않으면 조용히 추정하게 되고, 그것이 이 판정이 막으려던 일이다.
+        """
+        행 = self._표_행(lambda l: "유형" in l and "동작" in l and "근거" in l)
+        for 유형 in ("A", "C"):
+            with self.subTest(유형=유형):
+                해당 = [r for r in 행 if f"**{유형}**" in r[0]]
+                self.assertEqual(
+                    len(해당), 1, f"유형 {유형} 행이 1개가 아닙니다: {len(해당)}개"
+                )
+                self.assertIn(
+                    "묻는다", 해당[0][1],
+                    f"유형 {유형} 가 화면 분리를 묻지 않게 돼 있습니다 "
+                    f"— 근거 없이 화면 수를 추정하게 됩니다: {해당[0][1]!r}",
+                )
+
+    def test_미결정_판정이_추론표보다_앞선다(self):
+        """'추정하기 전에 판정한다' 가 이 규칙의 전부다 (설계서 §2.1).
+
+        판정 블록을 통째로 추론표 뒤로 옮겨도 다른 테스트는 전부 통과한다 —
+        표가 존재하는지만 보고 순서는 아무도 보지 않기 때문이다. 뒤에 있으면
+        Claude 는 추론표로 화면 수를 먼저 정한 뒤에 판정을 읽는다. 이미 추정한
+        뒤라 판정이 아무 일도 하지 않는다.
+        """
+        step3 = self._step3()
+        판정 = step3.find("미결정이다")
+        추론 = step3.find("요구사항 패턴")
+        self.assertNotEqual(판정, -1, "미결정 판정표를 찾지 못했습니다")
+        self.assertNotEqual(추론, -1, "화면 수 추론표를 찾지 못했습니다")
+        self.assertLess(
+            판정, 추론,
+            "미결정 판정이 화면 수 추론표보다 뒤에 있습니다 "
+            "— 추정한 뒤에 판정하면 판정이 아무 일도 하지 않습니다",
         )
 
     def test_기록_규칙이_DE_03_의_실제_컬럼을_지목한다(self):
