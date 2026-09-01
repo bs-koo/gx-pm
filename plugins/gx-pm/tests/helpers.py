@@ -34,6 +34,8 @@ def read_docs() -> list[tuple[Path, str]]:
     """플러그인의 모든 마크다운 문서를 (경로, 본문) 쌍으로 반환한다.
 
     .omc 는 런타임 상태 디렉터리라 검사 대상이 아니다.
+    tests/fixtures 는 규칙을 시험하기 위한 입력이라 검사 대상이 아니다 —
+    일부러 잘못된 예시를 담는 픽스처가 계약 검사에 걸리면 안 된다.
     저장소 루트 README 도 포함한다 — 사용자의 첫 접점이라 다른 문서와 같은
     계약 검사(개명·백틱·정본 참조 등)를 받아야 한다.
     """
@@ -41,6 +43,8 @@ def read_docs() -> list[tuple[Path, str]]:
     for path in sorted(PLUGIN_ROOT.rglob("*.md")):
         if ".omc" in path.parts:
             continue
+        if "fixtures" in path.parts:
+            continue  # 픽스처는 검사 대상이 아니라 검사 도구다
         docs.append((path, path.read_text(encoding="utf-8")))
     root_readme = REPO_ROOT / "README.md"
     if root_readme.exists():
