@@ -238,13 +238,52 @@ class PipelineProtocolTest(unittest.TestCase):
         절 = 구간.group(1)
         항목 = re.findall(r"^\d+\. \*\*(.+?)\*\*", 절, re.M)
         self.assertEqual(
-            len(항목), 4,
-            f"이월 금지 항목이 4개가 아닙니다: {항목}",
+            len(항목), 5,
+            f"이월 금지 항목이 5개가 아닙니다: {항목}",
         )
         self.assertTrue(
             any("화면 분리" in v for v in 항목),
             f"'화면 분리' 미결정 중단점이 이월 금지 항목에 없습니다: {항목}",
         )
+
+    def test_이월_금지_항목에_표_판정_애매성이_있다(self):
+        """§이월 금지 항목 절 안에서만 검사한다.
+
+        extract-requirements 의 '애매하면 묻는다' 는 사용자를 세우는 중단점인데
+        규약의 어느 표에도 분류돼 있지 않았다. 분류되지 않으면 /gx-spec 실행 중
+        Claude 는 거기서 멈춰야 하는지 게이트 1 로 미뤄야 하는지 지시를 받지 못한다.
+        """
+        구간 = re.search(
+            r"^## 이월 금지 항목$(.*?)(?=^## |\Z)", self.text, re.M | re.S
+        )
+        self.assertIsNotNone(
+            구간, "pipeline-protocol.md 에서 '## 이월 금지 항목' 절을 찾지 못했습니다"
+        )
+        항목 = re.findall(r"^\d+\. \*\*(.+?)\*\*", 구간.group(1), re.M)
+        self.assertEqual(len(항목), 5, f"이월 금지 항목이 5개가 아닙니다: {항목}")
+        self.assertTrue(
+            any("표 판정" in v for v in 항목),
+            f"'표 판정' 애매성 중단점이 이월 금지 항목에 없습니다: {항목}",
+        )
+
+    def test_단독_파이프라인_대조표에_중단점이_모두_있다(self):
+        """§이월 금지 항목의 중단점은 §단독 실행 vs 파이프라인 실행 표에도 있어야 한다.
+
+        한쪽에만 있으면 '이월 금지' 라고 선언해 놓고 파이프라인 실행 시 어떻게
+        동작하는지는 규정하지 않은 상태가 된다.
+        """
+        표 = re.search(
+            r"^## 단독 실행 vs 파이프라인 실행$(.*?)(?=^## |\Z)", self.text, re.M | re.S
+        )
+        self.assertIsNotNone(표, "'## 단독 실행 vs 파이프라인 실행' 절을 찾지 못했습니다")
+        본문 = 표.group(1)
+        for 중단점 in ("시안/대안 감지 중단점", "표 판정 애매성 중단점",
+                     "화면 분리 미결정 중단점", "입력 수집 중단점"):
+            with self.subTest(중단점=중단점):
+                self.assertIn(
+                    중단점, 본문,
+                    f"'{중단점}' 이 단독/파이프라인 대조표에 없습니다",
+                )
 
     def test_파생_ID가_모두_재생성_파급_규칙에_있다(self):
         """§재생성 파급 규칙 표 **안에서만** 검사한다.
@@ -487,6 +526,28 @@ class PipelineCommandTest(unittest.TestCase):
                 self.assertIn("templates/pipeline-protocol.md", 본문)
                 self.assertIn("templates/prerequisites.md", 본문)
 
+    def test_gx_spec_이_화면_분리_중단점을_선언한다(self):
+        """이 중단점은 라벨(`[필수 중단점]`)을 달 수 없다 — 게이트가 3개가 되기 때문이다.
+
+        라벨이 없으니 게이트 개수 정규식이 세지 못하고, 문단을 지워도 아무 테스트도
+        걸리지 않았다. 문단이 사라지면 /gx-spec 은 화면 분리 미결정에서 멈추지 않고
+        게이트 1 까지 간다 — 그때는 화면ID가 이미 채번된 뒤다.
+        """
+        본문 = self._본문("gx-spec")
+        구간 = re.search(
+            r"^### Step 3:(.*?)(?=^### |\Z)", 본문, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "gx-spec.md 에서 '### Step 3:' 절을 찾지 못했습니다")
+        절 = 구간.group(1)
+        self.assertIn(
+            "skills/generate-screen-list/SKILL.md", 절,
+            "Step 3 이 화면 분리 판정의 정본을 참조하지 않습니다",
+        )
+        self.assertRegex(
+            절, r"결정하지 않은[^\n]*중단한다",
+            "Step 3 에 화면 분리 미결정 중단 선언이 없습니다",
+        )
+
 
 class VersionConsistencyTest(unittest.TestCase):
     """버전과 개수 표기가 10개 지점에 흩어져 있어 한쪽만 갱신되기 쉽다.
@@ -707,9 +768,21 @@ class ScreenSplitRuleTest(unittest.TestCase):
         템플릿 = (
             PLUGIN_ROOT / "templates" / "DE-03-screen-list.md"
         ).read_text(encoding="utf-8")
-        헤더 = re.findall(r"^\|\s*([^|]+?)\s*\|", 템플릿, re.M)
+        # DE-03 템플릿의 컬럼 정의표는 세로형이다 — 각 행의 첫 칸이 컬럼명이고,
+        # 둘째 칸이 설명이다. 머리행(`| 컬럼 | 설명 |`)과 구분선은 제외한다.
+        컬럼명들 = []
+        for 줄 in 템플릿.splitlines():
+            벗긴줄 = 줄.strip()
+            if not (벗긴줄.startswith("|") and 벗긴줄.endswith("|")):
+                continue
+            칸 = [c.strip() for c in 벗긴줄.strip("|").split("|")]
+            if len(칸) < 2 or set("".join(칸)) <= set("-: "):
+                continue  # 구분선
+            if 칸[0] == "컬럼":
+                continue  # 머리행
+            컬럼명들.append(칸[0])
         self.assertIn(
-            컬럼, 헤더,
+            컬럼, 컬럼명들,
             f"기록 규칙이 지목한 `{컬럼}` 이 DE-03 템플릿의 컬럼이 아닙니다 "
             "— 기록해도 xlsx 추출에서 사라집니다",
         )

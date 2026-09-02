@@ -1,6 +1,7 @@
+import re
 import unittest
 
-from helpers import load_export_module, read_docs
+from helpers import PLUGIN_ROOT, load_export_module, read_docs
 
 
 class LoaderTest(unittest.TestCase):
@@ -189,6 +190,76 @@ class ProfileColumnBindingTest(unittest.TestCase):
                             f"프로필이 기대하는 컬럼 '{컬럼}' 을 어떤 문서도 만들지 않습니다 "
                             "— 오타이거나, 문서에서 이름이 바뀌었는데 프로필이 안 따라왔습니다",
                         )
+
+
+class An05ColumnSsotTest(unittest.TestCase):
+    """AN-05 컬럼 세트의 정본은 templates/AN-05-traceability-matrix.md 다.
+
+    종전에는 템플릿·trace-requirements 스킬·export-xlsx 프로필 셋이 서로 다른 컬럼
+    목록을 갖고 있었다 — 영역 1·2·4 전부에서 갈렸고, 그래서 extract-requirements 가
+    AN-02 의 `근거` 열에 넣은 원문 ID 가 추적매트릭스로 넘어가지 못했다.
+    양방향으로 묶어 다시 갈라질 수 없게 한다.
+    """
+
+    def setUp(self):
+        self.mod = load_export_module()
+        템플릿 = (
+            PLUGIN_ROOT / "templates" / "AN-05-traceability-matrix.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(
+            r"^### 본문 표 헤더 \(플랫[^\n]*\)$(.*?)(?=^#{1,3} |\Z)",
+            템플릿, re.M | re.S,
+        )
+        self.assertIsNotNone(
+            구간,
+            "AN-05 템플릿에서 '### 본문 표 헤더 (플랫…)' 절을 찾지 못했습니다 "
+            "— 절이 삭제됐거나 제목이 바뀌었습니다",
+        )
+        self.정본컬럼 = []
+        for 줄 in 구간.group(1).splitlines():
+            벗긴줄 = 줄.strip()
+            if not (벗긴줄.startswith("|") and 벗긴줄.endswith("|")):
+                continue
+            칸 = [c.strip() for c in 벗긴줄.strip("|").split("|")]
+            if len(칸) != 3 or set("".join(칸)) <= set("-: "):
+                continue
+            if 칸[0] == "#":
+                continue  # 머리행
+            self.정본컬럼.append(칸[1])
+
+    def test_정본_플랫_헤더가_비어있지_않다(self):
+        """파싱이 조용히 빈 목록을 내면 아래 두 테스트가 공허하게 통과한다."""
+        self.assertGreaterEqual(
+            len(self.정본컬럼), 20,
+            f"정본 플랫 헤더에서 뽑은 컬럼이 20개 미만입니다: {self.정본컬럼}",
+        )
+
+    def test_프로필의_모든_컬럼이_정본에_있다(self):
+        """프로필에만 있는 컬럼은 아무도 만들지 않는 유령 컬럼이다."""
+        for 세트번호, 컬럼들 in enumerate(
+            self.mod.DOCUMENT_PROFILES["추적매트릭스"]["columns"]
+        ):
+            for 컬럼 in 컬럼들:
+                with self.subTest(세트=세트번호, 컬럼=컬럼):
+                    self.assertIn(
+                        컬럼, self.정본컬럼,
+                        f"프로필의 '{컬럼}' 이 AN-05 템플릿의 플랫 헤더에 없습니다 "
+                        "— 정본에 추가하거나 프로필에서 빼세요",
+                    )
+
+    def test_정본의_모든_컬럼이_전체_세트에_있다(self):
+        """정본에만 있는 컬럼은 xlsx 에서 재배열되지 않고 뒤로 밀린다.
+
+        전체 세트가 정본을 다 담아야 한다. 축약 세트는 부분집합이므로 검사하지 않는다.
+        """
+        전체세트 = self.mod.DOCUMENT_PROFILES["추적매트릭스"]["columns"][0]
+        for 컬럼 in self.정본컬럼:
+            with self.subTest(컬럼=컬럼):
+                self.assertIn(
+                    컬럼, 전체세트,
+                    f"정본의 '{컬럼}' 이 프로필 전체 세트에 없습니다 "
+                    "— xlsx 에서 공공 양식 순서로 재배열되지 않습니다",
+                )
 
 
 if __name__ == "__main__":
