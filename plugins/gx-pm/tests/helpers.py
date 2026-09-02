@@ -53,6 +53,23 @@ def read_docs() -> list[tuple[Path, str]]:
     return docs
 
 
+def runtime_docs() -> list[tuple[Path, str]]:
+    """런타임에 '지시'로 읽히는 문서만 (경로, 본문) 쌍으로 반환한다.
+
+    read_docs() 는 CHANGELOG·README·docs/ 까지 포함한다. 하네스 비호환 패턴
+    검사는 그것들을 봐서는 안 된다 — 패턴을 *설명하는* 문서가 패턴을 *쓰는*
+    문서로 오인돼 실패한다. 이 검사를 추가한 커밋의 CHANGELOG 항목이
+    첫 희생자가 된다.
+
+    커맨드·스킬·템플릿만 본다. 이 셋이 Claude 가 절차로 읽는 전부다.
+    """
+    docs = []
+    for sub in ("commands", "skills", "templates"):
+        for path in sorted((PLUGIN_ROOT / sub).rglob("*.md")):
+            docs.append((path, path.read_text(encoding="utf-8")))
+    return docs
+
+
 def doc_label(path: Path) -> Path:
     """read_docs() 가 반환한 경로를 subTest 표시용 상대경로로 변환한다.
 

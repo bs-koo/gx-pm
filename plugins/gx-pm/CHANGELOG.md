@@ -14,6 +14,12 @@ v2.0.0 최종 리뷰가 변이 테스트로 찾아낸 하네스 구멍(머지를
   — `.agents/plugins/marketplace.json` 에는 version 필드가 없어 대신 `source` 가
   `plugins/gx-pm` 을 가리키는지 검사한다. 참조 구현(oh-my-gx)의 `url` 은 `"./"` 인데
   그쪽은 저장소 루트가 곧 플러그인 루트라서다 — 그대로 베끼면 등록이 실패한다.
+- **하네스 비호환 패턴 3종의 재발을 막았다.** `${CLAUDE_PLUGIN_ROOT}` 절대경로
+  조립, `Skill()` 상호 호출, `Task()` 서브에이전트 디스패치 — oh-my-gx 가 각각
+  27곳·44곳·17개를 고쳐야 했던 것들이다. gx-pm 은 지금 전부 0건이므로 그 상태를
+  `HarnessCompatTest` 3건으로 묶었다. 검사 범위는 커맨드·스킬·템플릿뿐이다
+  (`helpers.runtime_docs()`) — 전체 문서를 보면 이 항목처럼 패턴을 설명하는
+  글이 패턴을 쓰는 글로 오인된다.
 - **표 판정 애매성을 이월 금지 항목 5번으로 등록했다.** `extract-requirements` 의
   "애매하면 사용자에게 묻는다" 는 사용자를 세우는 중단점인데 `templates/pipeline-protocol.md` 의
   대조표에도 이월 금지 항목에도 분류돼 있지 않았다. `/gx-spec` 실행 중 Claude 는 거기서
