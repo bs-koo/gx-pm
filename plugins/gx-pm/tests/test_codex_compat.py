@@ -12,7 +12,14 @@ import json
 import re
 import unittest
 
-from helpers import PLUGIN_ROOT, REPO_ROOT, doc_label, runtime_docs
+from helpers import (
+    PLUGIN_ROOT,
+    REPO_ROOT,
+    command_names,
+    doc_label,
+    runtime_docs,
+    skill_names,
+)
 
 CODEX_PLUGIN = PLUGIN_ROOT / ".codex-plugin" / "plugin.json"
 CODEX_MARKETPLACE = REPO_ROOT / ".agents" / "plugins" / "marketplace.json"
@@ -150,3 +157,70 @@ class HarnessCompatTest(unittest.TestCase):
                     "서브에이전트 디스패치가 들어왔습니다 "
                     "— Codex 는 agents 컴포넌트를 배포하지 못합니다",
                 )
+
+
+COMMAND_MAP = PLUGIN_ROOT / "docs" / "codex-harness.md"
+
+
+class CodexCommandMapTest(unittest.TestCase):
+    """대조표가 낡으면 커맨드 추출 견적이 조용히 틀려진다.
+
+    이 표의 쓸모는 하나다 — '커맨드를 스킬로 추출하는 데 얼마나 드는가' 에
+    답하는 것. 커맨드가 늘거나 줄거나, 커맨드가 부르는 스킬이 바뀌면 답이
+    달라지는데 표는 그대로 남는다. 여기서 걸리게 한다.
+
+    구조는 PrerequisiteRegistryTest 와 같다 — 정본 표에 전수가 실려 있고,
+    없는 것도 실려 있지 않아야 한다.
+    """
+
+    def setUp(self):
+        self.text = COMMAND_MAP.read_text(encoding="utf-8")
+        self.표 = re.search(
+            r"^## 커맨드 16 ↔ 스킬 26$(.*?)(?=^#{1,3} |\Z)",
+            self.text, re.M | re.S,
+        )
+        self.assertIsNotNone(
+            self.표, "'## 커맨드 16 ↔ 스킬 26' 절을 찾지 못했습니다"
+        )
+        self.행 = re.findall(
+            r"^\|\s*`/(gx-[가-힣A-Za-z-]+)`\s*\|([^|]*)\|",
+            self.표.group(1), re.M,
+        )
+        self.실린커맨드 = {이름 for 이름, _ in self.행}
+
+    def test_대조표가_비어있지_않다(self):
+        """표 파싱이 조용히 실패하면 아래 두 검사가 공집합끼리 비교해 통과한다.
+
+        (기존 An05ColumnSsotTest 가 같은 이유로 파싱 가드를 갖고 있다.)
+        """
+        self.assertGreater(len(self.행), 0, "대조표에서 커맨드 행을 하나도 찾지 못했습니다")
+
+    def test_모든_커맨드가_대조표에_있다(self):
+        self.assertEqual(
+            command_names() - self.실린커맨드, set(),
+            "대조표에 없는 커맨드가 있습니다 — 커맨드를 추가했다면 표에도 넣으세요",
+        )
+
+    def test_대조표에_없는_커맨드가_실려있지_않다(self):
+        self.assertEqual(
+            self.실린커맨드 - command_names(), set(),
+            "존재하지 않는 커맨드가 대조표에 있습니다",
+        )
+
+    def test_대조표의_조립_스킬이_실제_커맨드에_있다(self):
+        """'gx-요구사항정의서가 6개를 조립한다' 는 추출 견적의 근거다.
+
+        커맨드 본문이 바뀌어 스킬이 빠져도 표는 그대로 남아, 견적만 조용히
+        틀려진다. 개수 대신 이름을 대조해 그 드리프트를 잡는다.
+        """
+        실존스킬 = skill_names()
+        for 이름, 스킬칸 in self.행:
+            본문 = (PLUGIN_ROOT / "commands" / f"{이름}.md").read_text(encoding="utf-8")
+            for 스킬 in re.findall(r"`([a-z][a-z0-9-]+)`", 스킬칸):
+                with self.subTest(커맨드=이름, 스킬=스킬):
+                    self.assertIn(스킬, 실존스킬, "존재하지 않는 스킬입니다")
+                    self.assertIn(
+                        f"**{스킬}**", 본문,
+                        f"대조표는 {이름} 이 이 스킬을 조립한다고 하는데 "
+                        "커맨드 본문에 없습니다",
+                    )
