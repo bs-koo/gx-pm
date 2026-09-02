@@ -1,0 +1,47 @@
+{
+  "name": "gx-pm",
+  "version": "2.0.0",
+  "description": "공공/SI PM의 AI 운영 체제 — 산출물 이름 한국어 커맨드 16개, 명세·테스트 묶음 파이프라인, 선행조건 자동 검사, 프로젝트 프로파일, 역방향 생성, xlsx 추출. 26개 스킬로 요구사항부터 테스트·결함관리·감리대응까지 자동화합니다.",
+  "author": {
+    "name": "SQI"
+  },
+  "homepage": "https://github.com/bs-koo/gx-pm",
+  "repository": "https://github.com/bs-koo/gx-pm",
+  "license": "MIT",
+  "keywords": [
+    "product-manager",
+    "public-sector",
+    "SI",
+    "korean",
+    "requirements",
+    "traceability",
+    "test-plan",
+    "audit",
+    "ERDCloud",
+    "cowork-plugin",
+    "test-case",
+    "defect-management",
+    "system-test",
+    "pipeline"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "gx-pm",
+    "shortDescription": "공공/SI 프로젝트 산출물을 요구사항부터 감리대응까지 만드는 PM 플러그인",
+    "longDescription": "RFP·과업지시서에서 요구사항을 뽑아 요구사항정의서·화면목록표·프로그램정의서·인터페이스정의서·테이블정의서를 만들고, 총괄·단위·통합·시스템 테스트 계획과 결함관리대장, 요구사항추적매트릭스, 감리대응 자료까지 이어서 생성한다. 각 산출물은 승인 루프를 거쳐 확정하며 xlsx 로 추출할 수 있다.",
+    "developerName": "SQI",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "RFP에서 요구사항을 뽑아줘",
+      "명세 5종을 한 번에 만들어줘",
+      "요구사항 추적매트릭스를 만들어줘"
+    ],
+    "websiteURL": "https://github.com/bs-koo/gx-pm",
+    "brandColor": "#0F766E"
+  }
+}

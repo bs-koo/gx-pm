@@ -550,7 +550,7 @@ class PipelineCommandTest(unittest.TestCase):
 
 
 class VersionConsistencyTest(unittest.TestCase):
-    """버전과 개수 표기가 10개 지점에 흩어져 있어 한쪽만 갱신되기 쉽다.
+    """버전과 개수 표기가 11개 지점에 흩어져 있어 한쪽만 갱신되기 쉽다.
 
     v1.4.0 에서 marketplace.json 과 README 배지가 실제로 누락됐다.
     """
@@ -564,6 +564,9 @@ class VersionConsistencyTest(unittest.TestCase):
         )
         self.readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
         self.changelog = (PLUGIN_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        self.codex_plugin_json = json.loads(
+            (PLUGIN_ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8")
+        )
         self.skill_count = len(skill_names())
         self.command_count = len(command_names())
 
@@ -572,6 +575,11 @@ class VersionConsistencyTest(unittest.TestCase):
         self.assertEqual(self.marketplace["plugins"][0]["version"], version)
         self.assertEqual(re.search(r"version-([\d.]+)-blue", self.readme).group(1), version)
         self.assertEqual(re.search(r"## \[([\d.]+)\]", self.changelog).group(1), version)
+        self.assertEqual(
+            self.codex_plugin_json["version"], version,
+            ".codex-plugin/plugin.json 의 버전이 다릅니다 "
+            "— Codex UI 에 옛 버전이 표시됩니다",
+        )
 
     def test_README_배지가_실제_스킬_커맨드_수와_같다(self):
         self.assertEqual(

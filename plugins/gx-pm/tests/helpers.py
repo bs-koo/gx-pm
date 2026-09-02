@@ -53,6 +53,30 @@ def read_docs() -> list[tuple[Path, str]]:
     return docs
 
 
+def runtime_docs() -> list[tuple[Path, str]]:
+    """런타임에 '지시'로 읽히는 문서만 (경로, 본문) 쌍으로 반환한다.
+
+    read_docs() 는 CHANGELOG·README·docs/ 까지 포함한다. 하네스 비호환 패턴
+    검사는 그것들을 봐서는 안 된다 — 패턴을 *설명하는* 문서가 패턴을 *쓰는*
+    문서로 오인돼 실패한다. 이 검사를 추가한 커밋의 CHANGELOG 항목이
+    첫 희생자가 된다.
+
+    커맨드·스킬·템플릿만 본다. 이 셋이 플러그인이 배포하는 절차 문서 전부다.
+    CLAUDE.md 는 이 저장소를 개발할 때의 지침이라 배포되지 않는다.
+    """
+    docs = []
+    for sub in ("commands", "skills", "templates"):
+        디렉터리 = PLUGIN_ROOT / sub
+        if not 디렉터리.is_dir():
+            raise RuntimeError(
+                f"런타임 문서 디렉터리가 없습니다: {sub} "
+                "— 이동·개명했다면 runtime_docs() 도 함께 고치세요"
+            )
+        for path in sorted(디렉터리.rglob("*.md")):
+            docs.append((path, path.read_text(encoding="utf-8")))
+    return docs
+
+
 def doc_label(path: Path) -> Path:
     """read_docs() 가 반환한 경로를 subTest 표시용 상대경로로 변환한다.
 
