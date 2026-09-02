@@ -7,6 +7,13 @@ v2.0.0 최종 리뷰가 변이 테스트로 찾아낸 하네스 구멍(머지를
 
 ### Added
 
+- **Codex 매니페스트를 이중화했다.** Codex CLI 는 Claude Code 의 플러그인 규격을
+  채택했지만 매니페스트를 `.codex-plugin/plugin.json` 과 `.agents/plugins/marketplace.json`
+  에서 읽고, `commands` 컴포넌트를 지원하지 않는다. 두 파일을 추가하고
+  `CodexManifestTest` 6건으로 Claude 매니페스트와 묶었다. 버전은 3중으로 대조한다
+  — `.agents/plugins/marketplace.json` 에는 version 필드가 없어 대신 `source` 가
+  `plugins/gx-pm` 을 가리키는지 검사한다. 참조 구현(oh-my-gx)의 `url` 은 `"./"` 인데
+  그쪽은 저장소 루트가 곧 플러그인 루트라서다 — 그대로 베끼면 등록이 실패한다.
 - **표 판정 애매성을 이월 금지 항목 5번으로 등록했다.** `extract-requirements` 의
   "애매하면 사용자에게 묻는다" 는 사용자를 세우는 중단점인데 `templates/pipeline-protocol.md` 의
   대조표에도 이월 금지 항목에도 분류돼 있지 않았다. `/gx-spec` 실행 중 Claude 는 거기서

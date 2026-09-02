@@ -418,6 +418,7 @@ gx-pm/                                      # 저장소 루트
 ├── .github/workflows/
 │   └── test.yml                           # CI — 계약 테스트 실행
 ├── plugins/gx-pm/                          # 플러그인 본체
+│   ├── .codex-plugin/                     # Codex 매니페스트 (commands 미지원)
 │   ├── .claude-plugin/
 │   │   └── plugin.json                    # 플러그인 메타데이터
 │   ├── commands/                          # 16개 커맨드 (한국어)

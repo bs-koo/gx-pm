@@ -1,0 +1,20 @@
+{
+  "name": "gx-pm",
+  "interface": {
+    "displayName": "gx-pm"
+  },
+  "plugins": [
+    {
+      "name": "gx-pm",
+      "source": {
+        "source": "url",
+        "url": "./plugins/gx-pm"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}
