@@ -61,11 +61,18 @@ def runtime_docs() -> list[tuple[Path, str]]:
     문서로 오인돼 실패한다. 이 검사를 추가한 커밋의 CHANGELOG 항목이
     첫 희생자가 된다.
 
-    커맨드·스킬·템플릿만 본다. 이 셋이 Claude 가 절차로 읽는 전부다.
+    커맨드·스킬·템플릿만 본다. 이 셋이 플러그인이 배포하는 절차 문서 전부다.
+    CLAUDE.md 는 이 저장소를 개발할 때의 지침이라 배포되지 않는다.
     """
     docs = []
     for sub in ("commands", "skills", "templates"):
-        for path in sorted((PLUGIN_ROOT / sub).rglob("*.md")):
+        디렉터리 = PLUGIN_ROOT / sub
+        if not 디렉터리.is_dir():
+            raise RuntimeError(
+                f"런타임 문서 디렉터리가 없습니다: {sub} "
+                "— 이동·개명했다면 runtime_docs() 도 함께 고치세요"
+            )
+        for path in sorted(디렉터리.rglob("*.md")):
             docs.append((path, path.read_text(encoding="utf-8")))
     return docs
 

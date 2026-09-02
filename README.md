@@ -63,6 +63,19 @@ RFP를 넣으면 요구사항을 뽑아주고, 화면목록표와 프로그램�
 /plugin install gx-pm@gx-pm
 ```
 
+### Codex CLI
+
+```bash
+codex plugin marketplace add bs-koo/gx-pm
+```
+
+등록 후 Codex TUI 에서 활성화한다.
+
+**Codex 에서는 커맨드 16개가 실리지 않는다** — Codex 플러그인 규격에 `commands`
+컴포넌트가 없다. 스킬 26개는 그대로 쓸 수 있으나 조합 순서를 알아야 하므로
+`plugins/gx-pm/docs/codex-harness.md` 의 대조표를 참고한다.
+템플릿·xlsx 추출의 배포 범위는 아직 검증되지 않았다.
+
 ---
 
 ## 사용법
@@ -413,14 +426,16 @@ DDL 복사 → /gx-테이블정의서에 붙여넣기 → DE-08 자동 생성
 
 ```
 gx-pm/                                      # 저장소 루트
+├── .agents/plugins/
+│   └── marketplace.json                   # Codex 마켓플레이스 등록
 ├── .claude-plugin/
 │   └── marketplace.json                   # 마켓플레이스 등록
 ├── .github/workflows/
 │   └── test.yml                           # CI — 계약 테스트 실행
 ├── plugins/gx-pm/                          # 플러그인 본체
-│   ├── .codex-plugin/                     # Codex 매니페스트 (commands 미지원)
 │   ├── .claude-plugin/
 │   │   └── plugin.json                    # 플러그인 메타데이터
+│   ├── .codex-plugin/                     # Codex 매니페스트 (commands 미지원)
 │   ├── commands/                          # 16개 커맨드 (한국어)
 │   │   ├── gx-spec.md                      # v2.0.0 신규
 │   │   ├── gx-testplan.md                  # v2.0.0 신규

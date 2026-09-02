@@ -63,6 +63,21 @@ class CodexManifestTest(unittest.TestCase):
         self.assertEqual(self.codex["name"], self.claude["name"])
         self.assertEqual(self.codex["description"], self.claude["description"])
 
+    def test_두_매니페스트의_공통_메타데이터가_같다(self):
+        """이름·설명 말고도 네 필드가 글자 단위로 복제돼 있다.
+
+        갈라져도 기능은 안 깨지고 Codex UI 에만 낡은 값이 뜬다 — 그래서 더
+        오래 방치된다. keywords 는 14개짜리 리스트라 손으로 맞추면 반드시 어긋난다.
+        license 는 일부러 뺐다: 참조 구현(oh-my-gx)도 Codex 쪽에만 두므로
+        비대칭 자체가 규격이다.
+        """
+        for 필드 in ("author", "homepage", "repository", "keywords"):
+            with self.subTest(필드=필드):
+                self.assertEqual(
+                    self.codex[필드], self.claude[필드],
+                    f"{필드} 가 두 매니페스트에서 갈라졌습니다",
+                )
+
     def test_codex_매니페스트에_interface_블록이_있다(self):
         """Codex TUI 의 플러그인 카드가 읽는 블록이다. 없으면 표시가 빈다.
 
@@ -79,11 +94,16 @@ class CodexManifestTest(unittest.TestCase):
         gx-pm 은 플러그인이 plugins/gx-pm 아래에 있다. './' 를 그대로 베끼면
         Codex 가 저장소 루트에서 plugin.json 을 찾다 실패한다.
         """
-        entry = self.codex_market["plugins"][0]
+        entry = next(
+            p for p in self.codex_market["plugins"] if p["name"] == self.claude["name"]
+        )
+        claude_entry = next(
+            p for p in self.claude_market["plugins"] if p["name"] == self.claude["name"]
+        )
         self.assertEqual(entry["name"], self.claude["name"])
         self.assertEqual(
             entry["source"]["url"],
-            self.claude_market["plugins"][0]["source"],
+            claude_entry["source"],
             "Codex 마켓플레이스의 url 이 Claude 쪽 source 와 다른 곳을 가리킵니다",
         )
 
@@ -92,7 +112,10 @@ class CodexManifestTest(unittest.TestCase):
 
         스키마 차이라 문자열을 그대로 두면 파싱에서 걸린다.
         """
-        source = self.codex_market["plugins"][0]["source"]
+        entry = next(
+            p for p in self.codex_market["plugins"] if p["name"] == self.claude["name"]
+        )
+        source = entry["source"]
         self.assertIsInstance(source, dict)
         self.assertEqual(source["source"], "url")
 
@@ -110,6 +133,13 @@ class HarnessCompatTest(unittest.TestCase):
 
     def setUp(self):
         self.docs = runtime_docs()
+
+    def test_런타임_문서가_비어있지_않다(self):
+        """세 디렉터리가 모두 사라져도 위 세 검사는 0건을 훑고 통과한다.
+
+        templates/ 이동이 후속 작업으로 예고돼 있어 실현 가능성이 높은 시나리오다.
+        """
+        self.assertGreater(len(self.docs), 0, "런타임 문서를 하나도 찾지 못했습니다")
 
     def test_절대경로_조립_변수를_쓰지_않는다(self):
         """${CLAUDE_PLUGIN_ROOT} 는 Codex 스킬 루트에서 설정된다는 보장이 없다.
@@ -149,7 +179,7 @@ class HarnessCompatTest(unittest.TestCase):
         gx-pm 은 서브에이전트를 쓰지 않으므로 이 제약에 걸리지 않는다 — 그 상태를
         유지한다. 들어오면 Codex 사용자에게는 그 단계가 통째로 사라진다.
         """
-        패턴 = re.compile(r"\bTask\s*\(\s*(?:subagent_type|description|prompt)")
+        패턴 = re.compile(r"\bTask\s*\(")
         for path, text in self.docs:
             with self.subTest(문서=doc_label(path)):
                 self.assertEqual(
@@ -183,10 +213,10 @@ class CodexCommandMapTest(unittest.TestCase):
             self.표, "'## 커맨드 16 ↔ 스킬 26' 절을 찾지 못했습니다"
         )
         self.행 = re.findall(
-            r"^\|\s*`/(gx-[가-힣A-Za-z-]+)`\s*\|([^|]*)\|",
+            r"^\|\s*`/(gx-[가-힣A-Za-z-]+)`\s*\|([^|]*)\|([^|]*)\|",
             self.표.group(1), re.M,
         )
-        self.실린커맨드 = {이름 for 이름, _ in self.행}
+        self.실린커맨드 = {이름 for 이름, _, _ in self.행}
 
     def test_대조표가_비어있지_않다(self):
         """표 파싱이 조용히 실패하면 아래 두 검사가 공집합끼리 비교해 통과한다.
@@ -214,7 +244,7 @@ class CodexCommandMapTest(unittest.TestCase):
         틀려진다. 개수 대신 이름을 대조해 그 드리프트를 잡는다.
         """
         실존스킬 = skill_names()
-        for 이름, 스킬칸 in self.행:
+        for 이름, 스킬칸, _ in self.행:
             본문 = (PLUGIN_ROOT / "commands" / f"{이름}.md").read_text(encoding="utf-8")
             for 스킬 in re.findall(r"`([a-z][a-z0-9-]+)`", 스킬칸):
                 with self.subTest(커맨드=이름, 스킬=스킬):
@@ -224,3 +254,38 @@ class CodexCommandMapTest(unittest.TestCase):
                         f"대조표는 {이름} 이 이 스킬을 조립한다고 하는데 "
                         "커맨드 본문에 없습니다",
                     )
+
+    def test_커맨드가_부르는_스킬이_대조표에_다_있다(self):
+        """단방향 검사의 짝. 커맨드가 스킬을 '추가'하는 경우를 잡는다.
+
+        표에 실린 것이 본문에 있는지만 보면, 본문에 새로 생긴 스킬은 아무도
+        모른다 — 표의 평균 4.1 과 「부르지 않는 스킬 0」이 함께 낡는다.
+        """
+        실존스킬 = skill_names()
+        for 이름, 스킬칸, _ in self.행:
+            본문 = (PLUGIN_ROOT / "commands" / f"{이름}.md").read_text(encoding="utf-8")
+            표에실린 = set(re.findall(r"`([a-z][a-z0-9-]+)`", 스킬칸))
+            본문이부르는 = {s for s in 실존스킬 if f"**{s}**" in 본문}
+            with self.subTest(커맨드=이름):
+                self.assertEqual(
+                    본문이부르는 - 표에실린, set(),
+                    f"{이름} 본문이 조립하는 스킬이 대조표에 없습니다 — 견적이 낡습니다",
+                )
+
+    def test_대조표의_Step_게이트_수가_실제와_같다(self):
+        """이 숫자가 추출 견적의 단위다. 커맨드가 바뀌면 견적도 바뀌어야 한다.
+
+        셈 규칙은 문서의 「셈 규칙」 인용 블록이 정본이다 — `### Step N` 헤딩의
+        고유 번호 수와, 그중 `[필수 중단점]` 이 붙은 것.
+        """
+        for 이름, _, 로직칸 in self.행:
+            본문 = (PLUGIN_ROOT / "commands" / f"{이름}.md").read_text(encoding="utf-8")
+            맞춤 = re.search(r"Step (\d+) · 게이트 (\d+)", 로직칸)
+            with self.subTest(커맨드=이름):
+                self.assertIsNotNone(맞춤, "고유 로직 칸의 형식이 다릅니다")
+                steps = len(set(re.findall(r"^### Step (\d+)", 본문, re.M)))
+                gates = len(re.findall(r"^### Step \d+.*\[필수 중단점", 본문, re.M))
+                self.assertEqual(
+                    (steps, gates), (int(맞춤[1]), int(맞춤[2])),
+                    "대조표의 Step·게이트 수가 커맨드 본문과 다릅니다 — 견적이 낡았습니다",
+                )

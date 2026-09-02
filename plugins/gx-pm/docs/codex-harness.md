@@ -31,6 +31,12 @@ Codex 플러그인 매니페스트가 지원하는 컴포넌트는 `skills`·`ho
 
 `추출 우선순위` 는 Codex 에서 잃는 것의 크기 순이다.
 
+> **셈 규칙**: `Step` 은 `### Step N` 헤딩의 고유 번호 수, `게이트` 는 그중
+> `[필수 중단점]` 이 붙은 것이다. 분기 전용 단계(`### [계획] Step 4a` 형태)와
+> 하위 게이트(`####`)는 이 셈에서 빠진다 — **실제 승인 중단점은 더 많다**:
+> `/gx-시스템테스트` 5, `/gx-프로젝트설정` 5, `/gx-결함관리대장` 2.
+> 추출 견적을 낼 때 이 셋은 표의 게이트 수보다 크게 잡는다.
+
 | 커맨드 | 조립 스킬 | 고유 로직 | 추출 우선순위 |
 |---|---|---|---|
 | `/gx-spec` | `load-project-profile` · `detect-existing-artifact` · `detect-alternatives` | Step 9 · 게이트 2 | **1** — 명세 5종의 조합 순서가 여기에만 있다 |
@@ -66,7 +72,7 @@ Codex 플러그인 매니페스트가 지원하는 컴포넌트는 `skills`·`ho
 | `AskUserQuestion` | `request_user_input` | 선택지 지원. EXPERIMENTAL |
 | Bash 실행 | `exec_command` / `local_shell` | |
 
-`AskUserQuestion` 은 31개 파일이 쓴다. `request_user_input` 이
+`AskUserQuestion` 은 30개 파일이 쓴다 (커맨드 16 · 스킬 11 · 템플릿 3). `request_user_input` 이
 `default_mode_request_user_input` 미완으로 기본 모드에서 발화하지 않을 수 있다.
 
 > **계약**: `request_user_input` 을 쓸 수 없으면 자연어로 묻되,
