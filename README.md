@@ -237,8 +237,8 @@ python utils/export-xlsx.py --dir 결과물/ --output 산출물.xlsx
 
 | 스킬 | 설명 |
 |------|------|
-| `extract-requirements` | RFP/과업지시서에서 요구사항 추출. ID 표 인식 포함 |
-| `classify-requirements` | 기능/비기능 분류 + 대/중/소분류 + 공공/SI 5단계 우선순위 |
+| `extract-requirements` | RFP/과업지시서에서 요구사항 추출. ID 표 인식 + **기능/비기능 판정 정본** |
+| `classify-requirements` | 비기능 세부 유형 + 대/중분류 + 공공/SI 5단계 우선순위 (기능/비기능 판정은 `extract-requirements` 정본) |
 | `trace-requirements` | AN-05 추적매트릭스 생성/갱신. 누락 7유형 탐지 |
 | `detect-alternatives` | 시안/대안 자동 감지. 1안/2안, A안/B안 등 패턴 스캔 |
 
