@@ -44,7 +44,7 @@ argument-hint: "<RFP 텍스트 또는 파일>"
 | 순서 | 스킬 | 하는 일 | 정본 |
 |------|------|--------|------|
 | 1 | extract-requirements | 추출 → 행 분할 → 분류 → ID·상태 부여 | `skills/extract-requirements/SKILL.md` Step 2~5 |
-| 2 | classify-requirements | 기능/비기능 판정, 대·중·소분류 확정 | `skills/classify-requirements/SKILL.md` Step 1~2 |
+| 2 | classify-requirements | 비기능 세부 유형·대·중분류 확정 (기능/비기능 판정은 1 이 이미 했다) | `skills/classify-requirements/SKILL.md` Step 1~2 |
 
 - **표 판정이 애매하면 그 자리에서 묻는다** (extract-requirements Step 2).
   파이프라인에서도 이월하지 않는다 — `templates/pipeline-protocol.md` §이월 금지 항목
@@ -53,6 +53,9 @@ argument-hint: "<RFP 텍스트 또는 파일>"
   한 번 묻고 저장한다 (기본 제안 `REQ-{3자리}`). 규칙의 정본은 `templates/id-naming-rules.md`
 - 상태는 최초 작성이면 전건 `신규`, 재실행이면
   `templates/AN-02-requirements-definition.md` 의 상태 판정표를 따른다
+- **classify-requirements 의 분류 결과 표는 승인용 작업용 뷰다.** `구분`·`비기능유형`·
+  `소분류`·`우선순위`·`영향도` 는 AN-02 10컬럼에 자리가 없다 — 그 뷰로 확인만 받고,
+  AN-02 는 `templates/AN-02-requirements-definition.md` 의 컬럼 정본대로 만든다
 
 ### Step 3: 요구사항 검토 [필수 중단점 — 승인 루프]
 
