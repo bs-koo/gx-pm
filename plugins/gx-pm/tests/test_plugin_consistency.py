@@ -838,5 +838,46 @@ class BoundaryRuleTest(unittest.TestCase):
         self.assertIn("먼저 걸리는 조건", self.text)
 
 
+class RevisionHistoryTest(unittest.TestCase):
+    """개정이력은 5종 공통 횡단 규칙이다.
+
+    정본은 templates/revision-history.md 다. 산출물마다 규칙을 복제하면
+    "언제 버전을 올리는가"가 다섯 갈래로 갈라진다.
+    """
+
+    def setUp(self):
+        정본파일 = PLUGIN_ROOT / "templates" / "revision-history.md"
+        self.assertTrue(정본파일.exists(), "개정이력 정본 템플릿이 없습니다")
+        self.정본 = 정본파일.read_text(encoding="utf-8")
+
+    def test_개정이력_컬럼_여섯_개가_정본에_있다(self):
+        for 컬럼 in ["버전", "개정일", "개정 사유", "개정 내용", "작성자", "승인자"]:
+            with self.subTest(컬럼=컬럼):
+                self.assertIn(컬럼, self.정본)
+
+    def test_개정_사유_다섯_값이_정본에_있다(self):
+        for 값 in ["신규", "추가", "변경", "삭제", "보완"]:
+            with self.subTest(사유=값):
+                self.assertIn(f"`{값}`", self.정본)
+
+    def test_행이_추가되지_않는_세_경우가_명시돼_있다(self):
+        """이 셋을 빠뜨리면 게이트에서 고칠 때마다 버전이 올라간다."""
+        for 표지 in ["승인 게이트 안에서의 수정", "다른 문서만 바뀐", "diff"]:
+            with self.subTest(경우=표지):
+                self.assertIn(표지, self.정본)
+
+    def test_사유_우선순위가_명시돼_있다(self):
+        self.assertIn("삭제` > `변경` > `추가` > `보완", self.정본)
+
+    def test_횡단_스킬이_정본을_참조한다(self):
+        스킬 = PLUGIN_ROOT / "skills" / "manage-revision-history" / "SKILL.md"
+        self.assertTrue(스킬.exists(), "manage-revision-history 스킬이 없습니다")
+        self.assertIn(
+            "templates/revision-history.md",
+            스킬.read_text(encoding="utf-8"),
+            "스킬이 정본을 참조하지 않고 규칙을 복제하고 있습니다",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

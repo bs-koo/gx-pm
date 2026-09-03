@@ -7,7 +7,7 @@
 요구사항 분석부터 테스트 계획, ID 추적, 감리 대응까지
 
 [![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)]()
-[![Skills](https://img.shields.io/badge/skills-26-green.svg)]()
+[![Skills](https://img.shields.io/badge/skills-27-green.svg)]()
 [![Commands](https://img.shields.io/badge/commands-16-orange.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -437,7 +437,7 @@ gx-pm/                                      # 저장소 루트
 │   │   ├── gx-프로그램정의서.md
 │   │   ├── gx-프로젝트설정.md
 │   │   └── gx-화면목록표.md
-│   ├── skills/                            # 26개 스킬
+│   ├── skills/                            # 27개 스킬
 │   │   ├── audit-response/
 │   │   ├── classify-requirements/
 │   │   ├── convert-ddl-to-tablespec/
@@ -459,12 +459,13 @@ gx-pm/                                      # 저장소 루트
 │   │   ├── impact-analysis/
 │   │   ├── load-project-profile/
 │   │   ├── manage-defects/
+│   │   ├── manage-revision-history/
 │   │   ├── prioritize-si/
 │   │   ├── reverse-scan-interfaces/
 │   │   ├── reverse-scan-source/
 │   │   ├── scan-source-index/
 │   │   └── trace-requirements/
-│   ├── templates/                         # 산출물 양식 + 정본 규약 16종
+│   ├── templates/                         # 산출물 양식 + 정본 규약 17종
 │   │   ├── pipeline-protocol.md            # v2.0.0 신규
 │   │   ├── prerequisites.md                # v2.0.0 신규
 │   │   ├── AN-02-requirements-definition.md
@@ -480,7 +481,8 @@ gx-pm/                                      # 저장소 루트
 │   │   ├── approval-protocol.md
 │   │   ├── id-naming-rules.md
 │   │   ├── inspection-criteria.md
-│   │   └── project-profile-schema.md
+│   │   ├── project-profile-schema.md
+│   │   └── revision-history.md
 │   ├── utils/
 │   │   └── export-xlsx.py                 # 마크다운 → xlsx 변환
 │   ├── tests/                             # unittest 계약 테스트
