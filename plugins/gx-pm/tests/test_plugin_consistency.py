@@ -222,7 +222,7 @@ class PipelineProtocolTest(unittest.TestCase):
     def test_이월_금지_항목이_세_개다(self):
         """화면 축 제거로 화면 분리·ID 확정 두 항목이 소멸했다."""
         구간 = re.search(
-            r"^## 이월 금지 항목$(.*?)(?=^## )", self.text, re.M | re.S
+            r"^## 이월 금지 항목$(.*?)(?=^## |\Z)", self.text, re.M | re.S
         )
         self.assertIsNotNone(구간, "이월 금지 항목 절을 찾지 못했습니다")
         번호 = re.findall(r"^\d+\.\s", 구간.group(1), re.M)
