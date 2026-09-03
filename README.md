@@ -7,8 +7,8 @@
 요구사항 분석부터 테스트 계획, ID 추적, 감리 대응까지
 
 [![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)]()
-[![Skills](https://img.shields.io/badge/skills-27-green.svg)]()
-[![Commands](https://img.shields.io/badge/commands-16-orange.svg)]()
+[![Skills](https://img.shields.io/badge/skills-28-green.svg)]()
+[![Commands](https://img.shields.io/badge/commands-17-orange.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 </div>
@@ -420,11 +420,12 @@ gx-pm/                                      # 저장소 루트
 ├── plugins/gx-pm/                          # 플러그인 본체
 │   ├── .claude-plugin/
 │   │   └── plugin.json                    # 플러그인 메타데이터
-│   ├── commands/                          # 16개 커맨드 (한국어)
+│   ├── commands/                          # 17개 커맨드 (한국어)
 │   │   ├── gx-spec.md                      # v2.0.0 신규
 │   │   ├── gx-testplan.md                  # v2.0.0 신규
 │   │   ├── gx-감리대응.md
 │   │   ├── gx-결함관리대장.md
+│   │   ├── gx-기능명세서.md
 │   │   ├── gx-단위테스트계획서.md
 │   │   ├── gx-시스템테스트.md
 │   │   ├── gx-요구사항정의서.md
@@ -437,7 +438,7 @@ gx-pm/                                      # 저장소 루트
 │   │   ├── gx-프로그램정의서.md
 │   │   ├── gx-프로젝트설정.md
 │   │   └── gx-화면목록표.md
-│   ├── skills/                            # 27개 스킬
+│   ├── skills/                            # 28개 스킬
 │   │   ├── audit-response/
 │   │   ├── classify-requirements/
 │   │   ├── convert-ddl-to-tablespec/
@@ -448,6 +449,7 @@ gx-pm/                                      # 저장소 루트
 │   │   ├── fill-integration-test-result/
 │   │   ├── fill-unit-test-result/
 │   │   ├── generate-erd-guide/
+│   │   ├── generate-function-spec/
 │   │   ├── generate-integration-test/
 │   │   ├── generate-interface-spec/
 │   │   ├── generate-master-test-plan/
@@ -465,10 +467,11 @@ gx-pm/                                      # 저장소 루트
 │   │   ├── reverse-scan-source/
 │   │   ├── scan-source-index/
 │   │   └── trace-requirements/
-│   ├── templates/                         # 산출물 양식 + 정본 규약 17종
+│   ├── templates/                         # 산출물 양식 + 정본 규약 18종
 │   │   ├── pipeline-protocol.md            # v2.0.0 신규
 │   │   ├── prerequisites.md                # v2.0.0 신규
 │   │   ├── AN-02-requirements-definition.md
+│   │   ├── AN-03-function-spec.md
 │   │   ├── AN-05-traceability-matrix.md
 │   │   ├── DE-03-screen-list.md
 │   │   ├── DE-05-program-definition.md

@@ -369,5 +369,33 @@ class An02ColumnSsotTest(unittest.TestCase):
                 self.assertNotIn(폐기, 프로필)
 
 
+class An03ColumnSsotTest(unittest.TestCase):
+    """AN-03 컬럼 정본은 templates/AN-03-function-spec.md 다."""
+
+    def setUp(self):
+        self.mod = load_export_module()
+        self.정본 = parse_column_ssot("AN-03-function-spec.md", "본문 컬럼 (정본)")
+
+    def test_정본이_열_개다(self):
+        self.assertEqual(len(self.정본), 10, f"AN-03 정본이 10개가 아닙니다: {self.정본}")
+
+    def test_정본_순서가_설계와_같다(self):
+        self.assertEqual(self.정본, [
+            "기능ID", "대분류", "중분류", "기능명", "기능설명",
+            "입력항목", "처리내용(로직)", "출력결과", "연계요구사항ID", "비고",
+        ])
+
+    def test_프로필이_정본과_같다(self):
+        self.assertEqual(
+            self.mod.DOCUMENT_PROFILES["기능명세서"]["columns"][0], self.정본
+        )
+
+    def test_분류_두_열이_병합_대상이다(self):
+        self.assertEqual(
+            self.mod.DOCUMENT_PROFILES["기능명세서"]["merge_columns"],
+            ["대분류", "중분류"],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

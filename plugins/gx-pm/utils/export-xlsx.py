@@ -71,6 +71,15 @@ DOCUMENT_PROFILES = {
         ]],
         "merge_columns": ["대분류", "중분류"],
     },
+    "기능명세서": {
+        "sheet_name": "기능명세",
+        # 컬럼 정본은 templates/AN-03-function-spec.md 의 「본문 컬럼 (정본)」 절이다.
+        "columns": [[
+            "기능ID", "대분류", "중분류", "기능명", "기능설명",
+            "입력항목", "처리내용(로직)", "출력결과", "연계요구사항ID", "비고",
+        ]],
+        "merge_columns": ["대분류", "중분류"],
+    },
     "화면목록표": {
         "sheet_name": "DE-03 화면목록표",
         "columns": [[
