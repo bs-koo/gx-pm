@@ -479,7 +479,7 @@ PIPELINE_GATES = {"gx-spec": 3}
 
 
 class PipelineCommandTest(unittest.TestCase):
-    """파이프라인은 묶은 산출물을 빠짐없이 만들고, 게이트를 2개 유지해야 한다."""
+    """파이프라인은 묶은 산출물을 빠짐없이 만들고, PIPELINE_GATES 만큼 게이트를 유지해야 한다."""
 
     def _본문(self, 이름: str) -> str:
         return (PLUGIN_ROOT / "commands" / f"{이름}.md").read_text(encoding="utf-8")
@@ -569,6 +569,23 @@ class PipelineCommandTest(unittest.TestCase):
                 self.assertIn("templates/pipeline-protocol.md", 본문)
                 self.assertIn("templates/prerequisites.md", 본문)
 
+    # 이월 금지 중단점이 gx-spec.md 의 어느 Step 에서 지켜지는가.
+    # 정본은 templates/pipeline-protocol.md §이월 금지 항목이고, 이 표는 그 항목들이
+    # 파이프라인 본문의 어디에 내려앉는지를 적는다. 항목이 늘면 여기도 늘려야 하며,
+    # 늘리지 않으면 아래 개수 대조가 잡는다.
+    이월금지_중단점 = [
+        {
+            "step": "2",
+            "중단점": ["시안", "표 판정"],
+            "정본": ["skills/extract-requirements/SKILL.md"],
+        },
+        {
+            "step": "5",
+            "중단점": ["신규 컬럼명"],
+            "정본": ["skills/convert-ddl-to-tablespec/SKILL.md"],
+        },
+    ]
+
     def test_gx_spec_이_이월_금지_중단점을_선언한다(self):
         """이월 금지 중단점은 `[필수 중단점]` 라벨을 달 수 없다 — 게이트 수가 틀어진다.
 
@@ -576,32 +593,72 @@ class PipelineCommandTest(unittest.TestCase):
         걸리지 않는다. 문단이 사라지면 /gx-spec 은 그 자리에서 멈추지 않고 다음 게이트까지
         간다 — 그때는 이미 그 판정 위에 뒤 산출물이 다 만들어진 뒤다.
 
-        정본은 templates/pipeline-protocol.md §이월 금지 항목이고, 파이프라인 본문은
-        그 세 항목을 각각 어디서 지키는지 판정 정본과 함께 적어야 한다.
+        **Step 절로 범위를 좁혀서 본다.** 파일 전체에서 낱말의 존재만 세면 결속이 없다.
+        `이월하지 않는다` 는 두 Step 에 각각 있으므로 한쪽을 통째로 지워도 파일 어딘가에
+        남고, "그 자리에서 묻는다" 를 "게이트에서 함께 본다" 로 바꿔도 — 이 테스트가
+        막으려는 바로 그 회귀인데 — 낱말과 정본 경로는 그대로라 초록으로 통과한다.
+        그래서 절 안에서 낱말·정본 경로·동작 문장을 **함께** 본다.
 
         종전에는 화면 분리 미결정 중단점을 같은 취지로 고정하고 있었다. 화면 축이
         사라지면서 그 중단점은 소멸했고, 남은 세 항목이 같은 위험을 물려받는다.
         """
         본문 = self._본문("gx-spec")
-        for 표지, 정본 in [
-            ("시안", None),
-            ("표 판정", "skills/extract-requirements/SKILL.md"),
-            ("신규 컬럼명", "skills/convert-ddl-to-tablespec/SKILL.md"),
-        ]:
-            with self.subTest(중단점=표지):
+        for 항목 in self.이월금지_중단점:
+            구간 = re.search(
+                rf"^### Step {항목['step']}:(.*?)(?=^### |\Z)", 본문, re.M | re.S
+            )
+            self.assertIsNotNone(
+                구간,
+                f"gx-spec.md 에서 '### Step {항목['step']}:' 절을 찾지 못했습니다",
+            )
+            절 = 구간.group(1)
+            with self.subTest(step=항목["step"]):
                 self.assertIn(
-                    표지, 본문,
-                    f"'{표지}' 중단점 선언이 gx-spec.md 에 없습니다",
+                    "이월하지 않는", 절,
+                    f"Step {항목['step']} 에 이월 금지 선언이 없습니다 "
+                    "— 이 중단점이 게이트로 밀립니다",
                 )
-                if 정본:
+                self.assertRegex(
+                    절, r"그 자리에서 (묻는다|중단한다)",
+                    f"Step {항목['step']} 에 '그 자리에서 묻는다/중단한다' 동작 문장이 "
+                    "없습니다 — 선언만 있고 무엇을 하라는 지시가 없습니다",
+                )
+                for 낱말 in 항목["중단점"]:
                     self.assertIn(
-                        정본, 본문,
-                        f"'{표지}' 중단점이 판정 정본({정본})을 참조하지 않습니다",
+                        낱말, 절,
+                        f"'{낱말}' 중단점이 Step {항목['step']} 에 선언돼 있지 않습니다",
                     )
-        self.assertIn(
-            "이월하지 않는다", 본문,
-            "이월 금지 선언이 gx-spec.md 에 없습니다 — 중단점이 게이트로 밀립니다",
+                for 정본 in 항목["정본"]:
+                    self.assertIn(
+                        정본, 절,
+                        f"Step {항목['step']} 의 중단점이 판정 정본({정본})을 "
+                        "그 절 안에서 가리키지 않습니다",
+                    )
+
+    def test_gx_spec_이_이월_금지_항목을_하나도_빠뜨리지_않는다(self):
+        """개수를 규약에서 읽어 대조한다.
+
+        위 테스트는 `이월금지_중단점` 표에 적힌 것만 검사하므로, 규약에 네 번째 항목이
+        생겨도 표를 안 고치면 조용히 통과한다. 정본의 항목 수를 세어 묶어 둔다.
+        """
+        규약 = (PLUGIN_ROOT / "templates" / "pipeline-protocol.md").read_text(
+            encoding="utf-8"
         )
+        구간 = re.search(r"^## 이월 금지 항목$(.*?)(?=^## |\Z)", 규약, re.M | re.S)
+        self.assertIsNotNone(구간, "pipeline-protocol.md 에서 §이월 금지 항목을 찾지 못했습니다")
+        규약항목 = re.findall(r"^\d+\. \*\*(.+?)\*\*", 구간.group(1), re.M)
+        선언된것 = [낱말 for 항목 in self.이월금지_중단점 for 낱말 in 항목["중단점"]]
+        self.assertEqual(
+            len(선언된것), len(규약항목),
+            f"규약의 이월 금지 항목 {len(규약항목)}개 중 gx-spec.md 가 선언하는 것은 "
+            f"{len(선언된것)}개입니다: 규약={규약항목} / 선언={선언된것}",
+        )
+        for 낱말 in 선언된것:
+            with self.subTest(중단점=낱말):
+                self.assertTrue(
+                    any(낱말 in 항목 for 항목 in 규약항목),
+                    f"'{낱말}' 이 규약의 이월 금지 항목에 없습니다: {규약항목}",
+                )
 
 
 class VersionConsistencyTest(unittest.TestCase):
