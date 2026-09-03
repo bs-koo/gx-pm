@@ -105,23 +105,25 @@ class MatchedSetIndexTest(unittest.TestCase):
         self.mod = load_export_module()
 
     def test_본문_표는_매칭된_컬럼_세트_인덱스를_반환한다(self):
-        rows = [["기능구분ID", "기능구분명", "기능ID", "기능명",
-                 "화면ID", "화면명", "사용자구분", "단위테스트ID"]]
+        rows = [["테스트ID", "연계기능ID", "연계요구사항ID", "사전조건", "입력",
+                 "기대결과", "사후조건", "의존성", "테스트담당자", "수행일", "결과"]]
         self.assertEqual(self.mod._matched_set_index(rows, "단위테스트계획서"), 0)
 
     def test_두번째_컬럼_세트도_구분한다(self):
-        rows = [["화면ID", "화면명", "단위테스트ID", "테스트케이스ID", "요구사항ID",
-                 "검사기준 항목", "설계기법", "구분", "사전조건", "입력 데이터"]]
-        self.assertEqual(self.mod._matched_set_index(rows, "단위테스트계획서"), 1)
+        # 단위테스트계획서는 27개 검사기준 시트 폐지로 컬럼 세트가 하나뿐이다.
+        # "여러 세트를 구분한다" 는 취지는 세트가 여전히 여럿인 총괄테스트계획서로 검증한다.
+        rows = [["기준", "목표치", "비고"]]
+        self.assertEqual(self.mod._matched_set_index(rows, "총괄테스트계획서"), 1)
 
     def test_보조_표는_None_을_반환한다(self):
         rows = [["경계값", "값", "출처"]]
         self.assertIsNone(self.mod._matched_set_index(rows, "단위테스트계획서"))
 
     def test_일부만_겹치는_보조_표도_None_을_반환한다(self):
-        # 교집합 1/8 = 0.125 — 0.5 임계값이 실제로 하중을 받는지 본다.
+        # 교집합 5/11 ≈ 0.45 — 0.5 임계값이 실제로 하중을 받는지 본다.
         # 이 단언이 없으면 임계값을 0 으로 되돌려도 테스트가 통과한다.
-        self.assertIsNone(self.mod._matched_set_index([["화면ID", "계"]], "단위테스트계획서"))
+        rows = [["테스트ID", "연계기능ID", "사전조건", "입력", "기대결과", "계"]]
+        self.assertIsNone(self.mod._matched_set_index(rows, "단위테스트계획서"))
 
     def test_산출물_유형이_없으면_None_을_반환한다(self):
         rows = [["결함ID", "심각도"]]
@@ -158,9 +160,11 @@ class SheetNamingTest(unittest.TestCase):
         self.mod = load_export_module()
 
     def test_컬럼_세트별로_다른_시트명을_준다(self):
-        names = self.mod.DOCUMENT_PROFILES["단위테스트계획서"]["sheet_names"]
-        self.assertEqual(names[0], "DE-13 단위테스트계획")
-        self.assertEqual(names[1], "DE-13 테스트케이스")
+        # 단위테스트계획서는 27개 검사기준 시트 폐지로 sheet_names 자체가 없다.
+        # 여러 세트가 각각 다른 시트명을 받는지는 총괄테스트계획서로 검증한다.
+        names = self.mod.DOCUMENT_PROFILES["총괄테스트계획서"]["sheet_names"]
+        self.assertEqual(names[0], "TE-01 테스트 레벨")
+        self.assertEqual(names[1], "TE-01 종료기준")
 
 
 class ProfileColumnBindingTest(unittest.TestCase):
@@ -424,6 +428,45 @@ class De08ColumnSsotTest(unittest.TestCase):
     def test_테이블명이_병합_대상이다(self):
         self.assertEqual(
             self.mod.DOCUMENT_PROFILES["테이블정의서"]["merge_columns"], ["테이블명"]
+        )
+
+
+class De13ColumnSsotTest(unittest.TestCase):
+    """DE-13 컬럼 정본은 templates/DE-13-unit-test-plan.md 다.
+
+    종전에는 화면당 27개 검사기준 체크리스트 + 테스트케이스 시트, 두 벌 구조였다.
+    지금은 기능명세(AN-03)·테이블정의서(DE-08)에서 케이스를 기계적으로 도출하는
+    11컬럼 단일 시트다. 27개 검사기준 시트가 정말 없어졌는지는 이 테스트가 잡는다.
+    """
+
+    def setUp(self):
+        self.mod = load_export_module()
+        self.정본 = parse_column_ssot("DE-13-unit-test-plan.md", "본문 컬럼 (정본)")
+
+    def test_정본이_열한_개다(self):
+        self.assertEqual(len(self.정본), 11, f"DE-13 정본이 11개가 아닙니다: {self.정본}")
+
+    def test_정본_순서가_설계와_같다(self):
+        self.assertEqual(self.정본, [
+            "테스트ID", "연계기능ID", "연계요구사항ID", "사전조건", "입력",
+            "기대결과", "사후조건", "의존성", "테스트담당자", "수행일", "결과",
+        ])
+
+    def test_프로필이_한_시트다(self):
+        """27개 검사기준 시트를 폐지했으므로 컬럼 세트는 하나다."""
+        프로필 = self.mod.DOCUMENT_PROFILES["단위테스트계획서"]
+        self.assertEqual(len(프로필["columns"]), 1)
+        self.assertNotIn("sheet_names", 프로필)
+
+    def test_화면_축_컬럼이_남아있지_않다(self):
+        프로필 = self.mod.DOCUMENT_PROFILES["단위테스트계획서"]["columns"][0]
+        for 폐기 in ["화면ID", "화면명", "단위테스트ID", "검사기준 항목", "사용자구분"]:
+            with self.subTest(컬럼=폐기):
+                self.assertNotIn(폐기, 프로필)
+
+    def test_프로필이_정본과_같다(self):
+        self.assertEqual(
+            self.mod.DOCUMENT_PROFILES["단위테스트계획서"]["columns"][0], self.정본
         )
 
 
