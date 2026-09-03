@@ -3,15 +3,48 @@ import unittest
 from helpers import load_export_module, parse_column_ssot, read_docs
 
 
+def _다중세트(테스트: unittest.TestCase, 이름: str) -> str:
+    """컬럼 세트가 둘인 임시 프로필을 등록하고 그 키를 돌려준다.
+
+    현역 산출물 6종은 전부 세트가 하나라, 다중 세트 코드 경로를 실제 프로필로는
+    검증할 수 없다. 검사 대상은 프로필 데이터가 아니라 `_best_column_set` 의 동작이므로
+    임시 프로필로 고정한다.
+
+    **모듈은 캐싱된다.** 끼운 프로필을 그대로 두면 다른 테스트
+    (`test_모듈이_로드되고_산출물_프로필을_노출한다`·`test_모든_프로필_컬럼이_문서에_존재한다`)가
+    실행 순서에 따라 깨진다. addCleanup 으로 반드시 되돌린다.
+    """
+    mod = load_export_module()
+    테스트.addCleanup(mod.DOCUMENT_PROFILES.pop, 이름, None)
+    mod.DOCUMENT_PROFILES[이름] = {
+        "sheet_name": "세트 1 시트",
+        "sheet_names": ["세트 1 시트", "세트 2 시트"],
+        "columns": [
+            ["레벨", "산출물 코드", "대상"],
+            ["기준", "목표치", "비고"],
+        ],
+        "merge_columns": [],
+    }
+    return 이름
+
+
 class LoaderTest(unittest.TestCase):
     def setUp(self):
         self.mod = load_export_module()
 
     def test_모듈이_로드되고_산출물_프로필을_노출한다(self):
-        profiles = self.mod.DOCUMENT_PROFILES
-        self.assertIn("요구사항정의서", profiles)
-        self.assertIn("결함관리대장", profiles)
-        self.assertIn("시스템테스트계획서", profiles)
+        """기능 축 전환(v3.0.0) 후 프로필은 5종 + 개정이력 = 6개다.
+
+        화면 축 산출물의 프로필을 지우지 않으면 그 컬럼명을 어떤 문서도 만들지 않게 되어
+        test_모든_프로필_컬럼이_문서에_존재한다 가 잡는다. 되살리는 법은 archive/README.md.
+        """
+        self.assertEqual(
+            sorted(self.mod.DOCUMENT_PROFILES),
+            sorted([
+                "개정이력", "요구사항정의서", "기능명세서",
+                "테이블정의서", "단위테스트계획서", "추적매트릭스",
+            ]),
+        )
 
     def test_모든_프로필이_컬럼_세트_리스트를_가진다(self):
         for name, profile in self.mod.DOCUMENT_PROFILES.items():
@@ -109,10 +142,15 @@ class MatchedSetIndexTest(unittest.TestCase):
         self.assertEqual(self.mod._matched_set_index(rows, "단위테스트계획서"), 0)
 
     def test_두번째_컬럼_세트도_구분한다(self):
-        # 단위테스트계획서는 27개 검사기준 시트 폐지로 컬럼 세트가 하나뿐이다.
-        # "여러 세트를 구분한다" 는 취지는 세트가 여전히 여럿인 총괄테스트계획서로 검증한다.
+        """현역 산출물 6종은 전부 컬럼 세트가 하나다 — 그래도 코드 경로는 살아 있다.
+
+        `_best_column_set` 은 여전히 세트를 순회하며 최적 세트를 고르고, `sheet_names` 로
+        세트별 시트명을 준다. archive/ 에서 다중 세트 산출물(TE-01)을 되살리면 그때
+        이 경로가 다시 쓰인다. 현역 프로필로는 검증할 수 없으므로 임시 프로필을 끼워
+        경로 자체를 고정한다 — 지우면 다중 세트 지원이 조용히 죽는다.
+        """
         rows = [["기준", "목표치", "비고"]]
-        self.assertEqual(self.mod._matched_set_index(rows, "총괄테스트계획서"), 1)
+        self.assertEqual(self.mod._matched_set_index(rows, _다중세트(self, "multi-a")), 1)
 
     def test_보조_표는_None_을_반환한다(self):
         rows = [["경계값", "값", "출처"]]
@@ -159,11 +197,11 @@ class SheetNamingTest(unittest.TestCase):
         self.mod = load_export_module()
 
     def test_컬럼_세트별로_다른_시트명을_준다(self):
-        # 단위테스트계획서는 27개 검사기준 시트 폐지로 sheet_names 자체가 없다.
-        # 여러 세트가 각각 다른 시트명을 받는지는 총괄테스트계획서로 검증한다.
-        names = self.mod.DOCUMENT_PROFILES["총괄테스트계획서"]["sheet_names"]
-        self.assertEqual(names[0], "TE-01 테스트 레벨")
-        self.assertEqual(names[1], "TE-01 종료기준")
+        # 현역 6종은 세트가 하나뿐이라 임시 프로필로 검증한다 — 사유는
+        # MatchedSetIndexTest.test_두번째_컬럼_세트도_구분한다 의 docstring 참조.
+        names = self.mod.DOCUMENT_PROFILES[_다중세트(self, "multi-b")]["sheet_names"]
+        self.assertEqual(names[0], "세트 1 시트")
+        self.assertEqual(names[1], "세트 2 시트")
 
 
 class ProfileColumnBindingTest(unittest.TestCase):

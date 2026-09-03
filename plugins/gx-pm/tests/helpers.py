@@ -100,6 +100,27 @@ def template_names() -> set[str]:
     return {p.name for p in (PLUGIN_ROOT / "templates").glob("*.md")}
 
 
+def archived_skill_names() -> set[str]:
+    """archive/skills 에 보관된 스킬 이름.
+
+    CHANGELOG 는 내린 스킬을 이름째 인용한다 — 그걸 오타로 볼 수는 없다.
+    그렇다고 CHANGELOG 를 검사에서 통째로 빼면 진짜 오타도 같이 놓친다.
+    보관 목록을 따로 돌려주어, 이력 문서에서만 이 이름들을 허용한다.
+    """
+    보관 = PLUGIN_ROOT / "archive" / "skills"
+    if not 보관.is_dir():
+        return set()
+    return {d.name for d in 보관.iterdir() if d.is_dir()}
+
+
+def archived_template_names() -> set[str]:
+    """archive/templates 에 보관된 템플릿 파일명. 사유는 archived_skill_names 참조."""
+    보관 = PLUGIN_ROOT / "archive" / "templates"
+    if not 보관.is_dir():
+        return set()
+    return {p.name for p in 보관.glob("*.md")}
+
+
 def parse_column_ssot(template_name: str, section_title: str) -> list[str]:
     """템플릿의 지정 절에서 컬럼 정본 목록을 뽑는다.
 

@@ -7,7 +7,7 @@ argument-hint: "<RFP 텍스트 또는 파일>"
 
 > **공통 규칙**: `templates/approval-protocol.md`의 승인 루프 프로토콜을 적용한다.
 > **선행조건**: `templates/prerequisites.md` 의 이 커맨드 행을 따른다.
-> **파이프라인**: `/gx-spec` 또는 `/gx-testplan` 에서 호출된 경우 `templates/pipeline-protocol.md` 의 규약을 따른다.
+> **파이프라인**: `/gx-spec` 에서 호출된 경우 `templates/pipeline-protocol.md` 의 규약을 따른다.
 
 ## 워크플로우
 
@@ -38,14 +38,21 @@ argument-hint: "<RFP 텍스트 또는 파일>"
 
 ### Step 2: 요구사항 추출 + 분류
 
-**extract-requirements** → **classify-requirements** 스킬 순차 적용:
+**extract-requirements** → **classify-requirements** 스킬을 순차 적용한다.
+각 스킬의 Step 구성이 정본이고, 여기서는 복제하지 않는다.
 
-추출 규칙은 `skills/extract-requirements/SKILL.md` Step 2 가 정본이다 — 여기서 복제하지 않는다.
+| 순서 | 스킬 | 하는 일 | 정본 |
+|------|------|--------|------|
+| 1 | extract-requirements | 추출 → 행 분할 → 분류 → ID·상태 부여 | `skills/extract-requirements/SKILL.md` Step 2~5 |
+| 2 | classify-requirements | 기능/비기능 판정, 대·중·소분류 확정 | `skills/classify-requirements/SKILL.md` Step 1~2 |
 
-분류 규칙:
-- 기능/비기능 분류, 대분류/중분류/소분류 자동 분류
-- 요구사항ID 부여: `{시스템코드}-RE-{3자리순번}` (예: B-RE-001)
-- 수용여부 초안: 명확한 기능→수용, 모호/범위초과→부분수용+사유, 기술적 불가→불가+사유
+- **표 판정이 애매하면 그 자리에서 묻는다** (extract-requirements Step 2).
+  파이프라인에서도 이월하지 않는다 — `templates/pipeline-protocol.md` §이월 금지 항목
+- **행 분할이 먼저다** (Step 3). 이 건수가 뒤 산출물 전체의 행 수를 정한다
+- 요구사항ID 는 프로파일의 `idNaming.requirement` 를 따른다. 없으면 AskUserQuestion 으로
+  한 번 묻고 저장한다 (기본 제안 `REQ-{3자리}`). 규칙의 정본은 `templates/id-naming-rules.md`
+- 상태는 최초 작성이면 전건 `신규`, 재실행이면
+  `templates/AN-02-requirements-definition.md` 의 상태 판정표를 따른다
 
 ### Step 3: 요구사항 검토 [필수 중단점 — 승인 루프]
 
@@ -58,9 +65,9 @@ argument-hint: "<RFP 텍스트 또는 파일>"
 수정하려면 변경할 내용을 입력하세요.
 
 수정 예시:
-• "RE-003과 004를 하나로 합쳐줘"
+• "REQ-003과 004를 하나로 합쳐줘"
 • "비기능에 보안 항목 추가"
-• "5번 수용여부를 부분수용으로"
+• "5번 상태를 변경으로"
 ```
 
 사용자가 승인할 때까지 수정 → 재출력 → AskUserQuestion으로 승인 요청을 반복한다.
@@ -92,5 +99,5 @@ diff 가 0 이면 행을 만들지 않고 버전을 유지한다.
 
 ### Step 7: 다음 제안
 
-- "`/gx-화면목록표` 로 화면을 설계할까요?"
+- "`/gx-기능명세서` 로 요구사항을 기능 단위로 분해할까요?"
 - "`/gx-추적매트릭스` 로 매핑을 확인할까요?"

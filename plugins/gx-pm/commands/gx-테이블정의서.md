@@ -7,7 +7,7 @@ argument-hint: "<DDL 텍스트 또는 파일 경로>"
 
 > **공통 규칙**: `templates/approval-protocol.md`의 승인 루프 프로토콜을 적용한다.
 > **선행조건**: `templates/prerequisites.md` 의 이 커맨드 행을 따른다.
-> **파이프라인**: `/gx-spec` 또는 `/gx-testplan` 에서 호출된 경우 `templates/pipeline-protocol.md` 의 규약을 따른다.
+> **파이프라인**: `/gx-spec` 에서 호출된 경우 `templates/pipeline-protocol.md` 의 규약을 따른다.
 
 **이 커맨드는 역생성 전용이다.** 요구사항에서 테이블을 추론해 만들지 않는다 — 이유는
 `templates/DE-08-table-definition.md` 의 "이 문서는 역생성 문서다" 절을 참조한다.

@@ -7,8 +7,8 @@
 요구사항 분석부터 테스트 계획, ID 추적, 감리 대응까지
 
 [![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)]()
-[![Skills](https://img.shields.io/badge/skills-27-green.svg)]()
-[![Commands](https://img.shields.io/badge/commands-17-orange.svg)]()
+[![Skills](https://img.shields.io/badge/skills-15-green.svg)]()
+[![Commands](https://img.shields.io/badge/commands-7-orange.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 </div>
@@ -419,7 +419,7 @@ gx-pm/                                      # 저장소 루트
 ├── plugins/gx-pm/                          # 플러그인 본체
 │   ├── .claude-plugin/
 │   │   └── plugin.json                    # 플러그인 메타데이터
-│   ├── commands/                          # 17개 커맨드 (한국어)
+│   ├── commands/                          # 7개 커맨드 (한국어)
 │   │   ├── gx-spec.md                      # v2.0.0 신규
 │   │   ├── gx-testplan.md                  # v2.0.0 신규
 │   │   ├── gx-감리대응.md
@@ -437,7 +437,7 @@ gx-pm/                                      # 저장소 루트
 │   │   ├── gx-프로그램정의서.md
 │   │   ├── gx-프로젝트설정.md
 │   │   └── gx-화면목록표.md
-│   ├── skills/                            # 27개 스킬
+│   ├── skills/                            # 15개 스킬
 │   │   ├── audit-response/
 │   │   ├── classify-requirements/
 │   │   ├── convert-ddl-to-tablespec/
