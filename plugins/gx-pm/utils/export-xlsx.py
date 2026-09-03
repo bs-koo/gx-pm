@@ -53,6 +53,14 @@ def ensure_openpyxl():
 # ──────────────────────────────────────
 
 DOCUMENT_PROFILES = {
+    "개정이력": {
+        "sheet_name": "개정이력",
+        # 컬럼 정본은 templates/revision-history.md 의 「개정이력 컬럼 (정본)」 절이다.
+        "columns": [[
+            "버전", "개정일", "개정 사유", "개정 내용", "작성자", "승인자",
+        ]],
+        "merge_columns": [],
+    },
     "요구사항정의서": {
         "sheet_name": "AN-02 요구사항정의서",
         "columns": [[
@@ -60,6 +68,7 @@ DOCUMENT_PROFILES = {
             "대분류", "중분류", "소분류",
             "요구내역", "요구사항 상세내역", "수용여부",
         ]],
+        "merge_columns": [],
     },
     "화면목록표": {
         "sheet_name": "DE-03 화면목록표",
@@ -69,6 +78,7 @@ DOCUMENT_PROFILES = {
             "개발예정일_UI", "개발예정일_LOGIC",
             "개발진행_UI", "개발진행_LOGIC", "신규/변경", "비고",
         ]],
+        "merge_columns": [],
     },
     "프로그램정의서": {
         "sheet_name": "DE-05 프로그램정의서",
@@ -78,6 +88,7 @@ DOCUMENT_PROFILES = {
             "Controller", "VO", "DAO", "Service", "Impl", "Sql", "JSP",
             "요구사항ID", "화면설계서ID",
         ]],
+        "merge_columns": [],
     },
     "테이블정의서": {
         "sheet_name": "DE-08 테이블정의서",
@@ -86,6 +97,7 @@ DOCUMENT_PROFILES = {
             "데이터타입", "길이", "소수점", "기본값",
             "PK", "FK", "NotNull", "표준 출처",
         ]],
+        "merge_columns": [],
     },
     "인터페이스정의서": {
         "sheet_name": "DE-04 인터페이스정의서",
@@ -93,6 +105,7 @@ DOCUMENT_PROFILES = {
             "인터페이스ID", "인터페이스명", "연동대상 시스템", "연동방식",
             "송수신방향", "주기", "관련 요구사항ID", "비고",
         ]],
+        "merge_columns": [],
     },
     "총괄테스트계획서": {
         "sheet_name": "TE-01 총괄테스트계획서",
@@ -102,6 +115,7 @@ DOCUMENT_PROFILES = {
             ["기준", "목표치", "비고"],
             ["역할", "담당", "책임"],
         ],
+        "merge_columns": [],
     },
     "단위테스트계획서": {
         "sheet_name": "DE-13 단위테스트계획서",
@@ -116,6 +130,7 @@ DOCUMENT_PROFILES = {
              "수행 절차", "기대 결과", "우선순위",
              "실행결과", "점검제외 사유", "결함ID", "수행자", "수행일"],
         ],
+        "merge_columns": [],
     },
     "단위테스트결과서": {
         "sheet_name": "IM-03 단위테스트결과서",
@@ -124,6 +139,7 @@ DOCUMENT_PROFILES = {
             "계획여부", "검사결과", "부적합내역", "결함ID", "점검제외 사유",
             "테스트일자", "테스트실시자",
         ]],
+        "merge_columns": [],
     },
     "통합테스트시나리오": {
         "sheet_name": "DE-14 통합테스트시나리오",
@@ -132,6 +148,7 @@ DOCUMENT_PROFILES = {
             "Step", "사용자구분",
             "예상 입력 (사용자 행위)", "예상 출력 (시스템 결과)", "테스트 데이터",
         ]],
+        "merge_columns": [],
     },
     "통합테스트결과서": {
         "sheet_name": "TE-02 통합테스트결과서",
@@ -140,6 +157,7 @@ DOCUMENT_PROFILES = {
             "판정결과", "부적합내역", "결함ID", "점검제외 사유",
             "테스트일시", "수행자",
         ]],
+        "merge_columns": [],
     },
     "인수테스트결과서": {
         "sheet_name": "TE-06 인수테스트결과서",
@@ -148,6 +166,7 @@ DOCUMENT_PROFILES = {
             "판정결과", "부적합내역", "결함ID", "점검제외 사유",
             "테스트일시", "수행자",
         ]],
+        "merge_columns": [],
     },
     "시스템테스트계획서": {
         "sheet_name": "ST-01 시스템테스트계획서",
@@ -155,6 +174,7 @@ DOCUMENT_PROFILES = {
             "시스템테스트ID", "요구사항ID", "비기능유형", "테스트 항목",
             "측정 방법", "목표치", "테스트 조건", "비고",
         ]],
+        "merge_columns": [],
     },
     "시스템테스트결과서": {
         "sheet_name": "ST-02 시스템테스트결과서",
@@ -164,6 +184,7 @@ DOCUMENT_PROFILES = {
             "판정결과", "점검제외 사유", "결함ID",
             "측정일시", "수행자", "증적", "비고",
         ]],
+        "merge_columns": [],
     },
     "결함관리대장": {
         "sheet_name": "DF-01 결함관리대장",
@@ -174,6 +195,7 @@ DOCUMENT_PROFILES = {
             "원인", "조치내역", "조치일", "조치자",
             "재테스트 결과", "재테스트일", "재테스트자", "비고",
         ]],
+        "merge_columns": [],
     },
     "추적매트릭스": {
         "sheet_name": "AN-05 추적매트릭스",
@@ -196,6 +218,7 @@ DOCUMENT_PROFILES = {
              "통합테스트시나리오명", "시스템테스트ID", "시스템테스트 항목", "잔존 결함", "과업완료여부",
              "검사결과"],
         ],
+        "merge_columns": [],
     },
 }
 
@@ -387,6 +410,44 @@ def _reorder_columns(
     return reordered
 
 
+def merge_ranges(
+    rows: list[list[str]], merge_columns: list[str]
+) -> list[tuple[int, int, int]]:
+    """연속으로 같은 값이 이어지는 칸을 세로 병합 범위로 돌려준다.
+
+    반환값은 (0기준 열 인덱스, 시작 시트행, 끝 시트행) 이다.
+    rows[0] 이 헤더라 시트 1행이고, rows[i] 는 시트 i+1 행이다.
+
+    빈 값은 묶지 않는다 — 빈칸이 이어지는 것은 "같은 값" 이 아니라 "값이 없는 것" 이다.
+    떨어져 있는 같은 값도 묶지 않는다 — 정렬이 깨진 표를 이어 붙이면 없는 사실을 만든다.
+    """
+    if len(rows) < 3:  # 헤더 + 데이터 2행 미만이면 묶을 것이 없다
+        return []
+
+    header = [h.strip() for h in rows[0]]
+    ranges: list[tuple[int, int, int]] = []
+
+    for col_name in merge_columns:
+        if col_name not in header:
+            continue
+        col = header.index(col_name)
+
+        start = 1
+        while start < len(rows):
+            value = rows[start][col].strip() if col < len(rows[start]) else ""
+            end = start
+            while end + 1 < len(rows):
+                nxt = rows[end + 1][col].strip() if col < len(rows[end + 1]) else ""
+                if nxt != value:
+                    break
+                end += 1
+            if value and end > start:
+                ranges.append((col, start + 1, end + 1))
+            start = end + 1
+
+    return ranges
+
+
 def create_xlsx(
     file_tables: list[tuple[str, list[tuple[str, list[str]]]]],
     output_path: str,
@@ -491,6 +552,17 @@ def create_xlsx(
                     else:
                         cell.font = cell_font
                         cell.alignment = wrap_align
+
+            # 연속 동일값 세로 병합 (참조 양식 형태)
+            if doc_type and doc_type in DOCUMENT_PROFILES:
+                for col, row_start, row_end in merge_ranges(
+                    rows, DOCUMENT_PROFILES[doc_type].get("merge_columns", [])
+                ):
+                    letter = get_column_letter(col + 1)
+                    ws.merge_cells(f"{letter}{row_start}:{letter}{row_end}")
+                    ws[f"{letter}{row_start}"].alignment = Alignment(
+                        wrap_text=True, vertical="center"
+                    )
 
             # 열 너비 자동 조정
             for col_idx in range(len(rows[0])):

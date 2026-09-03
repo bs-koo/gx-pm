@@ -262,5 +262,73 @@ class An05ColumnSsotTest(unittest.TestCase):
                 )
 
 
+class MergeRangesTest(unittest.TestCase):
+    """참조 양식은 대분류·중분류를 같은 값끼리 세로 병합한다.
+
+    행 인덱스는 시트 기준이다. rows[0] 이 헤더라 시트 1행,
+    rows[i] 는 시트 i+1 행이 된다.
+    """
+
+    def setUp(self):
+        self.mod = load_export_module()
+
+    def test_연속_동일값을_병합_범위로_묶는다(self):
+        rows = [
+            ["대분류", "중분류", "요구사항ID"],
+            ["데이터 전처리", "상대평가기준", "REQ-001"],
+            ["데이터 전처리", "상대평가기준", "REQ-002"],
+            ["데이터 전처리", "달력맞춤", "REQ-004"],
+        ]
+        구간 = self.mod.merge_ranges(rows, ["대분류", "중분류"])
+        self.assertIn((0, 2, 4), 구간, "대분류 3행이 하나로 묶여야 합니다")
+        self.assertIn((1, 2, 3), 구간, "중분류 2행이 하나로 묶여야 합니다")
+
+    def test_한_행짜리는_병합하지_않는다(self):
+        rows = [["대분류", "중분류"], ["A", "x"], ["B", "y"]]
+        self.assertEqual(self.mod.merge_ranges(rows, ["대분류", "중분류"]), [])
+
+    def test_빈값은_병합하지_않는다(self):
+        """빈칸이 이어지는 것은 같은 값이 아니라 값이 없는 것이다."""
+        rows = [["대분류"], [""], [""], [""]]
+        self.assertEqual(self.mod.merge_ranges(rows, ["대분류"]), [])
+
+    def test_병합_대상이_아닌_컬럼은_묶지_않는다(self):
+        rows = [["요구사항ID"], ["REQ-001"], ["REQ-001"]]
+        self.assertEqual(self.mod.merge_ranges(rows, ["대분류"]), [])
+
+    def test_헤더에_없는_병합_컬럼은_무시한다(self):
+        rows = [["중분류"], ["A"], ["A"]]
+        self.assertEqual(self.mod.merge_ranges(rows, ["대분류", "중분류"]), [(0, 2, 3)])
+
+    def test_떨어진_동일값은_따로_묶는다(self):
+        """정렬이 깨진 표를 억지로 이어 붙이면 없는 사실을 만든다."""
+        rows = [["대분류"], ["A"], ["A"], ["B"], ["A"], ["A"]]
+        구간 = self.mod.merge_ranges(rows, ["대분류"])
+        self.assertEqual(sorted(구간), [(0, 2, 3), (0, 5, 6)])
+
+
+class RevisionHistoryProfileTest(unittest.TestCase):
+    def setUp(self):
+        self.mod = load_export_module()
+
+    def test_개정이력_프로필이_있다(self):
+        self.assertIn("개정이력", self.mod.DOCUMENT_PROFILES)
+
+    def test_개정이력_컬럼_여섯_개가_순서대로다(self):
+        컬럼 = self.mod.DOCUMENT_PROFILES["개정이력"]["columns"][0]
+        self.assertEqual(
+            컬럼,
+            ["버전", "개정일", "개정 사유", "개정 내용", "작성자", "승인자"],
+        )
+
+    def test_모든_프로필이_merge_columns_키를_가진다(self):
+        """병합 대상이 없는 산출물은 빈 리스트를 갖는다 — 키 자체가 없으면
+        create_xlsx 가 KeyError 로 죽는다."""
+        for 이름, 프로필 in self.mod.DOCUMENT_PROFILES.items():
+            with self.subTest(산출물=이름):
+                self.assertIn("merge_columns", 프로필)
+                self.assertIsInstance(프로필["merge_columns"], list)
+
+
 if __name__ == "__main__":
     unittest.main()
