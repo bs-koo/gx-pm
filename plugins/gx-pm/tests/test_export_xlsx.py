@@ -1,7 +1,7 @@
 import re
 import unittest
 
-from helpers import PLUGIN_ROOT, load_export_module, read_docs
+from helpers import PLUGIN_ROOT, load_export_module, parse_column_ssot, read_docs
 
 
 class LoaderTest(unittest.TestCase):
@@ -328,6 +328,45 @@ class RevisionHistoryProfileTest(unittest.TestCase):
             with self.subTest(산출물=이름):
                 self.assertIn("merge_columns", 프로필)
                 self.assertIsInstance(프로필["merge_columns"], list)
+
+
+class An02ColumnSsotTest(unittest.TestCase):
+    """AN-02 컬럼 정본은 templates/AN-02-requirements-definition.md 다."""
+
+    def setUp(self):
+        self.mod = load_export_module()
+        self.정본 = parse_column_ssot(
+            "AN-02-requirements-definition.md", "본문 컬럼 (정본)"
+        )
+
+    def test_정본이_열_개다(self):
+        self.assertEqual(
+            len(self.정본), 10,
+            f"AN-02 정본 컬럼이 10개가 아닙니다: {self.정본}",
+        )
+
+    def test_정본_순서가_참조_양식과_같다(self):
+        self.assertEqual(self.정본, [
+            "번호", "요구사항ID", "대분류", "중분류", "요구사항명",
+            "요구사항 상세내용", "비고", "상태", "요구사항 근거", "변경 근거",
+        ])
+
+    def test_프로필이_정본과_같다(self):
+        self.assertEqual(
+            self.mod.DOCUMENT_PROFILES["요구사항정의서"]["columns"][0], self.정본
+        )
+
+    def test_분류_두_열이_병합_대상이다(self):
+        self.assertEqual(
+            self.mod.DOCUMENT_PROFILES["요구사항정의서"]["merge_columns"],
+            ["대분류", "중분류"],
+        )
+
+    def test_폐기된_컬럼이_프로필에_남아있지_않다(self):
+        프로필 = self.mod.DOCUMENT_PROFILES["요구사항정의서"]["columns"][0]
+        for 폐기 in ["제안요청ID", "수용여부", "소분류", "요구내역"]:
+            with self.subTest(컬럼=폐기):
+                self.assertNotIn(폐기, 프로필)
 
 
 if __name__ == "__main__":

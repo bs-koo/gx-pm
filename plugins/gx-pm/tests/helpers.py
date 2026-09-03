@@ -95,3 +95,33 @@ def command_names() -> set[str]:
 
 def template_names() -> set[str]:
     return {p.name for p in (PLUGIN_ROOT / "templates").glob("*.md")}
+
+
+def parse_column_ssot(template_name: str, section_title: str) -> list[str]:
+    """템플릿의 지정 절에서 컬럼 정본 목록을 뽑는다.
+
+    표는 `| # | 컬럼 | 규칙 |` 형태이고 둘째 칸이 컬럼명이다.
+    절 제목은 정확히 일치해야 한다 — 제목이 바뀌면 조용히 빈 목록을 내는 대신
+    호출부의 길이 검사가 실패하게 둔다.
+    """
+    import re
+
+    text = (PLUGIN_ROOT / "templates" / template_name).read_text(encoding="utf-8")
+    구간 = re.search(
+        rf"^#{{1,4}} {re.escape(section_title)}$(.*?)(?=^#{{1,4}} |\Z)",
+        text, re.M | re.S,
+    )
+    if 구간 is None:
+        return []
+    컬럼: list[str] = []
+    for 줄 in 구간.group(1).splitlines():
+        벗긴줄 = 줄.strip()
+        if not (벗긴줄.startswith("|") and 벗긴줄.endswith("|")):
+            continue
+        칸 = [c.strip() for c in 벗긴줄.strip("|").split("|")]
+        if len(칸) < 2 or set("".join(칸)) <= set("-: "):
+            continue
+        if 칸[0] == "#":
+            continue  # 머리행
+        컬럼.append(칸[1])
+    return 컬럼
