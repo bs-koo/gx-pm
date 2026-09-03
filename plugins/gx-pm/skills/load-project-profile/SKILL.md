@@ -104,7 +104,7 @@ profile.json 파일이 존재하지만 JSON 파싱에 실패하거나, 필수 �
 1. `lastUsed`를 오늘 날짜로 갱신하여 profile.json에 저장
 2. 이후 커맨드 워크플로우에서 다음 값들을 자동 사용:
    - `systemCode` → 산출물 파일명, ID 접두어
-   - `prefix` → 산출물 머리말·프로젝트 식별
+   - `prefix` → **현재 소비처 없음.** 프로파일에만 남는다 (`templates/project-profile-schema.md` §소비처 없는 필드)
    - `idNaming` → 요구사항ID·기능ID·테스트ID 채번 (아래 Step 3-1)
    - `framework` → 기능명세 처리내용의 표기 방식
    - `db` → DDL 문법, 데이터타입

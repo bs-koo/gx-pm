@@ -55,7 +55,8 @@
 
 - 프로파일이 없으면 → `/gx-프로젝트설정`을 먼저 실행하라고 안내 후 커맨드 종료
 - 프로파일이 있으면 → 활성화 후 이후 단계에서 프로파일 정보를 자동 사용
-  - `systemCode`, `prefix` → ID 접두어, 파일명에 사용
+  - `systemCode` → 산출물 파일명, 채번 규칙의 접두 후보
+  - `prefix`, `networkType` → **현재 소비처 없음** (`templates/project-profile-schema.md` §소비처 없는 필드)
   - `framework`, `db` → DDL 문법·데이터타입 해석에 사용
   - `idNaming` → 요구사항ID·기능ID·테스트ID 채번에 사용
   - `type` → 커맨드 워크플로우 분기에 사용

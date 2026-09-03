@@ -28,12 +28,12 @@
 | `type` | string | Y | 프로젝트 유형 코드 | `"new"`, `"enhancement"`, `"documentation"`, `"change"` |
 | `typeLabel` | string | Y | 프로젝트 유형 한글 라벨 | `"A. 신규 구축"` |
 | `systemCode` | string | Y | 시스템 코드 (영문). 산출물 파일명·ID 접두어에 쓴다 | `"B"` |
-| `prefix` | string | Y | 시스템 접두어. 산출물 머리말과 프로젝트 식별에 쓴다 | `"EHR"` |
+| `prefix` | string | Y | 시스템 접두어. **현재 소비처 없음** — 아래 §소비처 없는 필드 | `"EHR"` |
 | `idNaming` | object | N | 요구사항ID·기능ID·테스트ID 채번 규칙 | 아래 참조 |
 | `framework` | string | Y | 프레임워크 유형 | `"egovframe"`, `"springboot"`, `"other"` |
 | `db` | string | Y | DB 유형 | `"oracle"`, `"postgresql"`, `"mysql"`, `"other"` |
 | `author` | string | Y | 작성자명 | `"홍길동"` |
-| `networkType` | string | Y | 망 구분 | `"internal"`, `"external"`, `"mixed"` |
+| `networkType` | string | Y | 망 구분. **현재 소비처 없음** — 아래 §소비처 없는 필드 | `"internal"`, `"external"`, `"mixed"` |
 | `auditDate` | string | N | 감리 일정 (YYYY-MM-DD) | `"2026-06-15"` |
 | `assets` | object | N | 기존 자산 경로 정보 | 아래 참조 |
 | `createdAt` | string | Y | 프로파일 생성일 (YYYY-MM-DD) | `"2026-03-31"` |
@@ -66,6 +66,25 @@
   한 번 저장하면 다시 묻지 않는다
 - 산출물이 이미 있는 프로젝트(B·C·D 유형)에서는 묻기 전에 기존 산출물의 ID 표기를
   읽어 기본값으로 제시한다 — 같은 프로젝트에서 채번 규칙이 갈리면 추적이 끊긴다
+
+### 소비처 없는 필드 — `prefix` · `networkType`
+
+기능 축 전환(v3.0.0)으로 이 두 필드를 쓰던 산출물이 `archive/` 로 내려갔다.
+**현재 5종(AN-02 · AN-03 · DE-08 · DE-13 · AN-05) 어디에도 이 값을 적는 열이나
+머리말 항목이 없다.** 사용자에게 묻기는 하되 "어딘가 쓰인다" 고 말하지 않는다.
+
+| 필드 | 옛 소비처 | 지금 |
+|------|---------|------|
+| `prefix` | 화면ID 접두어 (`EHR_01_01_010`) | 없음. 파생 ID 폐지로 소멸 |
+| `networkType` | DE-03 의 망구분 열 기본값 | 없음. 그 산출물이 `archive/` 로 갔다 |
+
+**그런데도 필수 필드로 남긴 이유**: 지우면 세 곳이 함께 흔들린다 — 이 표,
+`skills/load-project-profile/SKILL.md` 의 필수 필드 검사 목록,
+`/gx-프로젝트설정` Step 3 의 질문. 게다가 기존 `profile.json` 이 필수 필드 누락으로
+읽히지 않게 되고, `archive/` 의 산출물을 되살리면 다시 쓰인다.
+
+**뺄지 남길지 판단할 때**: 감리가 있는 공공 사업에서 `archive/` 를 되살릴 계획이
+없다면 위 세 곳을 **함께** 고쳐 제거한다. 한 곳만 고치면 프로파일을 읽지 못한다.
 
 ---
 
