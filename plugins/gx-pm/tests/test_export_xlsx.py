@@ -1,7 +1,6 @@
-import re
 import unittest
 
-from helpers import PLUGIN_ROOT, load_export_module, parse_column_ssot, read_docs
+from helpers import load_export_module, parse_column_ssot, read_docs
 
 
 class LoaderTest(unittest.TestCase):
@@ -207,36 +206,28 @@ class An05ColumnSsotTest(unittest.TestCase):
 
     def setUp(self):
         self.mod = load_export_module()
-        템플릿 = (
-            PLUGIN_ROOT / "templates" / "AN-05-traceability-matrix.md"
-        ).read_text(encoding="utf-8")
-        구간 = re.search(
-            r"^### 본문 표 헤더 \(플랫[^\n]*\)$(.*?)(?=^#{1,3} |\Z)",
-            템플릿, re.M | re.S,
+        self.정본컬럼 = parse_column_ssot(
+            "AN-05-traceability-matrix.md", "본문 컬럼 (정본)"
         )
-        self.assertIsNotNone(
-            구간,
-            "AN-05 템플릿에서 '### 본문 표 헤더 (플랫…)' 절을 찾지 못했습니다 "
-            "— 절이 삭제됐거나 제목이 바뀌었습니다",
-        )
-        self.정본컬럼 = []
-        for 줄 in 구간.group(1).splitlines():
-            벗긴줄 = 줄.strip()
-            if not (벗긴줄.startswith("|") and 벗긴줄.endswith("|")):
-                continue
-            칸 = [c.strip() for c in 벗긴줄.strip("|").split("|")]
-            if len(칸) != 3 or set("".join(칸)) <= set("-: "):
-                continue
-            if 칸[0] == "#":
-                continue  # 머리행
-            self.정본컬럼.append(칸[1])
 
     def test_정본_플랫_헤더가_비어있지_않다(self):
         """파싱이 조용히 빈 목록을 내면 아래 두 테스트가 공허하게 통과한다."""
         self.assertGreaterEqual(
-            len(self.정본컬럼), 20,
-            f"정본 플랫 헤더에서 뽑은 컬럼이 20개 미만입니다: {self.정본컬럼}",
+            len(self.정본컬럼), 9,
+            f"정본 헤더에서 뽑은 컬럼이 9개 미만입니다: {self.정본컬럼}",
         )
+
+    def test_기능_축_컬럼이_정본에_있다(self):
+        """29컬럼 감리형에서 9컬럼 기능 축 대조기로 개편한 핵심 컬럼들이다."""
+        for 컬럼 in ["기능ID", "테이블·컬럼", "테스트 수", "Pass/Fail", "누락"]:
+            with self.subTest(컬럼=컬럼):
+                self.assertIn(컬럼, self.정본컬럼)
+
+    def test_폐기된_컬럼이_정본에_없다(self):
+        """감리형 29컬럼 중 화면·프로그램·제안요청 축은 기능 축 개편으로 사라졌다."""
+        for 폐기 in ["제안요청ID", "수용여부", "화면ID", "프로그램ID", "과업완료여부"]:
+            with self.subTest(컬럼=폐기):
+                self.assertNotIn(폐기, self.정본컬럼)
 
     def test_프로필의_모든_컬럼이_정본에_있다(self):
         """프로필에만 있는 컬럼은 아무도 만들지 않는 유령 컬럼이다."""
@@ -247,14 +238,14 @@ class An05ColumnSsotTest(unittest.TestCase):
                 with self.subTest(세트=세트번호, 컬럼=컬럼):
                     self.assertIn(
                         컬럼, self.정본컬럼,
-                        f"프로필의 '{컬럼}' 이 AN-05 템플릿의 플랫 헤더에 없습니다 "
+                        f"프로필의 '{컬럼}' 이 AN-05 템플릿의 정본 컬럼에 없습니다 "
                         "— 정본에 추가하거나 프로필에서 빼세요",
                     )
 
     def test_정본의_모든_컬럼이_전체_세트에_있다(self):
         """정본에만 있는 컬럼은 xlsx 에서 재배열되지 않고 뒤로 밀린다.
 
-        전체 세트가 정본을 다 담아야 한다. 축약 세트는 부분집합이므로 검사하지 않는다.
+        컬럼 세트가 하나뿐이므로 그 세트가 정본을 그대로 담아야 한다.
         """
         전체세트 = self.mod.DOCUMENT_PROFILES["추적매트릭스"]["columns"][0]
         for 컬럼 in self.정본컬럼:
