@@ -119,7 +119,7 @@ validate_column(["OBSVTR_NM","OBSRVN_YMD","LAT","LOT","USE_YN","REG_DT","MDFCN_D
 ```
 /gx-테이블정의서
   → (생성 중) "표준용어사전(BLDG_ENGY→MOIS_STD)으로 컬럼명 검증·변환해줘"
-  → 표준 컬럼 + 표준 출처 열이 포함된 DE-08 산출
+  → 기존 컬럼은 `현행유지`+표준 권고명, 신규 컬럼은 `신규적용`+근거가 채워진 DE-08 산출
 ```
 또는 `CLAUDE.md`의 규칙이 로드돼 있으면 별도 지시 없이도 적용된다.
 
