@@ -1,9 +1,11 @@
 ---
 description: "AN-03 기능명세서를 생성합니다. 요구사항정의서에서 기능을 도출하고 입력항목·처리내용·출력결과를 정의합니다. | 자연어: 기능명세서 만들어줘, 기능 정의, 기능 뽑아줘, 기능명세 작성"
+argument-hint: "<요구사항정의서 또는 파일>"
 ---
 
 # /gx-기능명세서 — AN-03 기능명세서 생성
 
+> **공통 규칙**: `templates/approval-protocol.md`의 승인 루프 프로토콜을 적용한다.
 > **선행조건**: `templates/prerequisites.md` 의 `/gx-기능명세서` 행을 따른다.
 > **실행 규약**: `templates/pipeline-protocol.md` 를 따른다.
 
