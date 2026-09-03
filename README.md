@@ -368,8 +368,11 @@ gx-pm/                                      # 저장소 루트
 │   ├── utils/
 │   │   └── export-xlsx.py                 # 마크다운 → xlsx 변환
 │   ├── tests/                             # unittest 계약 테스트
+│   │   ├── fixtures/
+│   │   │   └── requirement-tables.md
 │   │   ├── helpers.py
 │   │   ├── test_export_xlsx.py
+│   │   ├── test_extract_rules.py
 │   │   └── test_plugin_consistency.py
 │   ├── docs/
 │   │   └── 표준용어-mcp-연계.md
