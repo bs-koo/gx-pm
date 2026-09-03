@@ -7,7 +7,7 @@
 요구사항 분석부터 테스트 계획, ID 추적, 감리 대응까지
 
 [![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)]()
-[![Skills](https://img.shields.io/badge/skills-28-green.svg)]()
+[![Skills](https://img.shields.io/badge/skills-27-green.svg)]()
 [![Commands](https://img.shields.io/badge/commands-17-orange.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -282,14 +282,13 @@ python utils/export-xlsx.py --dir 결과물/ --output 산출물.xlsx
 | `trace-requirements` | AN-05 추적매트릭스 생성/갱신. 누락 유형 탐지 |
 | `detect-alternatives` | 시안/대안 자동 감지. 1안/2안, A안/B안 등 패턴 스캔 |
 
-### 설계 (5개)
+### 설계 (4개)
 
 | 스킬 | 설명 |
 |------|------|
 | `generate-screen-list` | 요구사항 → DE-03 화면목록표. 화면 유형 추론, ID 자동 부여 |
 | `generate-program-list` | 화면목록 → DE-05 프로그램정의서. eGovFrame/Spring Boot 소스 구조 매핑 |
-| `convert-ddl-to-tablespec` | DDL → DE-08 테이블정의서. 한글 속성명 자동 추론. DataGrip/DBeaver/ERDCloud 지원. Entity 역추출 가능 |
-| `generate-erd-guide` | 요구사항 → ERD 설계 가이드 + DDL 생성 |
+| `convert-ddl-to-tablespec` | 기존 DDL → DE-08 테이블정의서 역생성. 신규 컬럼만 표준용어사전 근거로 제안 |
 | `generate-interface-spec` | 외부 연동 식별 → 인터페이스정의서. REST/SOAP/파일/SSO |
 
 ### 역방향 생성 (3개) — v1.3.0 신규
@@ -438,7 +437,7 @@ gx-pm/                                      # 저장소 루트
 │   │   ├── gx-프로그램정의서.md
 │   │   ├── gx-프로젝트설정.md
 │   │   └── gx-화면목록표.md
-│   ├── skills/                            # 28개 스킬
+│   ├── skills/                            # 27개 스킬
 │   │   ├── audit-response/
 │   │   ├── classify-requirements/
 │   │   ├── convert-ddl-to-tablespec/
@@ -448,7 +447,6 @@ gx-pm/                                      # 저장소 루트
 │   │   ├── extract-requirements/
 │   │   ├── fill-integration-test-result/
 │   │   ├── fill-unit-test-result/
-│   │   ├── generate-erd-guide/
 │   │   ├── generate-function-spec/
 │   │   ├── generate-integration-test/
 │   │   ├── generate-interface-spec/

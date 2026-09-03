@@ -397,5 +397,35 @@ class An03ColumnSsotTest(unittest.TestCase):
         )
 
 
+class De08ColumnSsotTest(unittest.TestCase):
+    """DE-08 컬럼 정본은 templates/DE-08-table-definition.md 다.
+
+    이 문서는 역생성 전용이다 — 기존 컬럼은 고정하고 신규 컬럼만 표준용어사전
+    근거로 제안한다. `구분`·`표준 판정`이 그 승인 게이트를 데이터로 남긴다.
+    """
+
+    def setUp(self):
+        self.mod = load_export_module()
+        self.정본 = parse_column_ssot("DE-08-table-definition.md", "본문 컬럼 (정본)")
+
+    def test_정본이_열다섯_개다(self):
+        self.assertEqual(len(self.정본), 15, f"DE-08 정본이 15개가 아닙니다: {self.정본}")
+
+    def test_구분과_표준_판정_열이_있다(self):
+        for 컬럼 in ["구분", "표준 판정", "표준 권고명", "근거", "연계기능ID"]:
+            with self.subTest(컬럼=컬럼):
+                self.assertIn(컬럼, self.정본)
+
+    def test_프로필이_정본과_같다(self):
+        self.assertEqual(
+            self.mod.DOCUMENT_PROFILES["테이블정의서"]["columns"][0], self.정본
+        )
+
+    def test_테이블명이_병합_대상이다(self):
+        self.assertEqual(
+            self.mod.DOCUMENT_PROFILES["테이블정의서"]["merge_columns"], ["테이블명"]
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -879,5 +879,37 @@ class RevisionHistoryTest(unittest.TestCase):
         )
 
 
+class TableSpecStandardTest(unittest.TestCase):
+    """테이블정의서는 표준용어 MCP 없이 컬럼명을 지어내지 않는다."""
+
+    def setUp(self):
+        self.스킬 = (
+            PLUGIN_ROOT / "skills" / "convert-ddl-to-tablespec" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+
+    def test_두_MCP_도구를_모두_쓴다(self):
+        for 도구 in ["validate_column", "translate_column"]:
+            with self.subTest(도구=도구):
+                self.assertIn(도구, self.스킬)
+
+    def test_기존_컬럼을_바꾸지_않는다고_명시한다(self):
+        self.assertIn("현행유지", self.스킬)
+
+    def test_MCP_부재_시_중단한다고_명시한다(self):
+        self.assertIn("지어내지 않는다", self.스킬)
+
+    def test_MCP_연계_정본을_참조한다(self):
+        self.assertIn("docs/표준용어-mcp-연계.md", self.스킬)
+
+    def test_순방향_생성_경로가_남아있지_않다(self):
+        커맨드 = (
+            PLUGIN_ROOT / "commands" / "gx-테이블정의서.md"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn(
+            "generate-erd-guide", 커맨드,
+            "요구사항에서 테이블을 추론하는 순방향 경로가 남아 있습니다",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -38,11 +38,14 @@ def read_docs() -> list[tuple[Path, str]]:
     일부러 잘못된 예시를 담는 픽스처가 계약 검사에 걸리면 안 된다.
     저장소 루트 README 도 포함한다 — 사용자의 첫 접점이라 다른 문서와 같은
     계약 검사(개명·백틱·정본 참조 등)를 받아야 한다.
+    archive/ 는 커맨드에서 내린 산출물의 보관소라 검사 대상이 아니다.
     """
     docs = []
     for path in sorted(PLUGIN_ROOT.rglob("*.md")):
         if ".omc" in path.parts:
             continue
+        if "archive" in path.parts:
+            continue  # archive/ 는 보관소다. 옛 컬럼·옛 ID 규칙이 새 계약을 깨뜨린다
         if path.relative_to(PLUGIN_ROOT).parts[:2] == ("tests", "fixtures"):
             continue  # tests/fixtures 는 검사 대상이 아니라 검사 도구다 — 다른 위치의
             # "fixtures" 디렉터리(있다면)는 여전히 검사 대상이어야 한다
