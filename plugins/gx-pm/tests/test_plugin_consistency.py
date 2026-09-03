@@ -29,7 +29,7 @@ def specs_only(docs: list) -> list:
     (예: "/pm-design 참조 9곳 제거", "SCR-001 → EHR_01_01_020")
     이력 문서를 규칙으로 검사하면 고친 사실을 적었다는 이유로 실패한다.
     """
-    return [(path, text) for path, text in docs if path.name != "CHANGELOG.md"]
+    return [(path, text) for path, text in docs if path != PLUGIN_ROOT / "CHANGELOG.md"]
 
 
 class CommandNamingTest(unittest.TestCase):
@@ -101,7 +101,7 @@ class CrossReferenceTest(unittest.TestCase):
                 if name in self.스킬_아닌_이름:
                     continue
                 허용 = self.skills
-                if path.name == "CHANGELOG.md":
+                if path == PLUGIN_ROOT / "CHANGELOG.md":
                     허용 = self.skills | self.보관스킬
                 with self.subTest(문서=doc_label(path), 스킬=name):
                     self.assertIn(name, 허용)
@@ -116,7 +116,7 @@ class CrossReferenceTest(unittest.TestCase):
     def test_참조된_템플릿_경로가_모두_존재한다(self):
         for path, text in self.docs:
             허용 = self.templates
-            if path.name == "CHANGELOG.md":
+            if path == PLUGIN_ROOT / "CHANGELOG.md":
                 허용 = self.templates | self.보관템플릿
             for match in re.finditer(r"templates/([A-Za-z0-9\-]+\.md)", text):
                 with self.subTest(문서=doc_label(path), 템플릿=match.group(1)):
@@ -125,7 +125,7 @@ class CrossReferenceTest(unittest.TestCase):
     def test_참조된_스킬_경로가_모두_존재한다(self):
         for path, text in self.docs:
             허용 = self.skills
-            if path.name == "CHANGELOG.md":
+            if path == PLUGIN_ROOT / "CHANGELOG.md":
                 허용 = self.skills | self.보관스킬
             for match in re.finditer(r"skills/([a-z0-9-]+)/SKILL\.md", text):
                 with self.subTest(문서=doc_label(path), 스킬=match.group(1)):
@@ -844,6 +844,63 @@ class TableSpecStandardTest(unittest.TestCase):
             "generate-erd-guide", 커맨드,
             "요구사항에서 테이블을 추론하는 순방향 경로가 남아 있습니다",
         )
+
+
+class FiveDocumentContractTest(unittest.TestCase):
+    """산출물 5종이 같은 규약을 따르는지 묶는다."""
+
+    산출물스킬 = [
+        "extract-requirements",
+        "generate-function-spec",
+        "convert-ddl-to-tablespec",
+        "generate-unit-test-plan",
+        "trace-requirements",
+    ]
+
+    def test_다섯_스킬이_모두_개정이력_스킬을_부른다(self):
+        for 스킬 in self.산출물스킬:
+            with self.subTest(스킬=스킬):
+                text = (
+                    PLUGIN_ROOT / "skills" / 스킬 / "SKILL.md"
+                ).read_text(encoding="utf-8")
+                self.assertIn(
+                    "manage-revision-history", text,
+                    "개정이력을 기록하지 않으면 버전이 올라가지 않습니다",
+                )
+
+    def test_다섯_템플릿이_모두_개정이력_시트를_선언한다(self):
+        for 템플릿 in [
+            "AN-02-requirements-definition.md",
+            "AN-03-function-spec.md",
+            "DE-08-table-definition.md",
+            "DE-13-unit-test-plan.md",
+            "AN-05-traceability-matrix.md",
+        ]:
+            with self.subTest(템플릿=템플릿):
+                text = (PLUGIN_ROOT / "templates" / 템플릿).read_text(encoding="utf-8")
+                self.assertIn("templates/revision-history.md", text)
+
+    def test_다섯_템플릿이_모두_본문_컬럼_정본_절을_갖는다(self):
+        from helpers import parse_column_ssot
+        for 템플릿, 개수 in [
+            ("AN-02-requirements-definition.md", 10),
+            ("AN-03-function-spec.md", 10),
+            ("DE-08-table-definition.md", 15),
+            ("DE-13-unit-test-plan.md", 11),
+            ("AN-05-traceability-matrix.md", 9),
+        ]:
+            with self.subTest(템플릿=템플릿):
+                self.assertEqual(
+                    len(parse_column_ssot(템플릿, "본문 컬럼 (정본)")), 개수
+                )
+
+    def test_화면_축_잔재가_현역_문서에_없다(self):
+        """archive/ 밖에는 화면 축 어휘가 남으면 안 된다."""
+        잔재 = ["화면목록표", "PG_{화면ID}", "제안요청ID", "수용여부"]
+        for path, text in specs_only(read_docs()):
+            for 낱말 in 잔재:
+                with self.subTest(문서=doc_label(path), 낱말=낱말):
+                    self.assertNotIn(낱말, text)
 
 
 if __name__ == "__main__":

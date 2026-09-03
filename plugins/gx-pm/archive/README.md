@@ -51,8 +51,9 @@ git show 7242319:plugins/gx-pm/tests/test_plugin_consistency.py > /tmp/옛계약
 | `ScreenSplitRuleTest` (7건) | 화면 분리 미결정 판정이 추론표보다 앞설 것, A·C 는 묻고 D 는 묻지 않을 것, 기록 규칙이 DE-03 의 실제 컬럼을 지목할 것, 재질문 금지 |
 | `test_화면목록표_커맨드가_유형별_동작을_복제하지_않는다` | 커맨드가 `generate-screen-list/SKILL.md` §3-2 를 복제하지 않을 것 |
 
-같은 커밋의 `PIPELINE_ARTIFACTS`·`PIPELINE_GATES` 도 함께 본다 —
-`/gx-testplan` 을 되살린다면 그 파이프라인의 구성 산출물과 게이트 수(2개)가 거기 있다.
+같은 커밋의 `PIPELINE_ARTIFACTS` 도 함께 본다 — `/gx-testplan` 을 되살린다면 그 파이프라인의
+구성 산출물이 거기 있다. 그 시점에는 `PIPELINE_GATES` 상수가 아직 없었다 — 게이트 수(2개)는
+`PipelineCommandTest` 안에 하드코딩된 리터럴이었다. 찾다가 헷갈리지 않도록 여기 적어 둔다.
 
 ## 주의
 
