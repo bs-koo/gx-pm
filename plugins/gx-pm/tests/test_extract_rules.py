@@ -228,9 +228,9 @@ class ExtractRuleDocTest(unittest.TestCase):
             "원문 ID 를 근거 열에 어떻게 적는지 예시가 없습니다",
         )
         self.assertIn(
-            "제안요청ID 열에 넣지 않는다", self.text,
-            "원문 ID 를 제안요청ID 열에 넣지 말라는 금지가 없습니다 "
-            "— SFR- 체계가 무너집니다",
+            "요구사항 근거` 열에 병기한다", self.text,
+            "원문 ID 가 어느 열로 가는지 규칙 문장이 없습니다 "
+            "— 이게 없으면 원문 ID 가 어디로 갔는지 역추적할 수 없습니다",
         )
 
 
