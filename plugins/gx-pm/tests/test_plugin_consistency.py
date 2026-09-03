@@ -217,34 +217,28 @@ class PipelineProtocolTest(unittest.TestCase):
     def test_이월_금지_항목이_명시돼_있다(self):
         self.assertIn("이월 금지", self.text)
         self.assertIn("시안", self.text)
-        self.assertIn("화면ID", self.text)
+        self.assertIn("신규 컬럼명", self.text)
 
-    def test_이월_금지_항목에_화면_분리_미결정이_있다(self):
-        """§이월 금지 항목 **절 안에서만** 검사한다.
-
-        파일 전체를 substring 으로 훑으면 §재생성 파급 규칙의 '화면ID' 표기가
-        조건을 채워버려, 이 항목이 이월 금지 목록에서 통째로 빠져도 통과한다.
-        빠지면 /gx-spec 이 이 중단점을 게이트 1 로 미뤄도 아무도 모른다 —
-        그때는 화면ID가 이미 채번된 뒤라 되돌리는 비용이 전건 재채번이다.
-        """
+    def test_이월_금지_항목이_세_개다(self):
+        """화면 축 제거로 화면 분리·ID 확정 두 항목이 소멸했다."""
         구간 = re.search(
-            r"^## 이월 금지 항목$(.*?)(?=^## |\Z)", self.text, re.M | re.S
+            r"^## 이월 금지 항목$(.*?)(?=^## )", self.text, re.M | re.S
         )
-        self.assertIsNotNone(
-            구간,
-            "pipeline-protocol.md 에서 '## 이월 금지 항목' 절을 찾지 못했습니다 "
-            "— 절이 삭제됐거나 제목이 바뀌었습니다",
-        )
-        절 = 구간.group(1)
-        항목 = re.findall(r"^\d+\. \*\*(.+?)\*\*", 절, re.M)
+        self.assertIsNotNone(구간, "이월 금지 항목 절을 찾지 못했습니다")
+        번호 = re.findall(r"^\d+\.\s", 구간.group(1), re.M)
         self.assertEqual(
-            len(항목), 5,
-            f"이월 금지 항목이 5개가 아닙니다: {항목}",
+            len(번호), 3,
+            f"이월 금지 항목이 3개가 아닙니다: {len(번호)}개",
         )
-        self.assertTrue(
-            any("화면 분리" in v for v in 항목),
-            f"'화면 분리' 미결정 중단점이 이월 금지 항목에 없습니다: {항목}",
-        )
+
+    def test_이월_금지_항목에_신규_컬럼명_결정이_있다(self):
+        self.assertIn("신규 컬럼명 결정", self.text)
+        self.assertIn("convert-ddl-to-tablespec", self.text)
+
+    def test_화면_축_잔재가_규약에_없다(self):
+        for 잔재 in ["화면ID", "화면 분리", "PG_", "generate-screen-list"]:
+            with self.subTest(잔재=잔재):
+                self.assertNotIn(잔재, self.text)
 
     def test_이월_금지_항목에_표_판정_애매성이_있다(self):
         """§이월 금지 항목 절 안에서만 검사한다.
@@ -260,7 +254,7 @@ class PipelineProtocolTest(unittest.TestCase):
             구간, "pipeline-protocol.md 에서 '## 이월 금지 항목' 절을 찾지 못했습니다"
         )
         항목 = re.findall(r"^\d+\. \*\*(.+?)\*\*", 구간.group(1), re.M)
-        self.assertEqual(len(항목), 5, f"이월 금지 항목이 5개가 아닙니다: {항목}")
+        self.assertEqual(len(항목), 3, f"이월 금지 항목이 3개가 아닙니다: {항목}")
         self.assertTrue(
             any("표 판정" in v for v in 항목),
             f"'표 판정' 애매성 중단점이 이월 금지 항목에 없습니다: {항목}",
@@ -278,45 +272,25 @@ class PipelineProtocolTest(unittest.TestCase):
         self.assertIsNotNone(표, "'## 단독 실행 vs 파이프라인 실행' 절을 찾지 못했습니다")
         본문 = 표.group(1)
         for 중단점 in ("시안/대안 감지 중단점", "표 판정 애매성 중단점",
-                     "화면 분리 미결정 중단점", "입력 수집 중단점"):
+                     "신규 컬럼명 결정 중단점", "입력 수집 중단점"):
             with self.subTest(중단점=중단점):
                 self.assertIn(
                     중단점, 본문,
                     f"'{중단점}' 이 단독/파이프라인 대조표에 없습니다",
                 )
 
-    def test_파생_ID가_모두_재생성_파급_규칙에_있다(self):
-        """§재생성 파급 규칙 표 **안에서만** 검사한다.
-
-        파일 전체를 substring 으로 훑으면 §이월 금지 항목의 산문
-        ("화면ID가 바뀌면 PG_·U_·TC_ 가 전부 재채번된다") 이 조건을 채워버려,
-        이 테스트가 지킨다고 선언한 파급 표가 통째로 사라져도 통과한다.
-        """
-        rules = (PLUGIN_ROOT / "templates" / "id-naming-rules.md").read_text(
-            encoding="utf-8"
-        )
-        파생 = re.findall(r"\|\s*`(\w+_)`\s*\|[^|]*\|\s*\*\*화면ID", rules)
-        self.assertEqual(
-            set(파생), {"PG_", "U_", "TC_"},
-            "id-naming-rules.md 의 화면ID 파생 목록이 바뀌었습니다",
-        )
-
+    def test_파급_규칙이_다섯_갈래를_모두_덮는다(self):
         구간 = re.search(
             r"^## 재생성 파급 규칙$(.*?)(?=^## |\Z)", self.text, re.M | re.S
         )
-        self.assertIsNotNone(
-            구간,
-            "pipeline-protocol.md 에서 '## 재생성 파급 규칙' 절을 찾지 못했습니다 "
-            "— 절이 삭제됐거나 제목이 바뀌었습니다",
-        )
-        표 = 구간.group(1)
-        for 접두 in 파생:
-            with self.subTest(접두=접두):
-                self.assertIn(
-                    접두, 표,
-                    f"화면ID 파생 ID `{접두}` 가 재생성 파급 규칙 표에 없습니다 "
-                    "— 화면ID 변경 시 무엇을 다시 만들지 규정되지 않습니다",
-                )
+        self.assertIsNotNone(구간, "재생성 파급 규칙 절을 찾지 못했습니다")
+        본문 = 구간.group(1)
+        for 항목 in [
+            "요구사항ID", "요구사항 상세내용", "기능ID",
+            "입력항목", "컬럼 제약",
+        ]:
+            with self.subTest(항목=항목):
+                self.assertIn(항목, 본문)
 
     def test_중단_후_재개_규칙이_있다(self):
         self.assertIn("detect-existing-artifact", self.text)
