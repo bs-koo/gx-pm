@@ -938,6 +938,42 @@ class IdSuccessionTest(unittest.TestCase):
     def test_개정이력보다_먼저_돈다고_명시한다(self):
         self.assertIn("manage-revision-history", self.text)
 
+    def test_새로쓰기가_ID_승계를_거친다(self):
+        """새로쓰기의 의도는 '본문을 다시 뽑겠다' 이지 'ID 를 날리겠다' 가 아니다.
+
+        절 안에서만 본다 — 파일 어딘가에 스킬 이름이 있는 것으로는
+        새로쓰기 경로가 그걸 거친다는 보장이 안 된다.
+        """
+        text = (
+            PLUGIN_ROOT / "skills" / "detect-existing-artifact" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(
+            r"^#### 2\. 새로쓰기 선택 시$(.*?)(?=^#### |\Z)", text, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "detect-existing-artifact 의 §새로쓰기 절을 찾지 못했습니다")
+        self.assertIn("reconcile-ids", 구간.group(1))
+
+    def test_새로쓰기_안내문이_ID_를_날린다고_말하지_않는다(self):
+        """선택지 설명이 옛 동작을 그대로 적고 있으면 사용자가 잘못 고른다."""
+        text = (
+            PLUGIN_ROOT / "skills" / "detect-existing-artifact" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("ID는 직전 버전과 대조해 승계", text)
+
+    def test_개정이력이_ID_승계를_선행으로_둔다(self):
+        text = (
+            PLUGIN_ROOT / "skills" / "manage-revision-history" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("reconcile-ids", text)
+
+    def test_채번_규칙이_승계_재생성을_명시한다(self):
+        text = (PLUGIN_ROOT / "templates" / "id-naming-rules.md").read_text(
+            encoding="utf-8"
+        )
+        구간 = re.search(r"^## 불변 규칙$(.*?)(?=^## |\Z)", text, re.M | re.S)
+        self.assertIsNotNone(구간, "id-naming-rules.md 의 §불변 규칙 절을 찾지 못했습니다")
+        self.assertIn("reconcile-ids", 구간.group(1))
+
 
 class BoundaryRuleTest(unittest.TestCase):
     """드라이런에서 놓친 4건(영값·통과 측 경계·하위 정밀도)의 재발을 막는다.
