@@ -788,6 +788,40 @@ class EvidenceRuleTest(unittest.TestCase):
         self.assertIn("제약 미상", self.text)
         self.assertIn("지어내", self.text)
 
+    def test_AN_03_이_근거_정본을_참조한다(self):
+        an03 = (PLUGIN_ROOT / "templates" / "AN-03-function-spec.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("templates/evidence-rules.md", an03)
+        self.assertIn("[확인필요:제약]", an03)
+
+    def test_AN_03_도출_출처가_네_단이다(self):
+        """3단(요구사항·역산·DDL)만 적혀 있으면 소스 근거가 다시 사라진다."""
+        an03 = (PLUGIN_ROOT / "templates" / "AN-03-function-spec.md").read_text(
+            encoding="utf-8"
+        )
+        구간 = re.search(
+            r"^## 입력항목 — 이 문서에서 가장 중요한 열$(.*?)(?=^## |\Z)",
+            an03, re.M | re.S,
+        )
+        self.assertIsNotNone(구간, "AN-03 의 §입력항목 절을 찾지 못했습니다")
+        단 = re.findall(r"^[1-9]\. ", 구간.group(1), re.M)
+        self.assertEqual(len(단), 4, f"도출 출처가 4단이 아닙니다: {len(단)}개")
+        self.assertIn("기존 소스", 구간.group(1))
+
+    def test_기능명세_스킬이_확인필요_두_종류를_모두_안다(self):
+        """정본만 고치고 실행부를 안 고치면 규칙이 돌지 않는다."""
+        스킬 = (
+            PLUGIN_ROOT / "skills" / "generate-function-spec" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        for 종류 in ("[확인필요:항목]", "[확인필요:제약]"):
+            with self.subTest(종류=종류):
+                self.assertIn(종류, 스킬)
+        self.assertIn("templates/evidence-rules.md", 스킬)
+        for 집계 in ("근거 가용도", "제약 미상"):
+            with self.subTest(집계=집계):
+                self.assertIn(집계, 스킬)
+
 
 class BoundaryRuleTest(unittest.TestCase):
     """드라이런에서 놓친 4건(영값·통과 측 경계·하위 정밀도)의 재발을 막는다.
