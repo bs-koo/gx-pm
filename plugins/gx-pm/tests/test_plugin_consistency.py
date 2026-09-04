@@ -844,6 +844,30 @@ class EvidenceRuleTest(unittest.TestCase):
             "Step 6 에 '제약이 없으면 보강하지 않는다' 는 지시가 없습니다",
         )
 
+    def test_게이트2가_근거_집계를_보여준다(self):
+        """계측하고 안 보여주면 계측하지 않은 것과 같다.
+
+        Step 절로 범위를 좁혀서 본다 — 파일 어딘가에 낱말이 있는 것으로는
+        게이트 화면에 실린다는 보장이 안 된다.
+        """
+        본문 = (PLUGIN_ROOT / "commands" / "gx-spec.md").read_text(encoding="utf-8")
+        구간 = re.search(
+            r"^### Step 6: 게이트 2(.*?)(?=^### |\Z)", 본문, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "gx-spec.md 에서 Step 6(게이트 2) 절을 찾지 못했습니다")
+        for 항목 in ("근거 가용도", "[확인필요]", "제약 미상"):
+            with self.subTest(항목=항목):
+                self.assertIn(항목, 구간.group(1), f"게이트 2 에 '{항목}' 이 없습니다")
+        self.assertIn("templates/evidence-rules.md", 구간.group(1))
+
+    def test_게이트3이_제약_미상을_보여준다(self):
+        본문 = (PLUGIN_ROOT / "commands" / "gx-spec.md").read_text(encoding="utf-8")
+        구간 = re.search(
+            r"^### Step 9: 게이트 3(.*?)(?=^### |\Z)", 본문, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "gx-spec.md 에서 Step 9(게이트 3) 절을 찾지 못했습니다")
+        self.assertIn("제약 미상", 구간.group(1))
+
 
 class BoundaryRuleTest(unittest.TestCase):
     """드라이런에서 놓친 4건(영값·통과 측 경계·하위 정밀도)의 재발을 막는다.
