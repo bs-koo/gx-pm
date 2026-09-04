@@ -33,7 +33,8 @@ def load_export_module() -> ModuleType:
 def read_docs() -> list[tuple[Path, str]]:
     """플러그인의 모든 마크다운 문서를 (경로, 본문) 쌍으로 반환한다.
 
-    .omc 는 런타임 상태 디렉터리라 검사 대상이 아니다.
+    .omc·.dev 는 런타임 상태 디렉터리라 검사 대상이 아니다. .dev 는 훅이 남기는
+    의사결정 로그라 아직 만들지 않은 커맨드 이름이 선택지로 그대로 실린다.
     tests/fixtures 는 규칙을 시험하기 위한 입력이라 검사 대상이 아니다 —
     일부러 잘못된 예시를 담는 픽스처가 계약 검사에 걸리면 안 된다.
     저장소 루트 README 도 포함한다 — 사용자의 첫 접점이라 다른 문서와 같은
@@ -44,6 +45,8 @@ def read_docs() -> list[tuple[Path, str]]:
     for path in sorted(PLUGIN_ROOT.rglob("*.md")):
         if ".omc" in path.parts:
             continue
+        if ".dev" in path.parts:
+            continue  # .dev 는 훅이 쓰는 런타임 기록(의사결정 로그)이라 검사 대상이 아니다
         if "archive" in path.parts:
             continue  # archive/ 는 보관소다. 옛 컬럼·옛 ID 규칙이 새 계약을 깨뜨린다
         if path.relative_to(PLUGIN_ROOT).parts[:2] == ("tests", "fixtures"):
