@@ -869,6 +869,33 @@ class EvidenceRuleTest(unittest.TestCase):
         self.assertIn("제약 미상", 구간.group(1))
 
 
+class DdlAbsenceNoticeTest(unittest.TestCase):
+    """DDL 이 없어 전건 신규가 된 DE-08 은 실제 스키마가 아니라 설계 초안이다.
+
+    v3.0.0 은 이 사실을 게이트 2 화면에만 적었다. 승인하면 화면은 사라지고
+    문서만 남아, 이 문서가 실제 스키마로 오독된다 — 플러그인이 없애려던 문제 그 자체다.
+    """
+
+    def test_DE_08_템플릿이_설계_초안_표기를_요구한다(self):
+        text = (
+            PLUGIN_ROOT / "templates" / "DE-08-table-definition.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("설계 초안", text)
+        self.assertIn("개정이력", text)
+        self.assertRegex(
+            text, r"전건이? 신규",
+            "전건 신규일 때만이라는 조건이 없습니다 — 일부 신규에도 붙으면 경고가 무뎌집니다",
+        )
+
+    def test_역생성_스킬이_경고_줄을_넣는다(self):
+        """템플릿만 고치고 실행부를 안 고치면 규칙이 돌지 않는다."""
+        text = (
+            PLUGIN_ROOT / "skills" / "convert-ddl-to-tablespec" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("설계 초안", text)
+        self.assertIn("templates/DE-08-table-definition.md", text)
+
+
 class BoundaryRuleTest(unittest.TestCase):
     """드라이런에서 놓친 4건(영값·통과 측 경계·하위 정밀도)의 재발을 막는다.
 
