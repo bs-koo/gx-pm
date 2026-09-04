@@ -41,12 +41,7 @@ description: 승인된 요구사항정의서(AN-02)에서 기능을 도출하여
 둘 다 **지어내지 않는다.** `필수` 만 붙은 것은 제약이 빈 것이다.
 
 **근거 가용도를 함께 센다.** 4단 중 몇 단이 살아 있는지를 프로파일에서 판정한다.
-
-| 단 | 가용 조건 |
-|---|----------|
-| 1·2 | 항상 가용 |
-| 3 | `profile.assets.ddlFile` 이 있다 |
-| 4 | `profile.assets.sourcePath` 또는 `source-index.json` 이 있다 |
+가용 조건의 정본은 `templates/evidence-rules.md` §근거 4단이다 — 여기 옮겨 적지 않는다.
 
 ### Step 4: 처리내용 도출
 
