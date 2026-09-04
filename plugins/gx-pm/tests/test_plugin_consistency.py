@@ -739,6 +739,56 @@ class VersionConsistencyTest(unittest.TestCase):
                 )
 
 
+class EvidenceRuleTest(unittest.TestCase):
+    """근거 계측의 정본은 templates/evidence-rules.md 다.
+
+    v3.0.0 은 AN-03 이 '제약이 비면 테스트가 정상 케이스만 나온다' 고 경고하면서도
+    비었는지 세지 않았다. 세는 규칙을 한 곳에 두고, 실행부가 복제 대신 참조하게 한다.
+    """
+
+    def setUp(self):
+        self.text = (PLUGIN_ROOT / "templates" / "evidence-rules.md").read_text(
+            encoding="utf-8"
+        )
+
+    def test_근거가_네_단이다(self):
+        """소스 역추출이 v3.0.0 정본에 빠져 있었다.
+
+        memo 실행에서 검증 순서·기본값 같은 규칙은 전부 소스에서 나왔는데
+        도출 출처에 없는 근거였다. 단수를 셀 수 없으면 가용도 경고가 성립하지 않는다.
+        """
+        구간 = re.search(r"^## 근거 4단$(.*?)(?=^## |\Z)", self.text, re.M | re.S)
+        self.assertIsNotNone(구간, "§근거 4단 절을 찾지 못했습니다")
+        단 = re.findall(r"^\| [1-9] \|", 구간.group(1), re.M)
+        self.assertEqual(len(단), 4, f"근거 단이 4개가 아닙니다: {len(단)}개")
+        for 근거 in ("요구사항 상세내용", "처리내용 역산", "기존 DDL", "기존 소스"):
+            with self.subTest(근거=근거):
+                self.assertIn(근거, 구간.group(1))
+
+    def test_확인필요가_두_종류로_갈린다(self):
+        for 종류 in ("[확인필요:항목]", "[확인필요:제약]"):
+            with self.subTest(종류=종류):
+                self.assertIn(종류, self.text, f"{종류} 정의가 없습니다")
+
+    def test_제약이_빈_것의_판정_기준이_있다(self):
+        """'제약이 비었다' 를 정의하지 않으면 판정이 사람마다 달라진다."""
+        self.assertIn("필수", self.text)
+        self.assertRegex(
+            self.text, r"길이·범위·형식·열거값",
+            "정량 제약의 범위가 열거돼 있지 않습니다",
+        )
+
+    def test_가용도_미달인데_확인필요가_0건이면_경고한다(self):
+        구간 = re.search(r"^## 근거 가용도 경고$(.*?)(?=^## |\Z)", self.text, re.M | re.S)
+        self.assertIsNotNone(구간, "§근거 가용도 경고 절을 찾지 못했습니다")
+        self.assertIn("4/4 미만", 구간.group(1))
+        self.assertIn("0건", 구간.group(1))
+
+    def test_제약_미상은_자동보강하지_않는다(self):
+        self.assertIn("제약 미상", self.text)
+        self.assertIn("지어내", self.text)
+
+
 class BoundaryRuleTest(unittest.TestCase):
     """드라이런에서 놓친 4건(영값·통과 측 경계·하위 정밀도)의 재발을 막는다.
 
