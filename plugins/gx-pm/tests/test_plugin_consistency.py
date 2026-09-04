@@ -300,17 +300,25 @@ class PipelineProtocolTest(unittest.TestCase):
         self.assertIn("시안", self.text)
         self.assertIn("신규 컬럼명", self.text)
 
-    def test_이월_금지_항목이_세_개다(self):
-        """화면 축 제거로 화면 분리·ID 확정 두 항목이 소멸했다."""
+    def test_이월_금지_항목이_네_개다(self):
+        """화면 축 제거로 화면 분리·ID 확정 두 항목이 소멸했고(v3.0.0),
+
+        v3.1.0 에서 ID 승계 판정 애매성이 들어왔다. 이건 v2 의 'ID 확정' 과 다르다 —
+        파생 ID 를 정하는 것이 아니라 직전 버전의 어느 항목과 같은지를 정하는 것이다.
+        """
         구간 = re.search(
             r"^## 이월 금지 항목$(.*?)(?=^## |\Z)", self.text, re.M | re.S
         )
         self.assertIsNotNone(구간, "이월 금지 항목 절을 찾지 못했습니다")
         번호 = re.findall(r"^\d+\.\s", 구간.group(1), re.M)
         self.assertEqual(
-            len(번호), 3,
-            f"이월 금지 항목이 3개가 아닙니다: {len(번호)}개",
+            len(번호), 4,
+            f"이월 금지 항목이 4개가 아닙니다: {len(번호)}개",
         )
+
+    def test_이월_금지_항목에_ID_승계_판정이_있다(self):
+        self.assertIn("ID 승계 판정", self.text)
+        self.assertIn("reconcile-ids", self.text)
 
     def test_이월_금지_항목에_신규_컬럼명_결정이_있다(self):
         self.assertIn("신규 컬럼명 결정", self.text)
@@ -335,7 +343,7 @@ class PipelineProtocolTest(unittest.TestCase):
             구간, "pipeline-protocol.md 에서 '## 이월 금지 항목' 절을 찾지 못했습니다"
         )
         항목 = re.findall(r"^\d+\. \*\*(.+?)\*\*", 구간.group(1), re.M)
-        self.assertEqual(len(항목), 3, f"이월 금지 항목이 3개가 아닙니다: {항목}")
+        self.assertEqual(len(항목), 4, f"이월 금지 항목이 4개가 아닙니다: {항목}")
         self.assertTrue(
             any("표 판정" in v for v in 항목),
             f"'표 판정' 애매성 중단점이 이월 금지 항목에 없습니다: {항목}",
@@ -576,13 +584,26 @@ class PipelineCommandTest(unittest.TestCase):
     이월금지_중단점 = [
         {
             "step": "2",
-            "중단점": ["시안", "표 판정"],
-            "정본": ["skills/extract-requirements/SKILL.md"],
+            "중단점": ["시안", "표 판정", "ID 승계"],
+            "정본": [
+                "skills/extract-requirements/SKILL.md",
+                "skills/reconcile-ids/SKILL.md",
+            ],
+        },
+        {
+            "step": "4",
+            "중단점": ["ID 승계"],
+            "정본": ["skills/reconcile-ids/SKILL.md"],
         },
         {
             "step": "5",
             "중단점": ["신규 컬럼명"],
             "정본": ["skills/convert-ddl-to-tablespec/SKILL.md"],
+        },
+        {
+            "step": "7",
+            "중단점": ["ID 승계"],
+            "정본": ["skills/reconcile-ids/SKILL.md"],
         },
     ]
 
@@ -647,7 +668,11 @@ class PipelineCommandTest(unittest.TestCase):
         구간 = re.search(r"^## 이월 금지 항목$(.*?)(?=^## |\Z)", 규약, re.M | re.S)
         self.assertIsNotNone(구간, "pipeline-protocol.md 에서 §이월 금지 항목을 찾지 못했습니다")
         규약항목 = re.findall(r"^\d+\. \*\*(.+?)\*\*", 구간.group(1), re.M)
-        선언된것 = [낱말 for 항목 in self.이월금지_중단점 for 낱말 in 항목["중단점"]]
+        # ID 승계 판정은 Step 2·4·7 세 곳에서 같은 이름으로 일어난다.
+        # 평탄화한 리스트 길이로 규약 항목 수와 비교하면 중복이 초과로 잡힌다.
+        선언된것 = sorted(
+            {낱말 for 항목 in self.이월금지_중단점 for 낱말 in 항목["중단점"]}
+        )
         self.assertEqual(
             len(선언된것), len(규약항목),
             f"규약의 이월 금지 항목 {len(규약항목)}개 중 gx-spec.md 가 선언하는 것은 "

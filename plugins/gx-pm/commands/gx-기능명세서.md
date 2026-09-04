@@ -28,6 +28,11 @@ argument-hint: "<요구사항정의서 또는 파일>"
 
 `templates/approval-protocol.md` 를 따른다. `[확인필요]` 목록을 함께 보여준다.
 
+## Step 3-1: ID 승계
+
+직전 버전이 `backup/` 에 있으면 **reconcile-ids** 스킬로 기능ID 를 승계한다.
+백업본이 없으면 첫 생성이므로 건너뛴다.
+
 ## Step 4: 개정이력 기록
 
 **manage-revision-history** 스킬로 개정이력 행을 만든다.
