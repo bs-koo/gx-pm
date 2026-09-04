@@ -6,7 +6,7 @@
 
 요구사항 분석부터 기능명세, 테이블 설계, 단위테스트, ID 추적까지
 
-[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-3.1.0-blue.svg)]()
 [![Skills](https://img.shields.io/badge/skills-16-green.svg)]()
 [![Commands](https://img.shields.io/badge/commands-7-orange.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -20,6 +20,8 @@
 `gx-pm`은 **공공/SI 프로젝트의 PM**을 위한 Claude Code 플러그인입니다.
 
 RFP를 넣으면 요구사항을 뽑아주고, 요구사항에서 기능(입력항목·처리내용·출력결과)을 도출하고, DDL에서 테이블정의서를 역생성하고, 기능 1건당 단위테스트 케이스를 기계적으로 만들고, 산출물 간 ID가 끊기지 않았는지 추적합니다.
+
+**v3.1.0**: 재생성해도 ID가 밀리지 않습니다. 제약이 비어 경계 케이스가 안 나오는 기능과, 근거가 부족한데 확인 요청이 0건인 상황을 게이트에서 알려줍니다.
 
 **v3.0.0**: 플러그인을 화면 축에서 **기능 축**으로 재정렬했습니다. 산출물이 13종에서 **5종**으로, 커맨드가 16개에서 **7개**로 줄었습니다.
 `/gx-spec` 하나로 요구사항 → 기능 → 테이블 → 단위테스트 → 추적매트릭스를 순서대로 만들며, 판단이 필요한 **승인 게이트 3곳**에서만 멈춥니다.
@@ -127,7 +129,7 @@ ID 체계에서 **파생 ID가 전부 사라져** 어떤 ID를 바꿔도 재채�
   B-요구사항정의서.md (35건, 마지막 수정: 1/15)
 
   1. 이어쓰기 — 기존 유지 + 새 항목 추가 (B-RE-036부터)
-  2. 새로쓰기 — backup/ 폴더에 백업 후 처음부터 재생성
+  2. 새로쓰기 — backup/ 폴더에 백업 후 본문 재생성 (ID는 직전 버전에서 승계)
   3. 열기     — 기존 내용에서 특정 항목만 수정/삭제
 ```
 
@@ -256,12 +258,13 @@ python utils/export-xlsx.py --dir 결과물/ --output 산출물.xlsx
 | `generate-unit-test-plan` | 기능명세서(AN-03)·테이블정의서(DE-08) → DE-13 단위테스트계획서. 기능 축 케이스 도출 |
 | `design-test-cases` | 입력항목·처리내용 → 테스트 케이스. 동등분할·경계값·결정테이블·상태전이, 정상/경계/예외 강제 |
 
-### 프로젝트 관리 (4개)
+### 프로젝트 관리 (5개)
 
 | 스킬 | 설명 |
 |------|------|
 | `load-project-profile` | 프로파일 자동 감지·로드. 모든 커맨드의 Step 0에서 자동 실행 |
-| `detect-existing-artifact` | 기존 산출물 감지 → 이어쓰기/새로쓰기/열기 3택 제공 |
+| `detect-existing-artifact` | 기존 산출물 감지 → 이어쓰기/새로쓰기/열기 3택 제공. 새로쓰기는 ID를 승계 |
+| `reconcile-ids` | 재생성 시 직전 버전과 대조해 ID 승계. 신규만 다음 순번, 삭제된 ID는 재사용 안 함 |
 | `scan-source-index` | 소스코드 3단계 점진 스캔 (Level 1 트리 ~2K, Level 2 헤더 ~15K 토큰). 실구현 대조용 |
 | `manage-revision-history` | 5종 공통 개정이력 행 관리. 직전 버전과 대조해 초안을 만들고 승인을 받음 |
 
@@ -349,13 +352,14 @@ gx-pm/                                      # 저장소 루트
 │   │   ├── reconcile-ids/
 │   │   ├── scan-source-index/
 │   │   └── trace-requirements/
-│   ├── templates/                         # 산출물 양식 + 정본 규약 11종
+│   ├── templates/                         # 산출물 양식 + 정본 규약 12종
 │   │   ├── AN-02-requirements-definition.md
 │   │   ├── AN-03-function-spec.md
 │   │   ├── AN-05-traceability-matrix.md
 │   │   ├── DE-08-table-definition.md
 │   │   ├── DE-13-unit-test-plan.md
 │   │   ├── approval-protocol.md
+│   │   ├── evidence-rules.md
 │   │   ├── id-naming-rules.md
 │   │   ├── pipeline-protocol.md
 │   │   ├── prerequisites.md
