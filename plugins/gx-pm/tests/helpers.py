@@ -38,11 +38,14 @@ def read_docs() -> list[tuple[Path, str]]:
     일부러 잘못된 예시를 담는 픽스처가 계약 검사에 걸리면 안 된다.
     저장소 루트 README 도 포함한다 — 사용자의 첫 접점이라 다른 문서와 같은
     계약 검사(개명·백틱·정본 참조 등)를 받아야 한다.
+    archive/ 는 커맨드에서 내린 산출물의 보관소라 검사 대상이 아니다.
     """
     docs = []
     for path in sorted(PLUGIN_ROOT.rglob("*.md")):
         if ".omc" in path.parts:
             continue
+        if "archive" in path.parts:
+            continue  # archive/ 는 보관소다. 옛 컬럼·옛 ID 규칙이 새 계약을 깨뜨린다
         if path.relative_to(PLUGIN_ROOT).parts[:2] == ("tests", "fixtures"):
             continue  # tests/fixtures 는 검사 대상이 아니라 검사 도구다 — 다른 위치의
             # "fixtures" 디렉터리(있다면)는 여전히 검사 대상이어야 한다
@@ -95,3 +98,54 @@ def command_names() -> set[str]:
 
 def template_names() -> set[str]:
     return {p.name for p in (PLUGIN_ROOT / "templates").glob("*.md")}
+
+
+def archived_skill_names() -> set[str]:
+    """archive/skills 에 보관된 스킬 이름.
+
+    CHANGELOG 는 내린 스킬을 이름째 인용한다 — 그걸 오타로 볼 수는 없다.
+    그렇다고 CHANGELOG 를 검사에서 통째로 빼면 진짜 오타도 같이 놓친다.
+    보관 목록을 따로 돌려주어, 이력 문서에서만 이 이름들을 허용한다.
+    """
+    보관 = PLUGIN_ROOT / "archive" / "skills"
+    if not 보관.is_dir():
+        return set()
+    return {d.name for d in 보관.iterdir() if d.is_dir()}
+
+
+def archived_template_names() -> set[str]:
+    """archive/templates 에 보관된 템플릿 파일명. 사유는 archived_skill_names 참조."""
+    보관 = PLUGIN_ROOT / "archive" / "templates"
+    if not 보관.is_dir():
+        return set()
+    return {p.name for p in 보관.glob("*.md")}
+
+
+def parse_column_ssot(template_name: str, section_title: str) -> list[str]:
+    """템플릿의 지정 절에서 컬럼 정본 목록을 뽑는다.
+
+    표는 `| # | 컬럼 | 규칙 |` 형태이고 둘째 칸이 컬럼명이다.
+    절 제목은 정확히 일치해야 한다 — 제목이 바뀌면 조용히 빈 목록을 내는 대신
+    호출부의 길이 검사가 실패하게 둔다.
+    """
+    import re
+
+    text = (PLUGIN_ROOT / "templates" / template_name).read_text(encoding="utf-8")
+    구간 = re.search(
+        rf"^#{{1,4}} {re.escape(section_title)}$(.*?)(?=^#{{1,4}} |\Z)",
+        text, re.M | re.S,
+    )
+    if 구간 is None:
+        return []
+    컬럼: list[str] = []
+    for 줄 in 구간.group(1).splitlines():
+        벗긴줄 = 줄.strip()
+        if not (벗긴줄.startswith("|") and 벗긴줄.endswith("|")):
+            continue
+        칸 = [c.strip() for c in 벗긴줄.strip("|").split("|")]
+        if len(칸) < 2 or set("".join(칸)) <= set("-: "):
+            continue
+        if 칸[0] == "#":
+            continue  # 머리행
+        컬럼.append(칸[1])
+    return 컬럼

@@ -46,117 +46,105 @@ DDL을 붙여넣어 주세요:
 
 ## 처리 절차
 
-### Step 1: DDL 파싱
-SQL CREATE TABLE 문을 파싱한다:
+### Step 1: 기존 스키마 로드
+
+DDL 을 파싱해 테이블·컬럼 목록을 만든다. 전건의 `구분` 을 `기존` 으로 둔다.
 
 ```sql
 CREATE TABLE 테이블명 (
   컬럼명 데이터타입(길이) [NOT NULL] [DEFAULT 값],
-  ...
-  PRIMARY KEY (컬럼1, 컬럼2),
+  PRIMARY KEY (컬럼1),
   FOREIGN KEY (컬럼) REFERENCES 참조테이블(참조컬럼)
 );
 ```
 
-추출 항목:
-- 테이블명 (물리명)
-- 각 컬럼: 컬럼명, 데이터타입, 길이, 소수점, 기본값, NOT NULL 여부
-- PRIMARY KEY 컬럼 목록
-- FOREIGN KEY 관계
+`COMMENT ON COLUMN` 이 있으면 `컬럼 논리명` 으로 쓴다.
 
-### Step 2: COMMENT 파싱 (있으면)
-```sql
-COMMENT ON TABLE 테이블명 IS '엔터티명';
-COMMENT ON COLUMN 테이블명.컬럼명 IS '속성명';
+DDL 이 없으면 기존 스키마 없음으로 보고 Step 2 로 간다 (전건이 신규가 된다).
+
+### Step 2: 기능명세 입력항목 매핑
+
+AN-03 의 `입력항목` 을 파싱해 기존 컬럼에 매핑한다.
+
+| 매핑 결과 | 처리 |
+|----------|------|
+| 기존 컬럼에 대응됨 | `연계기능ID` 를 채운다. `컬럼 논리명` 이 비었으면 입력항목의 항목명으로 채운다 |
+| 대응 없음 | **신규 컬럼 후보.** `구분` 을 `신규` 로 둔다 |
+| 기존 컬럼인데 제약이 다름 | `구분` 은 `기존` 으로 둔다 — 스키마를 바꾸지 않는다 |
+
+제약 불일치는 DE-08 의 열에 남기지 않는다 — 15컬럼 정본에 그 자리가 없다.
+대신 버리지 않고 Step 5 승인 게이트의 `[제약 불일치]` 블록으로 한 번 보고해 사용자 판단을 받는다.
+`입력항목 50자 ↔ 컬럼 VARCHAR(100)` 은 둘 중 하나가 틀렸다는 뜻이다.
+
+### Step 3: 기존 컬럼 표준 검증
+
+`sqi-comn-term` MCP 가 세션에 있는지 먼저 확인한다. 없으면
+`docs/표준용어-mcp-연계.md` 의 설치 안내를 출력하고 **중단한다.**
+표준 검증 없이 컬럼명을 **지어내지 않는다.**
+
+`sourcePriority` 는 프로파일에서 읽고, 없으면 `["BLDG_ENGY", "MOIS_STD"]` 를 제안하고 묻는다.
+
+```
+validate_column(columnNames=[기존 컬럼 전건], sourcePriority=[...])
 ```
 
-COMMENT가 없으면 Step 3에서 한글명을 추론한다.
+| 결과 | 표준 판정 | 표준 권고명 |
+|------|----------|-----------|
+| `PASS` | `표준준수` | 공란 |
+| `PARTIAL` · `FAIL` | `현행유지` | `표준은 {suggestedColumnName}` |
 
-### Step 3: 한글명 추론
-COMMENT가 없는 경우:
-- 테이블명에서 엔터티명 추론 (예: `USER_INFO` → `사용자 정보`)
-- 컬럼명에서 속성명 추론 (예: `EMP_NO` → `직원번호`, `REG_DT` → `등록일시`)
-- 추론 결과를 사용자에게 확인 요청
+**기존 컬럼을 표준형으로 바꾸자고 제안하지 않는다.**
 
-공통 컬럼명 사전:
-| 영문 패턴 | 한글 속성명 |
-|----------|-----------|
-| *_NO | ~번호 |
-| *_NM | ~명 |
-| *_CD | ~코드 |
-| *_DT, *_DTM | ~일시 |
-| *_YN | ~여부 |
-| *_CN | ~내용 |
-| *_SN | ~일련번호 |
-| REG_* | 등록~ |
-| MOD_*, UPD_* | 수정~ |
-| DEL_* | 삭제~ |
-| USE_* | 사용~ |
+### Step 4: 신규 컬럼 표준 도출
 
-### Step 4: 테이블정의서 생성
-DE-08 양식에 맞게 출력한다.
+```
+translate_column(inputs=[신규 컬럼 논리명 전건], sourcePriority=[...])
+```
+
+| 결과 | 처리 |
+|------|------|
+| `FULL` | `신규적용` 으로 확정 제시. `근거` 에 `{ctgryNms} · {단어 매칭}` |
+| `PARTIAL` · `AI_SUGGESTED` | 근거와 함께 제시. 사용자가 반려하면 대안을 묻는다 |
+| `FAIL` · `decisionRequired=true` | **그 자리에서 사용자 선택.** `humanHint` 를 그대로 보여준다 |
+| `dataTypeCandidates` 다건 | 타입 후보를 나열하고 선택을 요청 |
+
+이 중단점은 **게이트로 이월하지 않는다** — `templates/pipeline-protocol.md` §이월 금지 항목.
+컬럼명이 확정돼야 DE-13 의 경계값이 그 위에 선다.
+
+### Step 5: 승인 게이트
+
+신규 컬럼만 승인 대상이다. 기존은 확인용으로만 보여준다.
+
+```
+신규 컬럼 12건에 표준 컬럼명을 제안합니다.  (출처: BLDG_ENGY → MOIS_STD)
+
+[신규 · 승인 필요]
+  권한명        → AUTH_NM       권한=AUTH, 명=NM              VARCHAR(200)
+  관측일자      → OBSRVN_YMD    관측=OBSRVN, 일자=YMD          CHAR(8)
+  일평균기온    → ???_ARTMP     기온=ARTMP, 앞 단어 미확정  선택 필요
+
+[기존 · 변경하지 않음]  비표준이지만 현재 사용 중이라 유지합니다.
+  REGION_CD   (표준은 RGN_CD)    · TB_BLDG
+  LATITUDE    (표준은 LAT)       · TB_BLDG
+
+[제약 불일치]  기능명세와 스키마가 어긋납니다.
+  FN-007 권한명 50자  ↔  TB_AUTH.AUTH_NM VARCHAR(100)
+```
+
+**AskUserQuestion 으로 묻는다.** `templates/approval-protocol.md` 의 인자 규칙을 따른다.
+
+### Step 6: 개정이력
+
+**manage-revision-history** 스킬로 개정이력 행을 만든다.
+불변 키는 `테이블명 + 컬럼명` 이다.
 
 ## 출력 형식
 
-```
-## 테이블정의서 — {시스템명}
+`templates/DE-08-table-definition.md` 의 컬럼 순서를 그대로 쓴다.
+개정이력 표를 맨 위에 둔다.
 
-### {엔터티명} ({테이블명})
+## 주의사항
 
-| 컬럼명 | 속성명 | 데이터타입 | 길이 | 소수점 | 기본값 | PK | FK | NotNull |
-|--------|--------|-----------|------|--------|--------|----|----|---------|
-| EMP_NO | 직원번호 | VARCHAR2 | 13 | | | Y | | Y |
-| CORS_CD | 과정코드 | VARCHAR2 | 50 | | | Y | | Y |
-```
-
-테이블별로 섹션을 나누어 출력한다.
-
-## 역방향: 테이블정의서 → DDL
-
-사용자가 요청하면 반대 방향 변환도 수행한다:
-- 마크다운 테이블 → CREATE TABLE SQL
-- ERDCloud에 바로 입력할 수 있는 형식으로 출력
-
-## 대량 DDL 처리
-
-테이블이 많은 경우 (50개 이상):
-1. 전체 테이블 목록을 먼저 표시 (테이블명 + 컬럼 수만)
-2. AskUserQuestion으로 확인: "전체 {N}개 테이블을 변환합니다. 진행할까요?"
-3. 10개씩 끊어서 표시 + 승인 루프 (한 번에 50개 표를 보여주면 확인이 어려움)
-4. 모든 테이블 승인 후 전체를 하나의 파일로 저장
-
-## Entity 클래스에서 역추출
-
-DDL 대신 JPA Entity 클래스에서도 테이블정의서를 생성할 수 있다:
-
-```
-Glob 패턴:
-  - **/entity/**/*.java
-  - **/domain/**/*.java
-  - **/*Entity.java
-
-추출 항목:
-  - @Table(name="...") → 테이블명
-  - @Column(name="...", length=N, nullable=false) → 컬럼 정보
-  - @Id → PK
-  - @ManyToOne, @JoinColumn → FK 관계
-```
-
-프로파일의 `type`이 `documentation`(C)이고 소스 경로가 있으면,
-DDL 입력 대신 Entity 클래스 스캔을 선택지로 제공한다:
-
-**AskUserQuestion 도구**로 다음 내용을 질문한다:
-
-```
-테이블정의서를 어떤 소스에서 생성할까요?
-  1. DDL 붙여넣기 (DataGrip/DBeaver에서 복사)
-  2. Entity 클래스 스캔 (소스코드의 @Entity에서 추출)
-  3. 프로젝트 DDL 파일 사용 (ddl.sql)
-```
-
-## 지원 DB
-
-- Oracle (VARCHAR2, NUMBER, DATE, CLOB 등)
-- PostgreSQL (varchar, integer, timestamp 등)
-- MySQL (varchar, int, datetime 등)
-- 자동 감지: 데이터타입으로 DB 유형 판별 (프로파일의 db 설정값도 참조)
+- 요구사항에서 테이블을 추론하지 않는다. 이 스킬은 역생성 전용이다
+- 기존 컬럼의 이름·타입·제약을 바꾸지 않는다
+- 표준 검증 없이 컬럼명을 지어내지 않는다

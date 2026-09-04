@@ -1,7 +1,31 @@
-import re
 import unittest
 
-from helpers import PLUGIN_ROOT, load_export_module, read_docs
+from helpers import load_export_module, parse_column_ssot, read_docs
+
+
+def _다중세트(테스트: unittest.TestCase, 이름: str) -> str:
+    """컬럼 세트가 둘인 임시 프로필을 등록하고 그 키를 돌려준다.
+
+    현역 산출물 6종은 전부 세트가 하나라, 다중 세트 코드 경로를 실제 프로필로는
+    검증할 수 없다. 검사 대상은 프로필 데이터가 아니라 `_best_column_set` 의 동작이므로
+    임시 프로필로 고정한다.
+
+    **모듈은 캐싱된다.** 끼운 프로필을 그대로 두면 다른 테스트
+    (`test_모듈이_로드되고_산출물_프로필을_노출한다`·`test_모든_프로필_컬럼이_문서에_존재한다`)가
+    실행 순서에 따라 깨진다. addCleanup 으로 반드시 되돌린다.
+    """
+    mod = load_export_module()
+    테스트.addCleanup(mod.DOCUMENT_PROFILES.pop, 이름, None)
+    mod.DOCUMENT_PROFILES[이름] = {
+        "sheet_name": "세트 1 시트",
+        "sheet_names": ["세트 1 시트", "세트 2 시트"],
+        "columns": [
+            ["레벨", "산출물 코드", "대상"],
+            ["기준", "목표치", "비고"],
+        ],
+        "merge_columns": [],
+    }
+    return 이름
 
 
 class LoaderTest(unittest.TestCase):
@@ -9,10 +33,18 @@ class LoaderTest(unittest.TestCase):
         self.mod = load_export_module()
 
     def test_모듈이_로드되고_산출물_프로필을_노출한다(self):
-        profiles = self.mod.DOCUMENT_PROFILES
-        self.assertIn("요구사항정의서", profiles)
-        self.assertIn("결함관리대장", profiles)
-        self.assertIn("시스템테스트계획서", profiles)
+        """기능 축 전환(v3.0.0) 후 프로필은 5종 + 개정이력 = 6개다.
+
+        화면 축 산출물의 프로필을 지우지 않으면 그 컬럼명을 어떤 문서도 만들지 않게 되어
+        test_모든_프로필_컬럼이_문서에_존재한다 가 잡는다. 되살리는 법은 archive/README.md.
+        """
+        self.assertEqual(
+            sorted(self.mod.DOCUMENT_PROFILES),
+            sorted([
+                "개정이력", "요구사항정의서", "기능명세서",
+                "테이블정의서", "단위테스트계획서", "추적매트릭스",
+            ]),
+        )
 
     def test_모든_프로필이_컬럼_세트_리스트를_가진다(self):
         for name, profile in self.mod.DOCUMENT_PROFILES.items():
@@ -105,23 +137,30 @@ class MatchedSetIndexTest(unittest.TestCase):
         self.mod = load_export_module()
 
     def test_본문_표는_매칭된_컬럼_세트_인덱스를_반환한다(self):
-        rows = [["기능구분ID", "기능구분명", "기능ID", "기능명",
-                 "화면ID", "화면명", "사용자구분", "단위테스트ID"]]
+        rows = [["테스트ID", "연계기능ID", "연계요구사항ID", "사전조건", "입력",
+                 "기대결과", "사후조건", "의존성", "테스트담당자", "수행일", "결과"]]
         self.assertEqual(self.mod._matched_set_index(rows, "단위테스트계획서"), 0)
 
     def test_두번째_컬럼_세트도_구분한다(self):
-        rows = [["화면ID", "화면명", "단위테스트ID", "테스트케이스ID", "요구사항ID",
-                 "검사기준 항목", "설계기법", "구분", "사전조건", "입력 데이터"]]
-        self.assertEqual(self.mod._matched_set_index(rows, "단위테스트계획서"), 1)
+        """현역 산출물 6종은 전부 컬럼 세트가 하나다 — 그래도 코드 경로는 살아 있다.
+
+        `_best_column_set` 은 여전히 세트를 순회하며 최적 세트를 고르고, `sheet_names` 로
+        세트별 시트명을 준다. archive/ 에서 다중 세트 산출물(TE-01)을 되살리면 그때
+        이 경로가 다시 쓰인다. 현역 프로필로는 검증할 수 없으므로 임시 프로필을 끼워
+        경로 자체를 고정한다 — 지우면 다중 세트 지원이 조용히 죽는다.
+        """
+        rows = [["기준", "목표치", "비고"]]
+        self.assertEqual(self.mod._matched_set_index(rows, _다중세트(self, "multi-a")), 1)
 
     def test_보조_표는_None_을_반환한다(self):
         rows = [["경계값", "값", "출처"]]
         self.assertIsNone(self.mod._matched_set_index(rows, "단위테스트계획서"))
 
     def test_일부만_겹치는_보조_표도_None_을_반환한다(self):
-        # 교집합 1/8 = 0.125 — 0.5 임계값이 실제로 하중을 받는지 본다.
+        # 교집합 5/11 ≈ 0.45 — 0.5 임계값이 실제로 하중을 받는지 본다.
         # 이 단언이 없으면 임계값을 0 으로 되돌려도 테스트가 통과한다.
-        self.assertIsNone(self.mod._matched_set_index([["화면ID", "계"]], "단위테스트계획서"))
+        rows = [["테스트ID", "연계기능ID", "사전조건", "입력", "기대결과", "계"]]
+        self.assertIsNone(self.mod._matched_set_index(rows, "단위테스트계획서"))
 
     def test_산출물_유형이_없으면_None_을_반환한다(self):
         rows = [["결함ID", "심각도"]]
@@ -158,9 +197,11 @@ class SheetNamingTest(unittest.TestCase):
         self.mod = load_export_module()
 
     def test_컬럼_세트별로_다른_시트명을_준다(self):
-        names = self.mod.DOCUMENT_PROFILES["단위테스트계획서"]["sheet_names"]
-        self.assertEqual(names[0], "DE-13 단위테스트계획")
-        self.assertEqual(names[1], "DE-13 테스트케이스")
+        # 현역 6종은 세트가 하나뿐이라 임시 프로필로 검증한다 — 사유는
+        # MatchedSetIndexTest.test_두번째_컬럼_세트도_구분한다 의 docstring 참조.
+        names = self.mod.DOCUMENT_PROFILES[_다중세트(self, "multi-b")]["sheet_names"]
+        self.assertEqual(names[0], "세트 1 시트")
+        self.assertEqual(names[1], "세트 2 시트")
 
 
 class ProfileColumnBindingTest(unittest.TestCase):
@@ -203,36 +244,28 @@ class An05ColumnSsotTest(unittest.TestCase):
 
     def setUp(self):
         self.mod = load_export_module()
-        템플릿 = (
-            PLUGIN_ROOT / "templates" / "AN-05-traceability-matrix.md"
-        ).read_text(encoding="utf-8")
-        구간 = re.search(
-            r"^### 본문 표 헤더 \(플랫[^\n]*\)$(.*?)(?=^#{1,3} |\Z)",
-            템플릿, re.M | re.S,
+        self.정본컬럼 = parse_column_ssot(
+            "AN-05-traceability-matrix.md", "본문 컬럼 (정본)"
         )
-        self.assertIsNotNone(
-            구간,
-            "AN-05 템플릿에서 '### 본문 표 헤더 (플랫…)' 절을 찾지 못했습니다 "
-            "— 절이 삭제됐거나 제목이 바뀌었습니다",
-        )
-        self.정본컬럼 = []
-        for 줄 in 구간.group(1).splitlines():
-            벗긴줄 = 줄.strip()
-            if not (벗긴줄.startswith("|") and 벗긴줄.endswith("|")):
-                continue
-            칸 = [c.strip() for c in 벗긴줄.strip("|").split("|")]
-            if len(칸) != 3 or set("".join(칸)) <= set("-: "):
-                continue
-            if 칸[0] == "#":
-                continue  # 머리행
-            self.정본컬럼.append(칸[1])
 
     def test_정본_플랫_헤더가_비어있지_않다(self):
         """파싱이 조용히 빈 목록을 내면 아래 두 테스트가 공허하게 통과한다."""
         self.assertGreaterEqual(
-            len(self.정본컬럼), 20,
-            f"정본 플랫 헤더에서 뽑은 컬럼이 20개 미만입니다: {self.정본컬럼}",
+            len(self.정본컬럼), 9,
+            f"정본 헤더에서 뽑은 컬럼이 9개 미만입니다: {self.정본컬럼}",
         )
+
+    def test_기능_축_컬럼이_정본에_있다(self):
+        """29컬럼 감리형에서 9컬럼 기능 축 대조기로 개편한 핵심 컬럼들이다."""
+        for 컬럼 in ["기능ID", "테이블·컬럼", "테스트 수", "Pass/Fail", "누락"]:
+            with self.subTest(컬럼=컬럼):
+                self.assertIn(컬럼, self.정본컬럼)
+
+    def test_폐기된_컬럼이_정본에_없다(self):
+        """감리형 29컬럼 중 화면·프로그램·제안요청 축은 기능 축 개편으로 사라졌다."""
+        for 폐기 in ["제안요청ID", "수용여부", "화면ID", "프로그램ID", "과업완료여부"]:
+            with self.subTest(컬럼=폐기):
+                self.assertNotIn(폐기, self.정본컬럼)
 
     def test_프로필의_모든_컬럼이_정본에_있다(self):
         """프로필에만 있는 컬럼은 아무도 만들지 않는 유령 컬럼이다."""
@@ -243,14 +276,14 @@ class An05ColumnSsotTest(unittest.TestCase):
                 with self.subTest(세트=세트번호, 컬럼=컬럼):
                     self.assertIn(
                         컬럼, self.정본컬럼,
-                        f"프로필의 '{컬럼}' 이 AN-05 템플릿의 플랫 헤더에 없습니다 "
+                        f"프로필의 '{컬럼}' 이 AN-05 템플릿의 정본 컬럼에 없습니다 "
                         "— 정본에 추가하거나 프로필에서 빼세요",
                     )
 
     def test_정본의_모든_컬럼이_전체_세트에_있다(self):
         """정본에만 있는 컬럼은 xlsx 에서 재배열되지 않고 뒤로 밀린다.
 
-        전체 세트가 정본을 다 담아야 한다. 축약 세트는 부분집합이므로 검사하지 않는다.
+        컬럼 세트가 하나뿐이므로 그 세트가 정본을 그대로 담아야 한다.
         """
         전체세트 = self.mod.DOCUMENT_PROFILES["추적매트릭스"]["columns"][0]
         for 컬럼 in self.정본컬럼:
@@ -260,6 +293,210 @@ class An05ColumnSsotTest(unittest.TestCase):
                     f"정본의 '{컬럼}' 이 프로필 전체 세트에 없습니다 "
                     "— xlsx 에서 공공 양식 순서로 재배열되지 않습니다",
                 )
+
+
+class MergeRangesTest(unittest.TestCase):
+    """참조 양식은 대분류·중분류를 같은 값끼리 세로 병합한다.
+
+    행 인덱스는 시트 기준이다. rows[0] 이 헤더라 시트 1행,
+    rows[i] 는 시트 i+1 행이 된다.
+    """
+
+    def setUp(self):
+        self.mod = load_export_module()
+
+    def test_연속_동일값을_병합_범위로_묶는다(self):
+        rows = [
+            ["대분류", "중분류", "요구사항ID"],
+            ["데이터 전처리", "상대평가기준", "REQ-001"],
+            ["데이터 전처리", "상대평가기준", "REQ-002"],
+            ["데이터 전처리", "달력맞춤", "REQ-004"],
+        ]
+        구간 = self.mod.merge_ranges(rows, ["대분류", "중분류"])
+        self.assertIn((0, 2, 4), 구간, "대분류 3행이 하나로 묶여야 합니다")
+        self.assertIn((1, 2, 3), 구간, "중분류 2행이 하나로 묶여야 합니다")
+
+    def test_한_행짜리는_병합하지_않는다(self):
+        rows = [["대분류", "중분류"], ["A", "x"], ["B", "y"]]
+        self.assertEqual(self.mod.merge_ranges(rows, ["대분류", "중분류"]), [])
+
+    def test_빈값은_병합하지_않는다(self):
+        """빈칸이 이어지는 것은 같은 값이 아니라 값이 없는 것이다."""
+        rows = [["대분류"], [""], [""], [""]]
+        self.assertEqual(self.mod.merge_ranges(rows, ["대분류"]), [])
+
+    def test_병합_대상이_아닌_컬럼은_묶지_않는다(self):
+        rows = [["요구사항ID"], ["REQ-001"], ["REQ-001"]]
+        self.assertEqual(self.mod.merge_ranges(rows, ["대분류"]), [])
+
+    def test_헤더에_없는_병합_컬럼은_무시한다(self):
+        rows = [["중분류"], ["A"], ["A"]]
+        self.assertEqual(self.mod.merge_ranges(rows, ["대분류", "중분류"]), [(0, 2, 3)])
+
+    def test_떨어진_동일값은_따로_묶는다(self):
+        """정렬이 깨진 표를 억지로 이어 붙이면 없는 사실을 만든다."""
+        rows = [["대분류"], ["A"], ["A"], ["B"], ["A"], ["A"]]
+        구간 = self.mod.merge_ranges(rows, ["대분류"])
+        self.assertEqual(sorted(구간), [(0, 2, 3), (0, 5, 6)])
+
+
+class RevisionHistoryProfileTest(unittest.TestCase):
+    def setUp(self):
+        self.mod = load_export_module()
+
+    def test_개정이력_프로필이_있다(self):
+        self.assertIn("개정이력", self.mod.DOCUMENT_PROFILES)
+
+    def test_개정이력_컬럼_여섯_개가_순서대로다(self):
+        컬럼 = self.mod.DOCUMENT_PROFILES["개정이력"]["columns"][0]
+        self.assertEqual(
+            컬럼,
+            ["버전", "개정일", "개정 사유", "개정 내용", "작성자", "승인자"],
+        )
+
+    def test_모든_프로필이_merge_columns_키를_가진다(self):
+        """병합 대상이 없는 산출물은 빈 리스트를 갖는다 — 키 자체가 없으면
+        create_xlsx 가 KeyError 로 죽는다."""
+        for 이름, 프로필 in self.mod.DOCUMENT_PROFILES.items():
+            with self.subTest(산출물=이름):
+                self.assertIn("merge_columns", 프로필)
+                self.assertIsInstance(프로필["merge_columns"], list)
+
+
+class An02ColumnSsotTest(unittest.TestCase):
+    """AN-02 컬럼 정본은 templates/AN-02-requirements-definition.md 다."""
+
+    def setUp(self):
+        self.mod = load_export_module()
+        self.정본 = parse_column_ssot(
+            "AN-02-requirements-definition.md", "본문 컬럼 (정본)"
+        )
+
+    def test_정본이_열_개다(self):
+        self.assertEqual(
+            len(self.정본), 10,
+            f"AN-02 정본 컬럼이 10개가 아닙니다: {self.정본}",
+        )
+
+    def test_정본_순서가_참조_양식과_같다(self):
+        self.assertEqual(self.정본, [
+            "번호", "요구사항ID", "대분류", "중분류", "요구사항명",
+            "요구사항 상세내용", "비고", "상태", "요구사항 근거", "변경 근거",
+        ])
+
+    def test_프로필이_정본과_같다(self):
+        self.assertEqual(
+            self.mod.DOCUMENT_PROFILES["요구사항정의서"]["columns"][0], self.정본
+        )
+
+    def test_분류_두_열이_병합_대상이다(self):
+        self.assertEqual(
+            self.mod.DOCUMENT_PROFILES["요구사항정의서"]["merge_columns"],
+            ["대분류", "중분류"],
+        )
+
+    def test_폐기된_컬럼이_프로필에_남아있지_않다(self):
+        프로필 = self.mod.DOCUMENT_PROFILES["요구사항정의서"]["columns"][0]
+        for 폐기 in ["제안요청ID", "수용여부", "소분류", "요구내역"]:
+            with self.subTest(컬럼=폐기):
+                self.assertNotIn(폐기, 프로필)
+
+
+class An03ColumnSsotTest(unittest.TestCase):
+    """AN-03 컬럼 정본은 templates/AN-03-function-spec.md 다."""
+
+    def setUp(self):
+        self.mod = load_export_module()
+        self.정본 = parse_column_ssot("AN-03-function-spec.md", "본문 컬럼 (정본)")
+
+    def test_정본이_열_개다(self):
+        self.assertEqual(len(self.정본), 10, f"AN-03 정본이 10개가 아닙니다: {self.정본}")
+
+    def test_정본_순서가_설계와_같다(self):
+        self.assertEqual(self.정본, [
+            "기능ID", "대분류", "중분류", "기능명", "기능설명",
+            "입력항목", "처리내용(로직)", "출력결과", "연계요구사항ID", "비고",
+        ])
+
+    def test_프로필이_정본과_같다(self):
+        self.assertEqual(
+            self.mod.DOCUMENT_PROFILES["기능명세서"]["columns"][0], self.정본
+        )
+
+    def test_분류_두_열이_병합_대상이다(self):
+        self.assertEqual(
+            self.mod.DOCUMENT_PROFILES["기능명세서"]["merge_columns"],
+            ["대분류", "중분류"],
+        )
+
+
+class De08ColumnSsotTest(unittest.TestCase):
+    """DE-08 컬럼 정본은 templates/DE-08-table-definition.md 다.
+
+    이 문서는 역생성 전용이다 — 기존 컬럼은 고정하고 신규 컬럼만 표준용어사전
+    근거로 제안한다. `구분`·`표준 판정`이 그 승인 게이트를 데이터로 남긴다.
+    """
+
+    def setUp(self):
+        self.mod = load_export_module()
+        self.정본 = parse_column_ssot("DE-08-table-definition.md", "본문 컬럼 (정본)")
+
+    def test_정본이_열다섯_개다(self):
+        self.assertEqual(len(self.정본), 15, f"DE-08 정본이 15개가 아닙니다: {self.정본}")
+
+    def test_구분과_표준_판정_열이_있다(self):
+        for 컬럼 in ["구분", "표준 판정", "표준 권고명", "근거", "연계기능ID"]:
+            with self.subTest(컬럼=컬럼):
+                self.assertIn(컬럼, self.정본)
+
+    def test_프로필이_정본과_같다(self):
+        self.assertEqual(
+            self.mod.DOCUMENT_PROFILES["테이블정의서"]["columns"][0], self.정본
+        )
+
+    def test_테이블명이_병합_대상이다(self):
+        self.assertEqual(
+            self.mod.DOCUMENT_PROFILES["테이블정의서"]["merge_columns"], ["테이블명"]
+        )
+
+
+class De13ColumnSsotTest(unittest.TestCase):
+    """DE-13 컬럼 정본은 templates/DE-13-unit-test-plan.md 다.
+
+    종전에는 화면당 27개 검사기준 체크리스트 + 테스트케이스 시트, 두 벌 구조였다.
+    지금은 기능명세(AN-03)·테이블정의서(DE-08)에서 케이스를 기계적으로 도출하는
+    11컬럼 단일 시트다. 27개 검사기준 시트가 정말 없어졌는지는 이 테스트가 잡는다.
+    """
+
+    def setUp(self):
+        self.mod = load_export_module()
+        self.정본 = parse_column_ssot("DE-13-unit-test-plan.md", "본문 컬럼 (정본)")
+
+    def test_정본이_열한_개다(self):
+        self.assertEqual(len(self.정본), 11, f"DE-13 정본이 11개가 아닙니다: {self.정본}")
+
+    def test_정본_순서가_설계와_같다(self):
+        self.assertEqual(self.정본, [
+            "테스트ID", "연계기능ID", "연계요구사항ID", "사전조건", "입력",
+            "기대결과", "사후조건", "의존성", "테스트담당자", "수행일", "결과",
+        ])
+
+    def test_프로필이_한_시트다(self):
+        """27개 검사기준 시트를 폐지했으므로 컬럼 세트는 하나다."""
+        프로필 = self.mod.DOCUMENT_PROFILES["단위테스트계획서"]
+        self.assertEqual(len(프로필["columns"]), 1)
+        self.assertNotIn("sheet_names", 프로필)
+
+    def test_화면_축_컬럼이_남아있지_않다(self):
+        프로필 = self.mod.DOCUMENT_PROFILES["단위테스트계획서"]["columns"][0]
+        for 폐기 in ["화면ID", "화면명", "단위테스트ID", "검사기준 항목", "사용자구분"]:
+            with self.subTest(컬럼=폐기):
+                self.assertNotIn(폐기, 프로필)
+
+    def test_프로필이_정본과_같다(self):
+        self.assertEqual(
+            self.mod.DOCUMENT_PROFILES["단위테스트계획서"]["columns"][0], self.정본
+        )
 
 
 if __name__ == "__main__":
