@@ -52,10 +52,20 @@ argument-hint: "<RFP 텍스트 또는 파일>"
 - 요구사항ID 는 프로파일의 `idNaming.requirement` 를 따른다. 없으면 AskUserQuestion 으로
   한 번 묻고 저장한다 (기본 제안 `REQ-{3자리}`). 규칙의 정본은 `templates/id-naming-rules.md`
 - 상태는 최초 작성이면 전건 `신규`, 재실행이면
-  `templates/AN-02-requirements-definition.md` 의 상태 판정표를 따른다
+  `templates/AN-02-requirements-definition.md` 의 상태 판정표를 따른다.
+  **그 판정은 요구사항ID 를 키로 대조하므로 Step 2-1 뒤에 채운다** — 앞에 두면
+  새로쓰기 경로에서 전건이 `신규` 로 나온다
 - **classify-requirements 의 분류 결과 표는 승인용 작업용 뷰다.** `구분`·`비기능유형`·
   `소분류`·`우선순위`·`영향도` 는 AN-02 10컬럼에 자리가 없다 — 그 뷰로 확인만 받고,
   AN-02 는 `templates/AN-02-requirements-definition.md` 의 컬럼 정본대로 만든다
+
+### Step 2-1: ID 승계
+
+직전 버전이 `backup/` 에 있으면 **reconcile-ids** 스킬로 요구사항ID 를 승계한다.
+백업본이 없으면 첫 생성이므로 건너뛴다.
+개정이력보다 **먼저** 돈다 — 불변 키 대조가 ID 확정을 전제한다.
+**승인(Step 3)보다도 먼저 돈다** — 사용자가 검토하는 표에 최종 ID 가 실려 있어야 한다
+(`skills/reconcile-ids/SKILL.md` §언제 도는가).
 
 ### Step 3: 요구사항 검토 [필수 중단점 — 승인 루프]
 
@@ -81,12 +91,6 @@ argument-hint: "<RFP 텍스트 또는 파일>"
 - 공공/SI 5단계: P1 법적필수 → P2 감리필수 → P3 과업명시 → P4 발주처요청 → P5 품질개선
 - 영향도(높/중/저) + 시급도 매트릭스
 - 감리 지적 고위험 항목 자동 식별
-
-### Step 4-1: ID 승계
-
-직전 버전이 `backup/` 에 있으면 **reconcile-ids** 스킬로 요구사항ID 를 승계한다.
-백업본이 없으면 첫 생성이므로 건너뛴다.
-개정이력보다 **먼저** 돈다 — 불변 키 대조가 ID 확정을 전제한다.
 
 ### Step 5: 개정이력 기록
 

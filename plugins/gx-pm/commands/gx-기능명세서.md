@@ -24,14 +24,16 @@ argument-hint: "<요구사항정의서 또는 파일>"
 
 **generate-function-spec** 스킬을 수행한다.
 
-## Step 3: 승인 루프
-
-`templates/approval-protocol.md` 를 따른다. `[확인필요]` 목록을 함께 보여준다.
-
-## Step 3-1: ID 승계
+## Step 2-1: ID 승계
 
 직전 버전이 `backup/` 에 있으면 **reconcile-ids** 스킬로 기능ID 를 승계한다.
 백업본이 없으면 첫 생성이므로 건너뛴다.
+**승인(Step 3)보다 먼저 돈다** — 사용자가 검토하는 표에 최종 ID 가 실려 있어야 한다
+(`skills/reconcile-ids/SKILL.md` §언제 도는가).
+
+## Step 3: 승인 루프
+
+`templates/approval-protocol.md` 를 따른다. `[확인필요]` 목록을 함께 보여준다.
 
 ## Step 4: 개정이력 기록
 

@@ -961,7 +961,15 @@ class IdSuccessionTest(unittest.TestCase):
         )
 
     def test_개정이력보다_먼저_돈다고_명시한다(self):
-        self.assertIn("manage-revision-history", self.text)
+        """낱말 존재만 보면 Step 7 을 통째로 지워도 통과한다.
+
+        `manage-revision-history` 는 §왜 필요한가에도 나오므로 파일 전체 검사는
+        순서 계약을 지키지 못한다. Step 7 절 안에서 순서 문장까지 함께 본다.
+        """
+        구간 = re.search(r"^### Step 7(.*?)(?=^### |^## |\Z)", self.text, re.M | re.S)
+        self.assertIsNotNone(구간, "reconcile-ids 의 Step 7 절을 찾지 못했습니다")
+        self.assertIn("manage-revision-history", 구간.group(1))
+        self.assertIn("순서를 뒤집지 않는다", 구간.group(1))
 
     def test_새로쓰기가_ID_승계를_거친다(self):
         """새로쓰기의 의도는 '본문을 다시 뽑겠다' 이지 'ID 를 날리겠다' 가 아니다.
