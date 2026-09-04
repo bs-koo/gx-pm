@@ -822,6 +822,28 @@ class EvidenceRuleTest(unittest.TestCase):
             with self.subTest(집계=집계):
                 self.assertIn(집계, 스킬)
 
+    def test_단위테스트_스킬이_제약_미상을_보강에서_제외한다(self):
+        """제약이 없는데 경계값을 만들면 지어낸 테스트가 된다.
+
+        v3.0.0 Step 6 은 '제약이 있는데 케이스가 없으면' 만 보강했다. 제약이 아예
+        없는 경우는 정상+미입력 2건에서 멈추는데 '정상 케이스만' 에도 안 걸려
+        조용히 통과했다.
+        """
+        스킬 = (
+            PLUGIN_ROOT / "skills" / "generate-unit-test-plan" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("제약 미상", 스킬)
+        self.assertIn("templates/evidence-rules.md", 스킬)
+        구간 = re.search(
+            r"^### Step 6: 충분성 검증$(.*?)(?=^### |\Z)", 스킬, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "generate-unit-test-plan 의 Step 6 절을 찾지 못했습니다")
+        self.assertIn("제약 미상", 구간.group(1))
+        self.assertRegex(
+            구간.group(1), r"보강하지 않는다|지어내",
+            "Step 6 에 '제약이 없으면 보강하지 않는다' 는 지시가 없습니다",
+        )
+
 
 class BoundaryRuleTest(unittest.TestCase):
     """드라이런에서 놓친 4건(영값·통과 측 경계·하위 정밀도)의 재발을 막는다.
