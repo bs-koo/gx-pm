@@ -9,6 +9,7 @@ Thumbs.db
 
 # oh-my-claudecode runtime
 .omc/
+.dev/
 
 # Research artifacts
 .research/

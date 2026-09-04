@@ -300,17 +300,25 @@ class PipelineProtocolTest(unittest.TestCase):
         self.assertIn("시안", self.text)
         self.assertIn("신규 컬럼명", self.text)
 
-    def test_이월_금지_항목이_세_개다(self):
-        """화면 축 제거로 화면 분리·ID 확정 두 항목이 소멸했다."""
+    def test_이월_금지_항목이_네_개다(self):
+        """화면 축 제거로 화면 분리·ID 확정 두 항목이 소멸했고(v3.0.0),
+
+        v3.1.0 에서 ID 승계 판정 애매성이 들어왔다. 이건 v2 의 'ID 확정' 과 다르다 —
+        파생 ID 를 정하는 것이 아니라 직전 버전의 어느 항목과 같은지를 정하는 것이다.
+        """
         구간 = re.search(
             r"^## 이월 금지 항목$(.*?)(?=^## |\Z)", self.text, re.M | re.S
         )
         self.assertIsNotNone(구간, "이월 금지 항목 절을 찾지 못했습니다")
         번호 = re.findall(r"^\d+\.\s", 구간.group(1), re.M)
         self.assertEqual(
-            len(번호), 3,
-            f"이월 금지 항목이 3개가 아닙니다: {len(번호)}개",
+            len(번호), 4,
+            f"이월 금지 항목이 4개가 아닙니다: {len(번호)}개",
         )
+
+    def test_이월_금지_항목에_ID_승계_판정이_있다(self):
+        self.assertIn("ID 승계 판정", self.text)
+        self.assertIn("reconcile-ids", self.text)
 
     def test_이월_금지_항목에_신규_컬럼명_결정이_있다(self):
         self.assertIn("신규 컬럼명 결정", self.text)
@@ -335,7 +343,7 @@ class PipelineProtocolTest(unittest.TestCase):
             구간, "pipeline-protocol.md 에서 '## 이월 금지 항목' 절을 찾지 못했습니다"
         )
         항목 = re.findall(r"^\d+\. \*\*(.+?)\*\*", 구간.group(1), re.M)
-        self.assertEqual(len(항목), 3, f"이월 금지 항목이 3개가 아닙니다: {항목}")
+        self.assertEqual(len(항목), 4, f"이월 금지 항목이 4개가 아닙니다: {항목}")
         self.assertTrue(
             any("표 판정" in v for v in 항목),
             f"'표 판정' 애매성 중단점이 이월 금지 항목에 없습니다: {항목}",
@@ -576,13 +584,26 @@ class PipelineCommandTest(unittest.TestCase):
     이월금지_중단점 = [
         {
             "step": "2",
-            "중단점": ["시안", "표 판정"],
-            "정본": ["skills/extract-requirements/SKILL.md"],
+            "중단점": ["시안", "표 판정", "ID 승계"],
+            "정본": [
+                "skills/extract-requirements/SKILL.md",
+                "skills/reconcile-ids/SKILL.md",
+            ],
+        },
+        {
+            "step": "4",
+            "중단점": ["ID 승계"],
+            "정본": ["skills/reconcile-ids/SKILL.md"],
         },
         {
             "step": "5",
             "중단점": ["신규 컬럼명"],
             "정본": ["skills/convert-ddl-to-tablespec/SKILL.md"],
+        },
+        {
+            "step": "7",
+            "중단점": ["ID 승계"],
+            "정본": ["skills/reconcile-ids/SKILL.md"],
         },
     ]
 
@@ -647,7 +668,11 @@ class PipelineCommandTest(unittest.TestCase):
         구간 = re.search(r"^## 이월 금지 항목$(.*?)(?=^## |\Z)", 규약, re.M | re.S)
         self.assertIsNotNone(구간, "pipeline-protocol.md 에서 §이월 금지 항목을 찾지 못했습니다")
         규약항목 = re.findall(r"^\d+\. \*\*(.+?)\*\*", 구간.group(1), re.M)
-        선언된것 = [낱말 for 항목 in self.이월금지_중단점 for 낱말 in 항목["중단점"]]
+        # ID 승계 판정은 Step 2·4·7 세 곳에서 같은 이름으로 일어난다.
+        # 평탄화한 리스트 길이로 규약 항목 수와 비교하면 중복이 초과로 잡힌다.
+        선언된것 = sorted(
+            {낱말 for 항목 in self.이월금지_중단점 for 낱말 in 항목["중단점"]}
+        )
         self.assertEqual(
             len(선언된것), len(규약항목),
             f"규약의 이월 금지 항목 {len(규약항목)}개 중 gx-spec.md 가 선언하는 것은 "
@@ -737,6 +762,250 @@ class VersionConsistencyTest(unittest.TestCase):
                 self.assertEqual(
                     int(re.search(r"커맨드 (\d+)개", description).group(1)), self.command_count
                 )
+
+
+class EvidenceRuleTest(unittest.TestCase):
+    """근거 계측의 정본은 templates/evidence-rules.md 다.
+
+    v3.0.0 은 AN-03 이 '제약이 비면 테스트가 정상 케이스만 나온다' 고 경고하면서도
+    비었는지 세지 않았다. 세는 규칙을 한 곳에 두고, 실행부가 복제 대신 참조하게 한다.
+    """
+
+    def setUp(self):
+        self.text = (PLUGIN_ROOT / "templates" / "evidence-rules.md").read_text(
+            encoding="utf-8"
+        )
+
+    def test_근거가_네_단이다(self):
+        """소스 역추출이 v3.0.0 정본에 빠져 있었다.
+
+        memo 실행에서 검증 순서·기본값 같은 규칙은 전부 소스에서 나왔는데
+        도출 출처에 없는 근거였다. 단수를 셀 수 없으면 가용도 경고가 성립하지 않는다.
+        """
+        구간 = re.search(r"^## 근거 4단$(.*?)(?=^## |\Z)", self.text, re.M | re.S)
+        self.assertIsNotNone(구간, "§근거 4단 절을 찾지 못했습니다")
+        단 = re.findall(r"^\| [1-9] \|", 구간.group(1), re.M)
+        self.assertEqual(len(단), 4, f"근거 단이 4개가 아닙니다: {len(단)}개")
+        for 근거 in ("요구사항 상세내용", "처리내용 역산", "기존 DDL", "기존 소스"):
+            with self.subTest(근거=근거):
+                self.assertIn(근거, 구간.group(1))
+
+    def test_확인필요가_두_종류로_갈린다(self):
+        for 종류 in ("[확인필요:항목]", "[확인필요:제약]"):
+            with self.subTest(종류=종류):
+                self.assertIn(종류, self.text, f"{종류} 정의가 없습니다")
+
+    def test_제약이_빈_것의_판정_기준이_있다(self):
+        """'제약이 비었다' 를 정의하지 않으면 판정이 사람마다 달라진다."""
+        self.assertIn("필수", self.text)
+        self.assertRegex(
+            self.text, r"길이·범위·형식·열거값",
+            "정량 제약의 범위가 열거돼 있지 않습니다",
+        )
+
+    def test_가용도_미달인데_확인필요가_0건이면_경고한다(self):
+        구간 = re.search(r"^## 근거 가용도 경고$(.*?)(?=^## |\Z)", self.text, re.M | re.S)
+        self.assertIsNotNone(구간, "§근거 가용도 경고 절을 찾지 못했습니다")
+        self.assertIn("4/4 미만", 구간.group(1))
+        self.assertIn("0건", 구간.group(1))
+
+    def test_제약_미상은_자동보강하지_않는다(self):
+        self.assertIn("제약 미상", self.text)
+        self.assertIn("지어내", self.text)
+
+    def test_AN_03_이_근거_정본을_참조한다(self):
+        an03 = (PLUGIN_ROOT / "templates" / "AN-03-function-spec.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("templates/evidence-rules.md", an03)
+        self.assertIn("[확인필요:제약]", an03)
+
+    def test_AN_03_도출_출처가_네_단이다(self):
+        """3단(요구사항·역산·DDL)만 적혀 있으면 소스 근거가 다시 사라진다."""
+        an03 = (PLUGIN_ROOT / "templates" / "AN-03-function-spec.md").read_text(
+            encoding="utf-8"
+        )
+        구간 = re.search(
+            r"^## 입력항목 — 이 문서에서 가장 중요한 열$(.*?)(?=^## |\Z)",
+            an03, re.M | re.S,
+        )
+        self.assertIsNotNone(구간, "AN-03 의 §입력항목 절을 찾지 못했습니다")
+        단 = re.findall(r"^[1-9]\. ", 구간.group(1), re.M)
+        self.assertEqual(len(단), 4, f"도출 출처가 4단이 아닙니다: {len(단)}개")
+        self.assertIn("기존 소스", 구간.group(1))
+
+    def test_기능명세_스킬이_확인필요_두_종류를_모두_안다(self):
+        """정본만 고치고 실행부를 안 고치면 규칙이 돌지 않는다."""
+        스킬 = (
+            PLUGIN_ROOT / "skills" / "generate-function-spec" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        for 종류 in ("[확인필요:항목]", "[확인필요:제약]"):
+            with self.subTest(종류=종류):
+                self.assertIn(종류, 스킬)
+        self.assertIn("templates/evidence-rules.md", 스킬)
+        for 집계 in ("근거 가용도", "제약 미상"):
+            with self.subTest(집계=집계):
+                self.assertIn(집계, 스킬)
+
+    def test_단위테스트_스킬이_제약_미상을_보강에서_제외한다(self):
+        """제약이 없는데 경계값을 만들면 지어낸 테스트가 된다.
+
+        v3.0.0 Step 6 은 '제약이 있는데 케이스가 없으면' 만 보강했다. 제약이 아예
+        없는 경우는 정상+미입력 2건에서 멈추는데 '정상 케이스만' 에도 안 걸려
+        조용히 통과했다.
+        """
+        스킬 = (
+            PLUGIN_ROOT / "skills" / "generate-unit-test-plan" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("제약 미상", 스킬)
+        self.assertIn("templates/evidence-rules.md", 스킬)
+        구간 = re.search(
+            r"^### Step 6: 충분성 검증$(.*?)(?=^### |\Z)", 스킬, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "generate-unit-test-plan 의 Step 6 절을 찾지 못했습니다")
+        self.assertIn("제약 미상", 구간.group(1))
+        self.assertRegex(
+            구간.group(1), r"보강하지 않는다|지어내",
+            "Step 6 에 '제약이 없으면 보강하지 않는다' 는 지시가 없습니다",
+        )
+
+    def test_게이트2가_근거_집계를_보여준다(self):
+        """계측하고 안 보여주면 계측하지 않은 것과 같다.
+
+        Step 절로 범위를 좁혀서 본다 — 파일 어딘가에 낱말이 있는 것으로는
+        게이트 화면에 실린다는 보장이 안 된다.
+        """
+        본문 = (PLUGIN_ROOT / "commands" / "gx-spec.md").read_text(encoding="utf-8")
+        구간 = re.search(
+            r"^### Step 6: 게이트 2(.*?)(?=^### |\Z)", 본문, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "gx-spec.md 에서 Step 6(게이트 2) 절을 찾지 못했습니다")
+        for 항목 in ("근거 가용도", "[확인필요]", "제약 미상"):
+            with self.subTest(항목=항목):
+                self.assertIn(항목, 구간.group(1), f"게이트 2 에 '{항목}' 이 없습니다")
+        self.assertIn("templates/evidence-rules.md", 구간.group(1))
+
+    def test_게이트3이_제약_미상을_보여준다(self):
+        본문 = (PLUGIN_ROOT / "commands" / "gx-spec.md").read_text(encoding="utf-8")
+        구간 = re.search(
+            r"^### Step 9: 게이트 3(.*?)(?=^### |\Z)", 본문, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "gx-spec.md 에서 Step 9(게이트 3) 절을 찾지 못했습니다")
+        self.assertIn("제약 미상", 구간.group(1))
+
+
+class DdlAbsenceNoticeTest(unittest.TestCase):
+    """DDL 이 없어 전건 신규가 된 DE-08 은 실제 스키마가 아니라 설계 초안이다.
+
+    v3.0.0 은 이 사실을 게이트 2 화면에만 적었다. 승인하면 화면은 사라지고
+    문서만 남아, 이 문서가 실제 스키마로 오독된다 — 플러그인이 없애려던 문제 그 자체다.
+    """
+
+    def test_DE_08_템플릿이_설계_초안_표기를_요구한다(self):
+        text = (
+            PLUGIN_ROOT / "templates" / "DE-08-table-definition.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("설계 초안", text)
+        self.assertIn("개정이력", text)
+        self.assertRegex(
+            text, r"전건이? 신규",
+            "전건 신규일 때만이라는 조건이 없습니다 — 일부 신규에도 붙으면 경고가 무뎌집니다",
+        )
+
+    def test_역생성_스킬이_경고_줄을_넣는다(self):
+        """템플릿만 고치고 실행부를 안 고치면 규칙이 돌지 않는다."""
+        text = (
+            PLUGIN_ROOT / "skills" / "convert-ddl-to-tablespec" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("설계 초안", text)
+        self.assertIn("templates/DE-08-table-definition.md", text)
+
+
+class IdSuccessionTest(unittest.TestCase):
+    """새로쓰기가 ID 를 처음부터 다시 매기면 개정이력의 불변 키 대조가 무너진다.
+
+    memo 실행에서 RSV-RE-003 의 의미가 바뀌어 직전 버전과 ID 로 대조할 수 없었다.
+    """
+
+    def setUp(self):
+        self.text = (
+            PLUGIN_ROOT / "skills" / "reconcile-ids" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+
+    def test_대조_대상이_세_산출물이다(self):
+        """DE-08 은 테이블명+컬럼명이 자연 키고 AN-05 는 ID 를 갖지 않는다."""
+        for 산출물 in ("AN-02", "AN-03", "DE-13"):
+            with self.subTest(산출물=산출물):
+                self.assertIn(산출물, self.text)
+
+    def test_판정_사다리가_네_갈래다(self):
+        구간 = re.search(r"^### Step 3(.*?)(?=^### |\Z)", self.text, re.M | re.S)
+        self.assertIsNotNone(구간, "§Step 3 판정 사다리 절을 찾지 못했습니다")
+        갈래 = re.findall(r"^\| [①②③④] \|", 구간.group(1), re.M)
+        self.assertEqual(len(갈래), 4, f"판정 갈래가 4개가 아닙니다: {len(갈래)}개")
+
+    def test_승계_판정_애매성을_그_자리에서_묻는다(self):
+        self.assertIn("이월하지 않는", self.text)
+        self.assertRegex(self.text, r"그 자리에서 (묻는다|중단한다)")
+
+    def test_삭제된_ID_를_재사용하지_않는다(self):
+        self.assertIn("재사용", self.text)
+        self.assertIn("templates/id-naming-rules.md", self.text)
+
+    def test_전부_새로_매기기에_경고가_붙는다(self):
+        """탈출구는 있어야 하지만 대가를 알려야 한다."""
+        self.assertIn("개정이력", self.text)
+        self.assertRegex(
+            self.text, r"불변 키",
+            "ID 를 전부 새로 매기면 무엇이 깨지는지 적혀 있지 않습니다",
+        )
+
+    def test_개정이력보다_먼저_돈다고_명시한다(self):
+        """낱말 존재만 보면 Step 7 을 통째로 지워도 통과한다.
+
+        `manage-revision-history` 는 §왜 필요한가에도 나오므로 파일 전체 검사는
+        순서 계약을 지키지 못한다. Step 7 절 안에서 순서 문장까지 함께 본다.
+        """
+        구간 = re.search(r"^### Step 7(.*?)(?=^### |^## |\Z)", self.text, re.M | re.S)
+        self.assertIsNotNone(구간, "reconcile-ids 의 Step 7 절을 찾지 못했습니다")
+        self.assertIn("manage-revision-history", 구간.group(1))
+        self.assertIn("순서를 뒤집지 않는다", 구간.group(1))
+
+    def test_새로쓰기가_ID_승계를_거친다(self):
+        """새로쓰기의 의도는 '본문을 다시 뽑겠다' 이지 'ID 를 날리겠다' 가 아니다.
+
+        절 안에서만 본다 — 파일 어딘가에 스킬 이름이 있는 것으로는
+        새로쓰기 경로가 그걸 거친다는 보장이 안 된다.
+        """
+        text = (
+            PLUGIN_ROOT / "skills" / "detect-existing-artifact" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(
+            r"^#### 2\. 새로쓰기 선택 시$(.*?)(?=^#### |\Z)", text, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "detect-existing-artifact 의 §새로쓰기 절을 찾지 못했습니다")
+        self.assertIn("reconcile-ids", 구간.group(1))
+
+    def test_새로쓰기_안내문이_ID_를_날린다고_말하지_않는다(self):
+        """선택지 설명이 옛 동작을 그대로 적고 있으면 사용자가 잘못 고른다."""
+        text = (
+            PLUGIN_ROOT / "skills" / "detect-existing-artifact" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("ID는 직전 버전과 대조해 승계", text)
+
+    def test_개정이력이_ID_승계를_선행으로_둔다(self):
+        text = (
+            PLUGIN_ROOT / "skills" / "manage-revision-history" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("reconcile-ids", text)
+
+    def test_채번_규칙이_승계_재생성을_명시한다(self):
+        text = (PLUGIN_ROOT / "templates" / "id-naming-rules.md").read_text(
+            encoding="utf-8"
+        )
+        구간 = re.search(r"^## 불변 규칙$(.*?)(?=^## |\Z)", text, re.M | re.S)
+        self.assertIsNotNone(구간, "id-naming-rules.md 의 §불변 규칙 절을 찾지 못했습니다")
+        self.assertIn("reconcile-ids", 구간.group(1))
 
 
 class BoundaryRuleTest(unittest.TestCase):
