@@ -896,6 +896,49 @@ class DdlAbsenceNoticeTest(unittest.TestCase):
         self.assertIn("templates/DE-08-table-definition.md", text)
 
 
+class IdSuccessionTest(unittest.TestCase):
+    """새로쓰기가 ID 를 처음부터 다시 매기면 개정이력의 불변 키 대조가 무너진다.
+
+    memo 실행에서 RSV-RE-003 의 의미가 바뀌어 직전 버전과 ID 로 대조할 수 없었다.
+    """
+
+    def setUp(self):
+        self.text = (
+            PLUGIN_ROOT / "skills" / "reconcile-ids" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+
+    def test_대조_대상이_세_산출물이다(self):
+        """DE-08 은 테이블명+컬럼명이 자연 키고 AN-05 는 ID 를 갖지 않는다."""
+        for 산출물 in ("AN-02", "AN-03", "DE-13"):
+            with self.subTest(산출물=산출물):
+                self.assertIn(산출물, self.text)
+
+    def test_판정_사다리가_네_갈래다(self):
+        구간 = re.search(r"^### Step 3(.*?)(?=^### |\Z)", self.text, re.M | re.S)
+        self.assertIsNotNone(구간, "§Step 3 판정 사다리 절을 찾지 못했습니다")
+        갈래 = re.findall(r"^\| [①②③④] \|", 구간.group(1), re.M)
+        self.assertEqual(len(갈래), 4, f"판정 갈래가 4개가 아닙니다: {len(갈래)}개")
+
+    def test_승계_판정_애매성을_그_자리에서_묻는다(self):
+        self.assertIn("이월하지 않는", self.text)
+        self.assertRegex(self.text, r"그 자리에서 (묻는다|중단한다)")
+
+    def test_삭제된_ID_를_재사용하지_않는다(self):
+        self.assertIn("재사용", self.text)
+        self.assertIn("templates/id-naming-rules.md", self.text)
+
+    def test_전부_새로_매기기에_경고가_붙는다(self):
+        """탈출구는 있어야 하지만 대가를 알려야 한다."""
+        self.assertIn("개정이력", self.text)
+        self.assertRegex(
+            self.text, r"불변 키",
+            "ID 를 전부 새로 매기면 무엇이 깨지는지 적혀 있지 않습니다",
+        )
+
+    def test_개정이력보다_먼저_돈다고_명시한다(self):
+        self.assertIn("manage-revision-history", self.text)
+
+
 class BoundaryRuleTest(unittest.TestCase):
     """드라이런에서 놓친 4건(영값·통과 측 경계·하위 정밀도)의 재발을 막는다.
 

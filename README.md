@@ -7,7 +7,7 @@
 요구사항 분석부터 기능명세, 테이블 설계, 단위테스트, ID 추적까지
 
 [![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)]()
-[![Skills](https://img.shields.io/badge/skills-15-green.svg)]()
+[![Skills](https://img.shields.io/badge/skills-16-green.svg)]()
 [![Commands](https://img.shields.io/badge/commands-7-orange.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -332,7 +332,7 @@ gx-pm/                                      # 저장소 루트
 │   │   ├── gx-추적매트릭스.md
 │   │   ├── gx-테이블정의서.md
 │   │   └── gx-프로젝트설정.md
-│   ├── skills/                            # 15개 스킬
+│   ├── skills/                            # 16개 스킬
 │   │   ├── classify-requirements/
 │   │   ├── convert-ddl-to-tablespec/
 │   │   ├── design-test-cases/
@@ -346,6 +346,7 @@ gx-pm/                                      # 저장소 루트
 │   │   ├── load-project-profile/
 │   │   ├── manage-revision-history/
 │   │   ├── prioritize-si/
+│   │   ├── reconcile-ids/
 │   │   ├── scan-source-index/
 │   │   └── trace-requirements/
 │   ├── templates/                         # 산출물 양식 + 정본 규약 11종
