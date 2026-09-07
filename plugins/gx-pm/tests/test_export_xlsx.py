@@ -1,4 +1,8 @@
+import tempfile
 import unittest
+from pathlib import Path
+
+import openpyxl
 
 from helpers import load_export_module, parse_column_ssot, read_docs
 
@@ -497,6 +501,190 @@ class De13ColumnSsotTest(unittest.TestCase):
         self.assertEqual(
             self.mod.DOCUMENT_PROFILES["단위테스트계획서"]["columns"][0], self.정본
         )
+
+
+class SheetTitleProfileTest(unittest.TestCase):
+    """참조 양식의 「개 정 이 력」 제목 행은 개정이력 프로필에만 있다."""
+
+    def setUp(self):
+        self.mod = load_export_module()
+
+    def test_개정이력만_sheet_title_을_가진다(self):
+        for 이름, 프로필 in self.mod.DOCUMENT_PROFILES.items():
+            with self.subTest(산출물=이름):
+                if 이름 == "개정이력":
+                    self.assertEqual(프로필["sheet_title"], "개 정 이 력")
+                else:
+                    self.assertNotIn("sheet_title", 프로필)
+
+
+class MinWidthComputationTest(unittest.TestCase):
+    """_column_width 는 자동 계산 너비와 min_widths 중 큰 값을 60 이내로 돌려준다."""
+
+    def setUp(self):
+        self.mod = load_export_module()
+
+    def test_최소_너비가_자동_계산보다_크면_최소_너비를_쓴다(self):
+        self.assertEqual(self.mod._column_width(["신규"], min_width=14), 14)
+
+    def test_자동_계산이_최소_너비보다_크면_자동_계산을_쓴다(self):
+        긴값 = "가" * 20  # 전각 20자 → 40 + 여백 4 = 44
+        self.assertEqual(self.mod._column_width([긴값], min_width=14), 44)
+
+    def test_상한은_60을_넘지_않는다(self):
+        아주긴값 = "가" * 50  # 100 + 4 = 104 → 60 으로 캡
+        self.assertEqual(self.mod._column_width([아주긴값], min_width=0), 60)
+
+    def test_개정이력_min_widths_값이_고정돼_있다(self):
+        self.assertEqual(
+            self.mod.DOCUMENT_PROFILES["개정이력"]["min_widths"],
+            {"개정 사유": 14, "개정일": 12, "작성자": 12, "승인자": 12},
+        )
+
+    def test_다른_산출물_프로필에는_min_widths_가_없다(self):
+        for 이름, 프로필 in self.mod.DOCUMENT_PROFILES.items():
+            if 이름 == "개정이력":
+                continue
+            with self.subTest(산출물=이름):
+                self.assertNotIn("min_widths", 프로필)
+
+
+class LeftAlignColumnSsotTest(unittest.TestCase):
+    """left_align 목록의 컬럼명이 그 산출물의 컬럼 정본에 실재하는지 고정한다.
+
+    오타가 나면 실행해도 에러가 나지 않고 정렬만 조용히 빠진다 — 이게 가장
+    위험한 실패 모드다. 컬럼 정본(templates/)과 양방향으로 대조해 오타를 잡는다.
+    """
+
+    _정본_위치 = {
+        "개정이력": ("revision-history.md", "개정이력 컬럼 (정본)"),
+        "요구사항정의서": ("AN-02-requirements-definition.md", "본문 컬럼 (정본)"),
+        "기능명세서": ("AN-03-function-spec.md", "본문 컬럼 (정본)"),
+        "테이블정의서": ("DE-08-table-definition.md", "본문 컬럼 (정본)"),
+        "단위테스트계획서": ("DE-13-unit-test-plan.md", "본문 컬럼 (정본)"),
+        "추적매트릭스": ("AN-05-traceability-matrix.md", "본문 컬럼 (정본)"),
+    }
+
+    def setUp(self):
+        self.mod = load_export_module()
+
+    def test_left_align_컬럼이_전부_정본에_있다(self):
+        for 산출물, (템플릿, 절제목) in self._정본_위치.items():
+            정본컬럼 = parse_column_ssot(템플릿, 절제목)
+            프로필 = self.mod.DOCUMENT_PROFILES[산출물]
+            for 컬럼 in 프로필.get("left_align", []):
+                with self.subTest(산출물=산출물, 컬럼=컬럼):
+                    self.assertIn(
+                        컬럼, 정본컬럼,
+                        f"'{산출물}' 의 left_align '{컬럼}' 이 정본 컬럼에 없습니다 "
+                        "— 오타이거나 정본 이름이 바뀌었는데 프로필이 안 따라왔습니다",
+                    )
+
+    def test_모든_산출물이_left_align_키를_가진다(self):
+        for 산출물 in self._정본_위치:
+            with self.subTest(산출물=산출물):
+                self.assertIn("left_align", self.mod.DOCUMENT_PROFILES[산출물])
+
+
+class RevisionHistoryTitleRenderTest(unittest.TestCase):
+    """실제 xlsx 를 만들어 다시 열어 제목 행·병합·고정·필터를 확인한다."""
+
+    def setUp(self):
+        self.mod = load_export_module()
+
+    def _render(self, filename: str, markdown: str):
+        tables = self.mod.parse_markdown_tables(markdown)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = str(Path(tmp) / "out.xlsx")
+            self.mod.create_xlsx([(filename, tables)], out)
+            return openpyxl.load_workbook(out)
+
+    _개정이력_MD = (
+        "## 개정이력\n\n"
+        "| 버전 | 개정일 | 개정 사유 | 개정 내용 | 작성자 | 승인자 |\n"
+        "|------|--------|----------|----------|--------|--------|\n"
+        "| 1.0 | 2026.09.03 | 신규 | 최초 작성 | 구본승 | |\n"
+    )
+
+    def test_제목_행이_병합되고_굵게_가운데_정렬된다(self):
+        wb = self._render("ACT-개정이력.md", self._개정이력_MD)
+        ws = wb["개정이력"]
+        self.assertEqual(ws["A1"].value, "개 정 이 력")
+        self.assertTrue(ws["A1"].font.bold)
+        self.assertEqual(ws["A1"].font.size, 14)
+        self.assertEqual(ws["A1"].alignment.horizontal, "center")
+        self.assertIn("A1:F1", [str(r) for r in ws.merged_cells.ranges])
+
+    def test_표는_제목_다음_2행부터_시작한다(self):
+        wb = self._render("ACT-개정이력.md", self._개정이력_MD)
+        ws = wb["개정이력"]
+        self.assertEqual(ws["A2"].value, "버전")
+        self.assertEqual(ws["A3"].value, "1.0")
+
+    def test_제목_행이_있으면_고정과_필터가_한_행_밀린다(self):
+        """freeze_panes·auto_filter 가 제목 행을 빼고 헤더부터 걸려야 한다.
+
+        빼먹으면 필터가 제목 행에 걸려 표가 아니라 제목 셀을 필터링하게 된다.
+        """
+        wb = self._render("ACT-개정이력.md", self._개정이력_MD)
+        ws = wb["개정이력"]
+        self.assertEqual(ws.freeze_panes, "A3")
+        self.assertEqual(ws.auto_filter.ref, "A2:F3")
+
+    def test_다른_산출물은_제목_행을_만들지_않는다(self):
+        md = (
+            "### 요구사항 명세\n\n"
+            "| 번호 | 요구사항ID | 대분류 | 중분류 | 요구사항명 | 요구사항 상세내용 "
+            "| 비고 | 상태 | 요구사항 근거 | 변경 근거 |\n"
+            "|---|---|---|---|---|---|---|---|---|---|\n"
+            "| 1 | REQ-001 | 데이터 전처리 | 상대평가기준 | 산출 | 상세 | | 신규 "
+            "| 과업지시서 BR-01 | |\n"
+        )
+        wb = self._render("ACT-요구사항정의서.md", md)
+        ws = wb["요구사항 명세"]
+        self.assertEqual(ws["A1"].value, "번호")  # 제목이 없으니 1행이 바로 헤더
+        self.assertEqual(ws.freeze_panes, "A2")
+
+    def test_개정_사유_열이_최소_너비로_렌더링된다(self):
+        """값이 "신규"뿐이면 자동 계산 너비가 min_widths 보다 작아진다."""
+        wb = self._render("ACT-개정이력.md", self._개정이력_MD)
+        ws = wb["개정이력"]
+        self.assertEqual(ws.column_dimensions["C"].width, 14)
+
+
+class AlignmentRenderTest(unittest.TestCase):
+    """left_align 목록 열은 좌측, 나머지 데이터 열(세로 병합 셀 포함)은 중앙 —
+    실제 xlsx 를 열어 확인한다."""
+
+    def setUp(self):
+        self.mod = load_export_module()
+
+    def test_서술_열은_좌측_나머지는_중앙(self):
+        md = (
+            "### 요구사항 명세\n\n"
+            "| 번호 | 요구사항ID | 대분류 | 중분류 | 요구사항명 | 요구사항 상세내용 "
+            "| 비고 | 상태 | 요구사항 근거 | 변경 근거 |\n"
+            "|---|---|---|---|---|---|---|---|---|---|\n"
+            "| 1 | REQ-001 | 데이터 전처리 | 상대평가기준 | 산출 | 상세 | | 신규 "
+            "| 과업지시서 BR-01 | |\n"
+            "| 2 | REQ-002 | 데이터 전처리 | 상대평가기준 | 산출2 | 상세2 | | 신규 "
+            "| 과업지시서 BR-02 | |\n"
+        )
+        tables = self.mod.parse_markdown_tables(md)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = str(Path(tmp) / "out.xlsx")
+            self.mod.create_xlsx([("ACT-요구사항정의서.md", tables)], out)
+            wb = openpyxl.load_workbook(out)
+        ws = wb["요구사항 명세"]
+        # 번호(A) 는 left_align 목록에 없다 → 중앙
+        self.assertEqual(ws["A2"].alignment.horizontal, "center")
+        # 요구사항명(E) 은 left_align 목록에 있다 → 좌측
+        self.assertEqual(ws["E2"].alignment.horizontal, "left")
+        # 요구사항 근거(I) 도 좌측 — 문장형 근거라 중앙정렬하면 읽기 어렵다
+        self.assertEqual(ws["I2"].alignment.horizontal, "left")
+        # 대분류(C) 는 세로 병합 셀이지만 가로는 중앙이어야 한다
+        self.assertEqual(ws["C2"].alignment.horizontal, "center")
+        self.assertIn("C2:C3", [str(r) for r in ws.merged_cells.ranges])
 
 
 if __name__ == "__main__":

@@ -55,11 +55,19 @@ def ensure_openpyxl():
 DOCUMENT_PROFILES = {
     "개정이력": {
         "sheet_name": "개정이력",
+        # 참조 양식은 표 위에 이 제목을 병합 셀로 얹는다. 이 키가 있는 프로필만
+        # 시트 1행에 제목을 쓰고 표를 2행부터 시작한다 — 다른 산출물은 건드리지 않는다.
+        "sheet_title": "개 정 이 력",
         # 컬럼 정본은 templates/revision-history.md 의 「개정이력 컬럼 (정본)」 절이다.
         "columns": [[
             "버전", "개정일", "개정 사유", "개정 내용", "작성자", "승인자",
         ]],
         "merge_columns": [],
+        # "개정 사유" 는 값이 "신규"(2자)뿐인 경우가 많아 자동 계산 너비가
+        # 지나치게 좁아진다 — 참조 양식만큼 최소 너비를 강제한다.
+        "min_widths": {"개정 사유": 14, "개정일": 12, "작성자": 12, "승인자": 12},
+        # 서술형 열만 좌측 정렬, 나머지(버전·개정일 등)는 중앙 정렬.
+        "left_align": ["개정 내용"],
     },
     "요구사항정의서": {
         "sheet_name": "요구사항 명세",
@@ -70,6 +78,11 @@ DOCUMENT_PROFILES = {
             "요구사항 상세내용", "비고", "상태", "요구사항 근거", "변경 근거",
         ]],
         "merge_columns": ["대분류", "중분류"],
+        # "요구사항 근거"·"변경 근거"는 사용자 요청상 중앙정렬 후보였으나, 문장형
+        # 근거("과업지시서 BR-01" 등)가 들어가 중앙정렬하면 읽기 어려워 좌측에 남긴다.
+        "left_align": [
+            "요구사항명", "요구사항 상세내용", "비고", "요구사항 근거", "변경 근거",
+        ],
     },
     "기능명세서": {
         "sheet_name": "기능명세",
@@ -79,6 +92,9 @@ DOCUMENT_PROFILES = {
             "입력항목", "처리내용(로직)", "출력결과", "연계요구사항ID", "비고",
         ]],
         "merge_columns": ["대분류", "중분류"],
+        "left_align": [
+            "기능명", "기능설명", "입력항목", "처리내용(로직)", "출력결과", "비고",
+        ],
     },
     "테이블정의서": {
         "sheet_name": "테이블정의",
@@ -89,6 +105,7 @@ DOCUMENT_PROFILES = {
             "구분", "표준 판정", "표준 권고명", "근거", "연계기능ID",
         ]],
         "merge_columns": ["테이블명"],
+        "left_align": ["테이블 논리명", "컬럼 논리명", "표준 권고명", "근거"],
     },
     "단위테스트계획서": {
         "sheet_name": "단위테스트계획",
@@ -98,6 +115,7 @@ DOCUMENT_PROFILES = {
             "기대결과", "사후조건", "의존성", "테스트담당자", "수행일", "결과",
         ]],
         "merge_columns": [],
+        "left_align": ["사전조건", "입력", "기대결과", "사후조건"],
     },
     "추적매트릭스": {
         "sheet_name": "추적매트릭스",
@@ -108,6 +126,7 @@ DOCUMENT_PROFILES = {
             "테이블·컬럼", "테스트 수", "Pass/Fail", "누락",
         ]],
         "merge_columns": ["요구사항ID"],
+        "left_align": ["요구사항명", "기능명", "테이블·컬럼", "누락"],
     },
 }
 
@@ -221,6 +240,26 @@ def _header_key(rows: list[list[str]]) -> str:
 # 프로필 컬럼과 이만큼 일치해야 산출물 본문 표로 본다.
 # 미만이면 근거·통계 같은 보조 표이므로 시트명도 컬럼 순서도 물려받지 않는다.
 _MATCH_THRESHOLD = 0.5
+
+
+def resolve_doc_type(header: list[str], file_doc_type: str | None) -> str | None:
+    """이 표 하나에 쓸 프로필을 고른다.
+
+    `detect_document_type` 은 **파일명**만 본다. 그런데 개정이력은 독립 파일이 아니라
+    5종 산출물 **안에 들어 있는 표**다. 파일명으로만 고르면 `REB-요구사항정의서.md`
+    안의 개정이력 표가 `요구사항정의서` 프로필로 처리되어, `개정이력` 프로필의
+    `sheet_title`·`min_widths`·`left_align` 이 하나도 걸리지 않는다 — 그 프로필이
+    사실상 죽은 코드가 된다.
+
+    그래서 헤더로 한 번 더 판정한다. 헤더가 `개정이력` 컬럼 정본과 임계값 이상
+    맞으면 그 표만 `개정이력` 프로필로 처리하고, 아니면 파일명이 정한 것을 쓴다.
+    """
+    if not header:
+        return file_doc_type
+    index, _ = _best_column_set(header, "개정이력")
+    if index is not None:
+        return "개정이력"
+    return file_doc_type
 
 
 def _best_column_set(
@@ -337,6 +376,20 @@ def merge_ranges(
     return ranges
 
 
+def _column_width(values: list[str], min_width: int = 0) -> int:
+    """열의 자동 계산 너비와 최소 너비 중 큰 값을 60 이내로 돌려준다.
+
+    자동 계산은 각 값의 표시 폭(전각 2 · 반각 1)에 여백 4를 더한 값이다.
+    `min_width` 는 DOCUMENT_PROFILES 의 `min_widths` 에서 온다 — "신규"처럼
+    짧은 값만 있는 열이 지나치게 좁아지는 것을 막는다.
+    """
+    max_len = 0
+    for value in values:
+        length = sum(2 if ord(c) > 127 else 1 for c in str(value))
+        max_len = max(max_len, length)
+    return min(max(max_len + 4, min_width), 60)
+
+
 def create_xlsx(
     file_tables: list[tuple[str, list[tuple[str, list[str]]]]],
     output_path: str,
@@ -365,13 +418,17 @@ def create_xlsx(
         top=Side(style="thin"),
         bottom=Side(style="thin"),
     )
-    wrap_align = Alignment(wrap_text=True, vertical="top")
+    # 서술형 열(left_align 목록)만 좌측, 나머지 데이터 열은 중앙 정렬한다.
+    wrap_align_left = Alignment(wrap_text=True, vertical="top", horizontal="left")
+    wrap_align_center = Alignment(wrap_text=True, vertical="top", horizontal="center")
     header_align = Alignment(
         wrap_text=True, vertical="center", horizontal="center"
     )
+    title_font = Font(name="맑은 고딕", bold=True, size=14)
+    title_align = Alignment(horizontal="center", vertical="center")
 
     for filename, tables in file_tables:
-        doc_type = detect_document_type(filename)
+        file_doc_type = detect_document_type(filename)
 
         # ── 1단계: 유효한 표만 추출하고, 동일 헤더끼리 병합 ──
         merged: dict[str, list[list[str]]] = {}  # header_key → 병합된 행들
@@ -392,11 +449,16 @@ def create_xlsx(
 
         # ── 2단계: 컬럼 재배열 + 시트 생성 ──
         for key, rows in merged.items():
+            # 표마다 프로필을 다시 고른다. 개정이력은 5종 산출물 안에 들어 있는
+            # 표라, 파일명으로만 고르면 부모 문서의 프로필에 묻힌다.
+            doc_type = resolve_doc_type(rows[0] if rows else [], file_doc_type)
+
             rows = _reorder_columns(rows, doc_type)
             title = merged_titles[key]
 
             # 시트 이름 결정
             set_index = _matched_set_index(rows, doc_type)
+            doc_profile = DOCUMENT_PROFILES.get(doc_type) if doc_type else None
             if set_index is not None:
                 # 본문 데이터 표 — 공공 양식 시트명을 쓴다
                 profile = DOCUMENT_PROFILES[doc_type]
@@ -426,11 +488,29 @@ def create_xlsx(
 
             ws = wb.create_sheet(title=sheet_name)
 
+            # 표 위 제목 행 — sheet_title 이 있는 프로필(개정이력)의 본문 표에만 붙는다.
+            # 제목 행이 생기면 헤더가 한 행 밀리므로, 아래 병합·고정·필터가 전부
+            # row_offset 만큼 보정해야 한다.
+            sheet_title = doc_profile.get("sheet_title") if (doc_profile and set_index is not None) else None
+            row_offset = 1 if sheet_title else 0
+            if sheet_title:
+                last_col_letter = get_column_letter(len(rows[0]))
+                ws.merge_cells(f"A1:{last_col_letter}1")
+                title_cell = ws["A1"]
+                title_cell.value = sheet_title
+                title_cell.font = title_font
+                title_cell.alignment = title_align
+
+            left_align_cols = set(doc_profile.get("left_align", [])) if doc_profile else set()
+            min_widths = doc_profile.get("min_widths", {}) if doc_profile else {}
+            header_names = rows[0]
+
             # 데이터 쓰기
             for row_idx, row in enumerate(rows):
+                sheet_row = row_idx + 1 + row_offset
                 for col_idx, value in enumerate(row):
                     cell = ws.cell(
-                        row=row_idx + 1, column=col_idx + 1, value=value
+                        row=sheet_row, column=col_idx + 1, value=value
                     )
                     cell.border = thin_border
 
@@ -440,37 +520,39 @@ def create_xlsx(
                         cell.alignment = header_align
                     else:
                         cell.font = cell_font
-                        cell.alignment = wrap_align
+                        col_name = header_names[col_idx] if col_idx < len(header_names) else ""
+                        cell.alignment = (
+                            wrap_align_left if col_name in left_align_cols else wrap_align_center
+                        )
 
-            # 연속 동일값 세로 병합 (참조 양식 형태)
+            # 연속 동일값 세로 병합 (참조 양식 형태) — 가로도 중앙 정렬한다.
             if doc_type and doc_type in DOCUMENT_PROFILES:
                 for col, row_start, row_end in merge_ranges(
                     rows, DOCUMENT_PROFILES[doc_type].get("merge_columns", [])
                 ):
+                    row_start += row_offset
+                    row_end += row_offset
                     letter = get_column_letter(col + 1)
                     ws.merge_cells(f"{letter}{row_start}:{letter}{row_end}")
                     ws[f"{letter}{row_start}"].alignment = Alignment(
-                        wrap_text=True, vertical="center"
+                        wrap_text=True, vertical="center", horizontal="center"
                     )
 
-            # 열 너비 자동 조정
+            # 열 너비 자동 조정 (min_widths 가 있으면 자동 계산값과 비교해 큰 쪽)
             for col_idx in range(len(rows[0])):
-                max_len = 0
                 col_letter = get_column_letter(col_idx + 1)
-                for row in rows:
-                    if col_idx < len(row):
-                        length = sum(
-                            2 if ord(c) > 127 else 1
-                            for c in str(row[col_idx])
-                        )
-                        max_len = max(max_len, length)
-                ws.column_dimensions[col_letter].width = min(
-                    max_len + 4, 60
+                col_name = header_names[col_idx] if col_idx < len(header_names) else ""
+                values = [row[col_idx] for row in rows if col_idx < len(row)]
+                ws.column_dimensions[col_letter].width = _column_width(
+                    values, min_widths.get(col_name, 0)
                 )
 
-            # 첫 행 고정 (필터용)
-            ws.freeze_panes = "A2"
-            ws.auto_filter.ref = ws.dimensions
+            # 헤더 행 고정 + 필터 — 제목 행이 있으면 한 행씩 밀어 제목은 제외한다.
+            header_row = 1 + row_offset
+            last_row = len(rows) + row_offset
+            last_col_letter = get_column_letter(len(rows[0]))
+            ws.freeze_panes = f"A{header_row + 1}"
+            ws.auto_filter.ref = f"A{header_row}:{last_col_letter}{last_row}"
 
     if not wb.sheetnames:
         ws = wb.create_sheet(title="빈 시트")

@@ -1073,6 +1073,148 @@ class IdSuccessionTest(unittest.TestCase):
         self.assertIn("reconcile-ids", 구간.group(1))
 
 
+class RequirementStatusValueTest(unittest.TestCase):
+    """AN-02 `상태` 열은 3값이다 (`유지`/`변경`/`삭제`).
+
+    `신규`를 없앤 이유: 최초 작성이면 전건이 `신규`라 아무 정보가 없고, 재실행 때도
+    `신규`와 `유지`가 모두 "현재 유효함"을 뜻해 구분이 흐렸다. 무엇이 새로 들어왔는지는
+    `요구사항 근거` 열과 개정이력의 `개정 사유`가 이미 기록하므로, 상태 열은
+    "이번 개정에서 손댔는가"만 답하면 된다 — 그래서 최초 작성에도 전건 `유지`다.
+
+    정본은 templates/AN-02-requirements-definition.md 하나다. DE-08 `구분` 열의
+    `신규`(컬럼의 신규 여부)와 revision-history.md `개정 사유`의 `신규`(문서 최초 생성)는
+    다른 축이라 이 테스트의 대상이 아니다 — 그래서 절 범위를 좁혀서 검사한다.
+    """
+
+    def setUp(self):
+        self.정본파일 = (
+            PLUGIN_ROOT / "templates" / "AN-02-requirements-definition.md"
+        )
+        self.정본 = self.정본파일.read_text(encoding="utf-8")
+
+    def _컬럼_값규칙(self, 컬럼명: str) -> str:
+        """`본문 컬럼 (정본)` 표에서 지정 컬럼의 '값 규칙' 칸 원문을 돌려준다."""
+        구간 = re.search(
+            r"^## 본문 컬럼 \(정본\)$(.*?)(?=^## |\Z)", self.정본, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "§본문 컬럼 (정본) 절을 찾지 못했습니다")
+        for 줄 in 구간.group(1).splitlines():
+            벗긴줄 = 줄.strip()
+            if not (벗긴줄.startswith("|") and 벗긴줄.endswith("|")):
+                continue
+            칸 = [c.strip() for c in 벗긴줄.strip("|").split("|")]
+            if len(칸) < 3 or set("".join(칸)) <= set("-: "):
+                continue
+            if 칸[1] == 컬럼명:
+                return 칸[2]
+        self.fail(f"'{컬럼명}' 컬럼 행을 찾지 못했습니다")
+
+    def _상태_판정표_행(self) -> list[list[str]]:
+        """`## 상태 판정` 절의 판정표를 [대조 결과, 상태, 추가 동작] 행 목록으로 돌려준다."""
+        구간 = re.search(
+            r"^## 상태 판정[^\n]*\n(.*?)(?=^## |\Z)", self.정본, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "§상태 판정 절을 찾지 못했습니다")
+        행목록 = []
+        for 줄 in 구간.group(1).splitlines():
+            벗긴줄 = 줄.strip()
+            if not (벗긴줄.startswith("|") and 벗긴줄.endswith("|")):
+                continue
+            칸 = [c.strip() for c in 벗긴줄.strip("|").split("|")]
+            if len(칸) < 3 or set("".join(칸)) <= set("-: "):
+                continue
+            if 칸[0] == "대조 결과":
+                continue  # 머리행
+            행목록.append(칸)
+        return 행목록
+
+    def test_상태값이_정확히_3개다(self):
+        """컬럼 정본의 '값 규칙' 칸에서 첫 구획(— 앞)의 백틱 값만 상태값으로 센다.
+
+        — 뒤 설명문에는 `유지`가 다시 나온다("최초 작성 시 전건이 이 값") — 그건
+        상태값 목록이 아니라 뜻풀이라 다시 세면 안 된다.
+        """
+        값규칙 = self._컬럼_값규칙("상태")
+        목록구간 = 값규칙.split("—", 1)[0]
+        상태값 = re.findall(r"`([^`]+)`", 목록구간)
+        self.assertEqual(
+            set(상태값), {"유지", "변경", "삭제"},
+            f"AN-02 상태값이 3값(유지/변경/삭제)이 아닙니다: {상태값}",
+        )
+        self.assertNotIn("신규", 상태값, "`신규`가 상태값으로 남아 있습니다")
+
+    def test_상태_판정표의_상태_열도_3값_안에_있다(self):
+        상태열값 = set()
+        for 행 in self._상태_판정표_행():
+            상태열값.update(re.findall(r"`([^`]+)`", 행[1]))
+        self.assertTrue(
+            상태열값 <= {"유지", "변경", "삭제"},
+            f"판정표의 상태 열에 3값 밖의 값이 있습니다: {상태열값}",
+        )
+        self.assertNotIn("신규", 상태열값, "판정표의 상태 열에 `신규`가 남아 있습니다")
+
+    def test_상태_판정표가_네_갈래를_모두_덮는다(self):
+        갈래 = self._상태_판정표_행()
+        대조결과들 = "\n".join(행[0] for 행 in 갈래)
+        for 표지 in ("입력에만 있음", "동일", "다름", "기존에만 있음"):
+            with self.subTest(갈래=표지):
+                self.assertIn(표지, 대조결과들, f"'{표지}' 갈래가 판정표에 없습니다")
+        self.assertEqual(len(갈래), 4, f"판정표 행이 4개가 아닙니다: {len(갈래)}개")
+
+    def test_최초_작성도_유지로_성립한다는_근거가_있다(self):
+        """`유지`가 '이번 개정에서 손대지 않음'으로 정의되어 최초 작성에도 성립함을
+        정본이 스스로 설명해야 한다 — 안 그러면 다음에 읽는 사람이 버그로 본다."""
+        self.assertIn("손대지 않음", self.정본)
+        self.assertIn("최초 작성", self.정본)
+
+    def test_extract_requirements가_상태값을_복제하지_않고_정본을_가리킨다(self):
+        text = (
+            PLUGIN_ROOT / "skills" / "extract-requirements" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("templates/AN-02-requirements-definition.md", text)
+        self.assertNotRegex(
+            text, r"`유지`\s*/\s*`변경`\s*/\s*`삭제`",
+            "정본의 3값 나열을 그대로 복제하고 있습니다",
+        )
+        self.assertNotIn("전건 `신규`", text, "extract-requirements 에 옛 상태값이 남아 있습니다")
+
+    def test_요구사항정의서_커맨드가_상태값을_복제하지_않고_정본을_가리킨다(self):
+        text = (
+            PLUGIN_ROOT / "commands" / "gx-요구사항정의서.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("templates/AN-02-requirements-definition.md", text)
+        self.assertNotRegex(
+            text, r"`유지`\s*/\s*`변경`\s*/\s*`삭제`",
+            "정본의 3값 나열을 그대로 복제하고 있습니다",
+        )
+        self.assertNotIn("전건 `신규`", text, "커맨드에 옛 상태값이 남아 있습니다")
+
+    def test_순서_경고문이_두_파일에_있고_옛_문구가_없다(self):
+        """ID 승계 전에 상태를 판정하면 안 된다는 경고 — 3값 체계에서는 순서를 어기면
+        `변경`이 `유지`로 잡히고 `삭제`가 아예 안 잡히는 실제 피해를 말해야 한다.
+        옛 문구("전건이 `신규`로 나온다")는 4값 체계의 근거라 남아 있으면 안 된다.
+        """
+        옛문구 = re.compile(r"전건이\s*`?신규`?\s*로\s*나온다")
+        새경고_신호 = ("삭제", "잡히지 않는다")
+
+        커맨드 = (
+            PLUGIN_ROOT / "commands" / "gx-요구사항정의서.md"
+        ).read_text(encoding="utf-8")
+        reconcile = (
+            PLUGIN_ROOT / "skills" / "reconcile-ids" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+
+        for 라벨, text in (("commands/gx-요구사항정의서.md", 커맨드),
+                          ("skills/reconcile-ids/SKILL.md", reconcile)):
+            with self.subTest(파일=라벨):
+                self.assertIsNone(
+                    옛문구.search(text),
+                    f"{라벨} 에 4값 체계의 옛 경고 문구가 남아 있습니다",
+                )
+                for 신호 in 새경고_신호:
+                    self.assertIn(신호, text, f"{라벨} 에 새 경고의 '{신호}' 신호가 없습니다")
+
+
 class BoundaryRuleTest(unittest.TestCase):
     """드라이런에서 놓친 4건(영값·통과 측 경계·하위 정밀도)의 재발을 막는다.
 
