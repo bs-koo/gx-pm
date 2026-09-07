@@ -776,6 +776,62 @@ class PipelineCommandTest(unittest.TestCase):
             "— 무엇을 건너뛰게 되는지가 사용자에게 안 보입니다",
         )
 
+    def test_확인요청서_반영_경로가_배선돼_있다(self):
+        """스킬만 만들고 커맨드가 안 부르면 도달할 수 없다.
+
+        커맨드를 늘리지 않는 대신 Step 0-2 의 기존 산출물 분기에 선택지를 얹었다.
+        선택지 문구가 없으면 사용자가 이 경로를 찾을 방법이 없고, 스킬 굵게 표기가
+        없으면 도달 가능성 검사(test_문서의_스킬_경로가_모두_존재한다)가 놓친다.
+        """
+        본문 = self._본문("gx-spec")
+        구간 = re.search(r"^### Step 0:(.*?)(?=^### |\Z)", 본문, re.M | re.S)
+        self.assertIsNotNone(구간, "Step 0 절을 찾지 못했습니다")
+        절 = 구간.group(1)
+        self.assertIn(
+            "**apply-confirmations**", 절,
+            "Step 0 이 apply-confirmations 스킬을 굵게 부르지 않습니다",
+        )
+        self.assertIn(
+            "확인요청서 반영하고 확정", 절,
+            "확인요청서 반영 선택지가 없습니다 — 사용자가 이 경로를 찾을 수 없습니다",
+        )
+
+    def test_확인요청서_임계치가_정본에_있다(self):
+        """임계치를 정하지 않으면 매번 다른 기준으로 파일이 생긴다."""
+        양식 = (
+            PLUGIN_ROOT / "templates" / "confirmation-request.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("10건", 양식, "확인요청서 생성 임계치가 없습니다")
+        self.assertIn(
+            "개정이력", 양식,
+            "개정이력을 붙이는지 안 붙이는지가 정해져 있지 않습니다 "
+            "— revision-history 는 5종의 첫 시트를 개정이력으로 정합니다",
+        )
+        본문 = self._본문("gx-spec")
+        self.assertIn(
+            "templates/confirmation-request.md", 본문,
+            "gx-spec 이 확인요청서 양식 정본을 가리키지 않습니다",
+        )
+
+    def test_반영_무응답이_묵시적_승인이다(self):
+        """무응답에서 멈추면 파이프라인이 사람을 기다린다.
+
+        착수 전에는 답할 수 없는 것이 많아 무응답이 정상이다. 이 규칙이 없으면
+        확인요청서가 파이프라인을 막는 새 관문이 된다 — 없애려던 문제 그 자체다.
+        """
+        스킬 = (
+            PLUGIN_ROOT / "skills" / "apply-confirmations" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("묵시적 승인", 스킬)
+        self.assertRegex(
+            스킬, r"무응답도 정상 종료",
+            "무응답으로도 끝난다는 규칙이 없습니다",
+        )
+        self.assertIn(
+            "templates/pipeline-protocol.md", 스킬,
+            "파급 규칙 정본을 가리키지 않습니다 — 여기서 복제하면 두 벌이 갈립니다",
+        )
+
     def test_게이트마다_저장한다(self):
         """저장이 Step 10 한 곳뿐이면 중간에 끊겼을 때 승인분이 사라진다.
 
