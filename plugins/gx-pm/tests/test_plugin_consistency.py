@@ -1379,5 +1379,136 @@ class FiveDocumentContractTest(unittest.TestCase):
                     self.assertNotIn(낱말, text)
 
 
+class SplitOmissionAndDataProvenanceTest(unittest.TestCase):
+    """분할 누락 되묻기와 데이터 출처 검사 — 실제 실행에서 뚫린 결함을 막는다.
+
+    SFR-012(벤치마크 산출)는 원본 기능 6건을 묶은 요구사항이었는데 gx-pm 은 3건으로만
+    갈랐고, 그중 "원본 보존 적재"가 통째로 사라졌다. 그 결과 SFR-017(통계 원본 세부
+    조회 + 이상값 조건부 재산출)에 해당하는 기능이 읽을 데이터를 만드는 기능이 없는
+    채로 남았다. 행 분할 규칙(`templates/AN-03-function-spec.md`)은 있었지만 적용을
+    빠뜨렸는지 보는 장치가 없어서 못 잡았다 — 같은 실행에서 SFR-022~024(로그인·
+    로그아웃·토큰갱신)는 요구사항 단계에서 뭉쳐 있던 것을 정확히 갈랐으니, 규칙이
+    아니라 적용이 흔들린 것이다.
+    """
+
+    def setUp(self):
+        self.스킬 = (
+            PLUGIN_ROOT / "skills" / "generate-function-spec" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(r"^### Step 6: 검증$(.*?)(?=^### |\Z)", self.스킬, re.M | re.S)
+        self.assertIsNotNone(구간, "generate-function-spec 의 Step 6 절을 찾지 못했습니다")
+        self.step6 = 구간.group(1)
+
+    def test_Step6_이_분할_누락을_되묻는다(self):
+        self.assertIn("분할 누락", self.step6)
+        self.assertRegex(
+            self.step6, r"되묻는다|되묻기",
+            "분할 누락은 차단이 아니라 되묻기여야 합니다",
+        )
+        # 실제로 뚫린 사례(SFR-012)가 판정 기준을 구체화한다 — 산출물 3종 열거
+        self.assertIn("원단위", self.step6)
+        self.assertIn("건물 등급", self.step6)
+
+    def test_Step6_이_데이터_출처를_검사한다(self):
+        self.assertIn("데이터 출처", self.step6)
+        self.assertIn("만드는 기능", self.step6)
+
+    def test_두_검사_모두_차단하지_않는다(self):
+        """정말 한 기능인 경우도, 외부에서 들어오는 데이터인 경우도 있다 — 되묻기·
+        목록 보고이지 차단이 아니다."""
+        for 라벨 in ("분할 누락", "데이터 출처"):
+            with self.subTest(검사=라벨):
+                시작 = self.step6.find(라벨)
+                self.assertNotEqual(시작, -1, f"'{라벨}' 문단을 찾지 못했습니다")
+                문단 = self.step6[시작:시작 + 400]
+                self.assertRegex(
+                    문단, r"차단(하지 않는다|이 아니라)",
+                    f"'{라벨}' 검사 문단에 차단하지 않는다는 선언이 없습니다",
+                )
+
+    def test_게이트2_집계가_5종으로_늘었다(self):
+        self.assertIn("집계 5종", self.스킬)
+        for 항목 in ("분할 누락 의심", "데이터 출처 없음"):
+            with self.subTest(항목=항목):
+                self.assertIn(항목, self.스킬)
+
+
+class Gate2ShowsSplitAndProvenanceTest(unittest.TestCase):
+    """계측하고 화면에 안 내면 계측하지 않은 것과 같다 — 근거 가용도 계측과 같은 원칙
+    (test_게이트2가_근거_집계를_보여준다 참조). Step 절로 범위를 좁혀서 본다."""
+
+    def setUp(self):
+        본문 = (PLUGIN_ROOT / "commands" / "gx-spec.md").read_text(encoding="utf-8")
+        구간 = re.search(
+            r"^### Step 6: 게이트 2(.*?)(?=^### |\Z)", 본문, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "gx-spec.md 에서 Step 6(게이트 2) 절을 찾지 못했습니다")
+        self.게이트2 = 구간.group(1)
+
+    def test_게이트2에_분할_누락과_데이터_출처_집계가_실린다(self):
+        for 항목 in ("분할 누락", "데이터 출처"):
+            with self.subTest(항목=항목):
+                self.assertIn(항목, self.게이트2, f"게이트 2 화면에 '{항목}' 이 없습니다")
+
+
+class DesignConstraintReflectionTest(unittest.TestCase):
+    """DAR-005(회차 누적 규칙)처럼 기능을 거치지 않는 데이터 요구사항이 DE-08 어디에도
+    반영되지 않고 조용히 사라지던 결함을 막는다. 원본 시스템은 이 규칙을 놓쳐 마지막
+    회차 대장 46건에 900만 건이 조인되는 사고가 실제로 났다. 기존 누락 판정 7유형은
+    전부 기능 축만 보고, `테이블·컬럼` 열은 DE-08 의 `연계기능ID` 역조회라 기능을
+    거치지 않는 데이터 요구사항은 대조 대상이 아니었다.
+    """
+
+    def setUp(self):
+        self.an05 = (
+            PLUGIN_ROOT / "templates" / "AN-05-traceability-matrix.md"
+        ).read_text(encoding="utf-8")
+
+    def _누락판정_유형행(self) -> list[str]:
+        구간 = re.search(r"^## 누락 판정$(.*?)(?=^## |\Z)", self.an05, re.M | re.S)
+        self.assertIsNotNone(구간, "AN-05 의 §누락 판정 절을 찾지 못했습니다")
+        유형행 = []
+        for 줄 in 구간.group(1).splitlines():
+            벗긴줄 = 줄.strip()
+            if not (벗긴줄.startswith("|") and 벗긴줄.endswith("|")):
+                continue
+            칸 = [c.strip() for c in 벗긴줄.strip("|").split("|")]
+            if len(칸) < 3 or set("".join(칸)) <= set("-: "):
+                continue
+            if 칸[0] == "유형":
+                continue  # 머리행
+            유형행.append(칸[0])
+        return 유형행
+
+    def test_누락_판정이_8유형이고_설계_제약_미반영이_있다(self):
+        유형행 = self._누락판정_유형행()
+        self.assertEqual(len(유형행), 8, f"누락 판정 유형이 8개가 아닙니다: {유형행}")
+        self.assertIn("설계 제약 미반영", 유형행)
+
+    def test_AN_05_컬럼_정본은_9개_그대로다(self):
+        """누락 열의 표기값만 늘어야 한다 — 컬럼 정본(9개)을 늘리거나 줄이면 안 된다."""
+        from helpers import parse_column_ssot
+        self.assertEqual(
+            len(parse_column_ssot("AN-05-traceability-matrix.md", "본문 컬럼 (정본)")), 9
+        )
+
+    def test_convert_ddl_이_데이터_요구사항_반영_단계를_갖는다(self):
+        """정본만 고치고 실행부를 안 고치면 규칙이 돌지 않는다 (기존 관례와 동일)."""
+        스킬 = (
+            PLUGIN_ROOT / "skills" / "convert-ddl-to-tablespec" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("데이터 요구사항", 스킬)
+        self.assertRegex(
+            스킬, r"차단하지 않(는다|고)",
+            "데이터 요구사항 반영 단계가 차단하지 않는다고 선언하지 않았습니다",
+        )
+        self.assertIn("templates/AN-05-traceability-matrix.md", 스킬)
+
+    def test_AN_05_가_데이터_요구사항_정의를_convert_ddl_로_가리킨다(self):
+        """정본을 옮겨 적지 않고 경로로 가리키는지 — 같은 개념이 두 곳에서 따로
+        정의되면 다음 수정에서 어긋난다."""
+        self.assertIn("skills/convert-ddl-to-tablespec/SKILL.md", self.an05)
+
+
 if __name__ == "__main__":
     unittest.main()

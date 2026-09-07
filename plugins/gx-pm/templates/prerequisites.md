@@ -31,7 +31,7 @@
 
 ### `sqi-comn-term` MCP 가 하드인 이유
 
-`skills/convert-ddl-to-tablespec/SKILL.md` Step 3 은 이 MCP 가 세션에 없으면 **중단한다**
+`skills/convert-ddl-to-tablespec/SKILL.md` Step 4 는 이 MCP 가 세션에 없으면 **중단한다**
 (표준 검증 없이 컬럼명을 지어내지 않는다). 파이프라인 전체에서 **유일한 하드 중단**이라,
 Step 1 에서 막지 않으면 `/gx-spec` 이 게이트 1(요구사항 승인)과 기능명세 생성을 마친 뒤
 DE-08 단계에서 멈춘다. `/gx-spec` 의 저장은 **Step 10 한 곳뿐**이므로 그 시점에는 저장된

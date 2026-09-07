@@ -31,7 +31,7 @@
    `skills/extract-requirements/SKILL.md` Step 2 가 정본이다.
 3. **신규 컬럼명 결정 중단점** — 표준용어 MCP 가 `decisionRequired` 를 내면 그 자리에서
    물어야 한다. 컬럼명이 확정돼야 단위테스트의 경계값이 그 위에 선다. 판정 기준은
-   `skills/convert-ddl-to-tablespec/SKILL.md` Step 4 가 정본이다.
+   `skills/convert-ddl-to-tablespec/SKILL.md` Step 5 가 정본이다.
 4. **ID 승계 판정 애매성** — 산출물을 다시 만들 때 직전 버전의 어느 항목과 같은 것인지
    애매하면 그 자리에서 물어야 한다. 게이트로 미루면 그 ID 로 이미 아래 산출물이
    만들어진 뒤다. DE-13 의 테스트ID 를 게이트 3 에서 고치면 Step 8 에서 이미 만들어진
@@ -67,4 +67,4 @@ REQ-005 변경의 영향: 기능 1건(FN-007), 컬럼 2건, 테스트 5건(UT-01
 파이프라인은 부분 재실행 플래그를 제공하지 않는다.
 
 신규 컬럼명 결정처럼 **사용자가 답한 결정**은 산출물 안에 남긴다
-(`skills/convert-ddl-to-tablespec/SKILL.md` Step 4). 재개할 때 다시 묻지 않는 근거가 그 기록이다.
+(`skills/convert-ddl-to-tablespec/SKILL.md` Step 5). 재개할 때 다시 묻지 않는 근거가 그 기록이다.
