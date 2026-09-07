@@ -905,10 +905,51 @@ class EvidenceRuleTest(unittest.TestCase):
             with self.subTest(근거=근거):
                 self.assertIn(근거, 구간.group(1))
 
-    def test_확인필요가_두_종류로_갈린다(self):
-        for 종류 in ("[확인필요:항목]", "[확인필요:제약]"):
+    def test_가정과_미확정이_2단_판정으로_갈린다(self):
+        """옛 분류(`항목`/`제약`)는 무엇이 비었는가를 갈랐다.
+
+        그것으로는 「지어내도 되는 값」과 「발주기관만 아는 값」이 구별되지 않아,
+        표본 최소 수 같은 판정 기준값을 관행값으로 채우는 것을 막지 못했다.
+        새 분류는 **누가 정할 값인가**를 가른다.
+
+        표만 있고 판정 순서가 없으면 실행이 순서를 스스로 정하므로 순서 문자열도 본다.
+        """
+        for 종류 in ("[가정]", "[미확정]"):
             with self.subTest(종류=종류):
                 self.assertIn(종류, self.text, f"{종류} 정의가 없습니다")
+        self.assertIn(
+            "RFP 가 그 값을 줬는가", self.text,
+            "2단 판정의 1번(RFP 가 값을 줬는가)이 없습니다",
+        )
+        self.assertRegex(
+            self.text, r"없으면 요구사항을 구현할 수 없는가",
+            "2단 판정의 2번(없으면 구현 불가인가)이 없습니다 "
+            "— 이것이 발주기관 몫과 설계 재량을 가르는 기준입니다",
+        )
+        self.assertIn(
+            "RFP 미규정", self.text,
+            "`[가정]` 근거에 `RFP 미규정` 을 적으라는 규칙이 없습니다 "
+            "— 그것이 2단 판정을 통과했다는 증거입니다",
+        )
+
+    def test_가정_표식이_세_홉을_관통한다(self):
+        """AN-03 에만 적으면 DE-13 이 무표식 값에서 경계를 뽑는다.
+
+        제약의 최종 승자는 DE-08 이므로(generate-unit-test-plan Step 2),
+        AN-03 비고의 태그는 DE-08 길이 열에서 숫자만 남기고 끊긴다. 그러면
+        감리에 나가는 DE-13 에서 가정값 검증과 RFP 값 검증이 구별되지 않는다.
+
+        한 홉만 적혀 있어도 통과하지 않도록 세 자리를 각각 본다.
+        """
+        구간 = re.search(
+            r"^### 표식은 세 홉을 관통한다$(.*?)(?=^#{2,3} |\Z)", self.text, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "§표식은 세 홉을 관통한다 절을 찾지 못했습니다")
+        절 = 구간.group(1)
+        for 홉, 자리 in (("AN-03", "입력항목"), ("DE-08", "근거"), ("DE-13", "입력")):
+            with self.subTest(홉=홉):
+                self.assertIn(홉, 절, f"{홉} 홉이 표식 경로에 없습니다")
+                self.assertIn(자리, 절, f"{홉} 의 표식 자리({자리})가 없습니다")
 
     def test_제약이_빈_것의_판정_기준이_있다(self):
         """'제약이 비었다' 를 정의하지 않으면 판정이 사람마다 달라진다."""
@@ -924,16 +965,82 @@ class EvidenceRuleTest(unittest.TestCase):
         self.assertIn("4/4 미만", 구간.group(1))
         self.assertIn("0건", 구간.group(1))
 
-    def test_제약_미상은_자동보강하지_않는다(self):
-        self.assertIn("제약 미상", self.text)
-        self.assertIn("지어내", self.text)
+    def test_미확정_제약만_자동보강에서_빠진다(self):
+        """자동 보강을 두 갈래로 가르지 않으면 배선이 반쪽이 된다.
+
+        옛 규칙은 "제약이 비면 보강하지 않는다" 였다. 그 전제는 "제약이 비면
+        근거가 없다" 였는데, 2단 판정이 RFP 미규정 항목에 근거를 만들면서
+        전제가 바뀌었다. `[가정]` 은 보강하고 `[미확정]` 은 보강하지 않는다.
+
+        한쪽만 적혀 있으면 실행이 나머지를 스스로 정하므로 둘 다 본다.
+        DE-13 밀도가 이 갈래에 달려 있다 — `[가정]` 을 보강하지 않으면 경계
+        케이스가 안 나와 밀도가 그대로다.
+        """
+        구간 = re.search(
+            r"^## \[미확정\] 제약은 자동 보강 대상이 아니다$(.*?)(?=^## |\Z)",
+            self.text, re.M | re.S,
+        )
+        self.assertIsNotNone(
+            구간, "§[미확정] 제약은 자동 보강 대상이 아니다 절을 찾지 못했습니다"
+        )
+        절 = 구간.group(1)
+        self.assertIn("지어내", 절, "보강하지 않는 이유(지어내기)가 없습니다")
+        self.assertRegex(
+            절, r"\[가정\][^\n]*\|[^\n]*한다",
+            "`[가정]` 제약을 보강한다는 갈래가 없습니다 — 밀도가 오르지 않습니다",
+        )
+        self.assertRegex(
+            절, r"\[미확정\][^\n]*\|[^\n]*하지 않는다",
+            "`[미확정]` 제약을 보강하지 않는다는 갈래가 없습니다",
+        )
+
+    def test_옛_확인필요_표기가_남아_있지_않다(self):
+        """정본만 새 표기로 바꾸고 실행부에 옛 표기가 남으면 둘이 갈린다.
+
+        이 플러그인이 반복해 겪은 형태다 — 규칙은 정본에 있고 실행부가 안 한다.
+        `read_docs()` 범위(archive·.dev·tests/fixtures 제외) 전체를 훑는다.
+        `CHANGELOG.md` 만 예외다: 과거 기록이라 그때의 표기가 남는 것이 맞다.
+        """
+        남은 = [
+            path.relative_to(REPO_ROOT)
+            for path, text in read_docs()
+            if path.name != "CHANGELOG.md" and "[확인필요" in text
+        ]
+        self.assertEqual(
+            남은, [],
+            f"옛 `[확인필요]` 표기가 남아 있습니다: {남은} "
+            "— `[가정]`/`[미확정]` 2단 판정으로 바꾸세요",
+        )
+
+    def test_가정_표식을_세_홉의_실행부가_모두_안다(self):
+        """정본에 경로를 그려도 각 홉의 실행부가 모르면 표식이 끊긴다.
+
+        AN-03 비고에만 적히면 DE-08 `길이` 열에는 숫자만 남고, 제약의 최종 승자가
+        DE-08 이라 그 뒤로는 되살릴 자리가 없다. DE-13 은 무표식 값에서 경계를
+        뽑고, 감리에서 가정값 검증이 RFP 값 검증처럼 보인다.
+
+        한 홉만 알아도 통과하지 않도록 세 파일을 각각 본다.
+        """
+        for 파일 in (
+            PLUGIN_ROOT / "templates" / "DE-08-table-definition.md",
+            PLUGIN_ROOT / "templates" / "DE-13-unit-test-plan.md",
+            PLUGIN_ROOT / "skills" / "convert-ddl-to-tablespec" / "SKILL.md",
+        ):
+            with self.subTest(파일=파일.name):
+                text = 파일.read_text(encoding="utf-8")
+                self.assertIn(
+                    "[가정]", text,
+                    f"{파일.name} 이 `[가정]` 표식을 다루지 않습니다 "
+                    "— 이 홉에서 표식이 끊깁니다",
+                )
 
     def test_AN_03_이_근거_정본을_참조한다(self):
         an03 = (PLUGIN_ROOT / "templates" / "AN-03-function-spec.md").read_text(
             encoding="utf-8"
         )
         self.assertIn("templates/evidence-rules.md", an03)
-        self.assertIn("[확인필요:제약]", an03)
+        self.assertIn("[미확정]", an03)
+        self.assertIn("[가정]", an03)
 
     def test_AN_03_도출_출처가_네_단이다(self):
         """3단(요구사항·역산·DDL)만 적혀 있으면 소스 근거가 다시 사라진다."""
@@ -949,16 +1056,20 @@ class EvidenceRuleTest(unittest.TestCase):
         self.assertEqual(len(단), 4, f"도출 출처가 4단이 아닙니다: {len(단)}개")
         self.assertIn("기존 소스", 구간.group(1))
 
-    def test_기능명세_스킬이_확인필요_두_종류를_모두_안다(self):
+    def test_기능명세_스킬이_가정과_미확정을_모두_안다(self):
         """정본만 고치고 실행부를 안 고치면 규칙이 돌지 않는다."""
         스킬 = (
             PLUGIN_ROOT / "skills" / "generate-function-spec" / "SKILL.md"
         ).read_text(encoding="utf-8")
-        for 종류 in ("[확인필요:항목]", "[확인필요:제약]"):
+        for 종류 in ("[가정]", "[미확정]"):
             with self.subTest(종류=종류):
                 self.assertIn(종류, 스킬)
         self.assertIn("templates/evidence-rules.md", 스킬)
-        for 집계 in ("근거 가용도", "제약 미상"):
+        self.assertIn(
+            "RFP 미규정", 스킬,
+            "`[가정]` 근거에 `RFP 미규정` 을 적으라는 지시가 실행부에 없습니다",
+        )
+        for 집계 in ("근거 가용도", "[미확정] 제약"):
             with self.subTest(집계=집계):
                 self.assertIn(집계, 스킬)
 
@@ -972,16 +1083,27 @@ class EvidenceRuleTest(unittest.TestCase):
         스킬 = (
             PLUGIN_ROOT / "skills" / "generate-unit-test-plan" / "SKILL.md"
         ).read_text(encoding="utf-8")
-        self.assertIn("제약 미상", 스킬)
+        self.assertIn("[미확정] 제약", 스킬)
         self.assertIn("templates/evidence-rules.md", 스킬)
         구간 = re.search(
             r"^### Step 6: 충분성 검증$(.*?)(?=^### |\Z)", 스킬, re.M | re.S
         )
         self.assertIsNotNone(구간, "generate-unit-test-plan 의 Step 6 절을 찾지 못했습니다")
-        self.assertIn("제약 미상", 구간.group(1))
+        절 = 구간.group(1)
+        self.assertIn("[미확정] 제약", 절)
         self.assertRegex(
-            구간.group(1), r"보강하지 않는다|지어내",
-            "Step 6 에 '제약이 없으면 보강하지 않는다' 는 지시가 없습니다",
+            절, r"보강하지 않는다|지어내",
+            "Step 6 에 '[미확정] 제약은 보강하지 않는다' 는 지시가 없습니다",
+        )
+        self.assertRegex(
+            절, r"\[가정\].*보강",
+            "Step 6 이 `[가정]` 제약을 보강한다고 말하지 않습니다 "
+            "— 이 갈래가 없으면 DE-13 밀도가 오르지 않습니다",
+        )
+        self.assertIn(
+            "[가정:", 절,
+            "보강한 케이스에 `[가정:N]` 표식을 붙이라는 지시가 없습니다 "
+            "— 감리에서 RFP 값 검증과 구별되지 않습니다",
         )
 
     def test_게이트2가_근거_집계를_보여준다(self):
@@ -995,18 +1117,18 @@ class EvidenceRuleTest(unittest.TestCase):
             r"^### Step 6: 게이트 2(.*?)(?=^### |\Z)", 본문, re.M | re.S
         )
         self.assertIsNotNone(구간, "gx-spec.md 에서 Step 6(게이트 2) 절을 찾지 못했습니다")
-        for 항목 in ("근거 가용도", "[확인필요]", "제약 미상"):
+        for 항목 in ("근거 가용도", "[가정]", "[미확정]"):
             with self.subTest(항목=항목):
                 self.assertIn(항목, 구간.group(1), f"게이트 2 에 '{항목}' 이 없습니다")
         self.assertIn("templates/evidence-rules.md", 구간.group(1))
 
-    def test_게이트3이_제약_미상을_보여준다(self):
+    def test_게이트3이_미확정_제약을_보여준다(self):
         본문 = (PLUGIN_ROOT / "commands" / "gx-spec.md").read_text(encoding="utf-8")
         구간 = re.search(
             r"^### Step 9: 게이트 3(.*?)(?=^### |\Z)", 본문, re.M | re.S
         )
         self.assertIsNotNone(구간, "gx-spec.md 에서 Step 9(게이트 3) 절을 찾지 못했습니다")
-        self.assertIn("제약 미상", 구간.group(1))
+        self.assertIn("[미확정] 제약", 구간.group(1))
 
 
 class DdlAbsenceNoticeTest(unittest.TestCase):

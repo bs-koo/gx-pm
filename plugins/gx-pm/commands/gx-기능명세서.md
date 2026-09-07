@@ -33,7 +33,7 @@ argument-hint: "<요구사항정의서 또는 파일>"
 
 ## Step 3: 승인 루프
 
-`templates/approval-protocol.md` 를 따른다. `[확인필요]` 목록을 함께 보여준다.
+`templates/approval-protocol.md` 를 따른다. `[가정]`·`[미확정]` 목록을 함께 보여준다.
 
 ## Step 4: 개정이력 기록
 
