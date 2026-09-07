@@ -776,6 +776,69 @@ class PipelineCommandTest(unittest.TestCase):
             "— 무엇을 건너뛰게 되는지가 사용자에게 안 보입니다",
         )
 
+    def test_게이트마다_저장한다(self):
+        """저장이 Step 10 한 곳뿐이면 중간에 끊겼을 때 승인분이 사라진다.
+
+        `templates/pipeline-protocol.md` §중단 후 재개는 "이미 저장된 산출물은
+        그대로 둔다" 고 정해두었는데, 정작 저장이 맨 끝에만 있어 규약이 헛돌았다.
+        MCP 를 Step 1 에서 하드로 막던 것도 이 손실 때문이었다.
+
+        "게이트마다 저장한다" 한 줄을 어딘가에 적는 것으로는 통과하지 않도록
+        게이트 세 절을 각각 본다 — 한 절만 고치고 나머지를 빠뜨리는 것이
+        이 레포가 반복해 겪은 형태다.
+        """
+        본문 = self._본문("gx-spec")
+        for 절제목 in ("Step 3: 게이트 1", "Step 6: 게이트 2", "Step 9: 게이트 3"):
+            with self.subTest(게이트=절제목):
+                구간 = re.search(
+                    rf"^### {re.escape(절제목)}(.*?)(?=^### |\Z)", 본문, re.M | re.S
+                )
+                self.assertIsNotNone(구간, f"{절제목} 절을 찾지 못했습니다")
+                self.assertRegex(
+                    구간.group(1), r"파일로 저장한다",
+                    f"{절제목} 통과 후 저장한다는 지시가 없습니다",
+                )
+
+    def test_생성_표지의_자리가_정해져_있다(self):
+        """표지가 없으면 파일 존재만으로 게이트 통과를 판정할 수 없다.
+
+        단독 커맨드도 같은 파일을 만들기 때문이다. 자리를 안 정하면 게이트 화면에만
+        찍히고 파일에 안 남아 다음 세션이 못 읽는다.
+        """
+        본문 = self._본문("gx-spec")
+        구간 = re.search(r"^## 생성 표지$(.*?)(?=^## |\Z)", 본문, re.M | re.S)
+        self.assertIsNotNone(구간, "gx-spec.md 에 §생성 표지 절이 없습니다")
+        절 = 구간.group(1)
+        self.assertIn(
+            "개정이력", 절,
+            "표지 자리가 `## 개정이력` 기준으로 명시돼 있지 않습니다",
+        )
+        self.assertIn("게이트 1 통과", 절, "표지 문구 예시가 없습니다")
+
+    def test_중간_산출물은_백업_대상이_아니다(self):
+        """게이트 저장분을 백업하면 같은 날짜 파일명이 진짜 직전 버전을 덮어쓴다.
+
+        `reconcile-ids` Step 1 은 그 백업을 ID 승계의 유일한 기준선으로 읽으므로,
+        반쯤 만들다 만 산출물이 기준선이 되면 승계가 통째로 어긋난다.
+        데이터 손실 경로라 순번 규칙도 함께 본다.
+        """
+        스킬 = (
+            PLUGIN_ROOT / "skills" / "detect-existing-artifact" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(
+            r"^#### 2\. 새로쓰기 선택 시$(.*?)(?=^#### |\Z)", 스킬, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "새로쓰기 절을 찾지 못했습니다")
+        절 = 구간.group(1)
+        self.assertIn(
+            "게이트", 절,
+            "게이트 통과 표지가 붙은 중간 산출물을 백업에서 빼라는 규칙이 없습니다",
+        )
+        self.assertIn(
+            "_2", 절,
+            "같은 날 두 번 백업할 때의 순번 규칙이 없습니다 — 앞 백업을 덮어씁니다",
+        )
+
     def test_gx_spec_step0가_하위_절로_갈린다(self):
         """Step 0 이 한 덩어리면 종료 지시 뒤 문장들이 이어서 읽힌다.
 
