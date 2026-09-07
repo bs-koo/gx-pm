@@ -1504,6 +1504,61 @@ class DesignConstraintReflectionTest(unittest.TestCase):
         )
         self.assertIn("templates/AN-05-traceability-matrix.md", 스킬)
 
+    def test_trace_requirements_가_8번째_유형을_판정한다(self):
+        """정본에 유형을 더하고 판정 순서를 안 고치면 그 유형이 영영 안 나온다.
+
+        AN-05 템플릿에 `설계 제약 미반영` 을 넣었을 때 실제로 그랬다 — 정본은 8유형인데
+        `trace-requirements` Step 5 의 판정 순서는 7개뿐이라, 매트릭스를 만들어도
+        그 값이 한 번도 찍히지 않았다. 이 플러그인이 반복해 겪은 형태다:
+        규칙은 정본에 있고 실행부가 그걸 안 한다.
+
+        Step 5 절로 범위를 좁혀서 본다.
+        """
+        스킬 = (
+            PLUGIN_ROOT / "skills" / "trace-requirements" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(r"^### Step 5: 누락 판정$(.*?)(?=^## |\Z)", 스킬, re.M | re.S)
+        self.assertIsNotNone(
+            구간, "trace-requirements 의 §Step 5 누락 판정 절을 찾지 못했습니다"
+        )
+        절 = 구간.group(1)
+        번호 = re.findall(r"^\d+\. ", 절, re.M)
+        self.assertEqual(
+            len(번호), 8,
+            f"판정 순서가 8단계가 아닙니다: {len(번호)}단계 "
+            "— 정본의 누락 유형 수와 어긋나면 안 나오는 유형이 생깁니다",
+        )
+        self.assertIn(
+            "설계 제약 미반영", 절,
+            "Step 5 판정 순서에 `설계 제약 미반영` 이 없습니다",
+        )
+        self.assertIn(
+            "skills/convert-ddl-to-tablespec/SKILL.md", 절,
+            "Step 5 가 반영 절차의 정본을 가리키지 않습니다",
+        )
+
+    def test_누락_유형_수_표기가_문서마다_같다(self):
+        """`7유형` 이라고 적힌 곳이 네 군데 있었다. 정본만 8로 늘리면 나머지가
+
+        낡은 수를 주장한다. 반대로 실행부가 못 미치는데 설명만 늘리면 없는 기능을
+        있다고 말한다 — 어느 쪽이든 문서가 서로를 부정한다.
+        """
+        유형수 = len(self._누락판정_유형행())
+        for 경로 in (
+            PLUGIN_ROOT / "skills" / "trace-requirements" / "SKILL.md",
+            PLUGIN_ROOT / "skills" / "id-trace" / "SKILL.md",
+            PLUGIN_ROOT / "commands" / "gx-추적매트릭스.md",
+        ):
+            본문 = 경로.read_text(encoding="utf-8")
+            with self.subTest(문서=경로.name):
+                낡은표기 = re.findall(r"누락[^\n]{0,20}?(\d+)(?:유형|가지 유형)", 본문)
+                for 수 in 낡은표기:
+                    self.assertEqual(
+                        int(수), 유형수,
+                        f"{경로.name} 이 누락 유형을 {수}개로 적었습니다 "
+                        f"— 정본은 {유형수}개입니다",
+                    )
+
     def test_AN_05_가_데이터_요구사항_정의를_convert_ddl_로_가리킨다(self):
         """정본을 옮겨 적지 않고 경로로 가리키는지 — 같은 개념이 두 곳에서 따로
         정의되면 다음 수정에서 어긋난다."""
