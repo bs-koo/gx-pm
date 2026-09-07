@@ -36,8 +36,31 @@
 | `networkType` | string | Y | 망 구분. **현재 소비처 없음** — 아래 §소비처 없는 필드 | `"internal"`, `"external"`, `"mixed"` |
 | `auditDate` | string | N | 감리 일정 (YYYY-MM-DD) | `"2026-06-15"` |
 | `assets` | object | N | 기존 자산 경로 정보 | 아래 참조 |
+| `policy` | object | N | 질문 정책 4개. `/gx-spec` Step 0-4 가 묻고 저장한다 | 아래 참조 |
 | `createdAt` | string | Y | 프로파일 생성일 (YYYY-MM-DD) | `"2026-03-31"` |
 | `lastUsed` | string | Y | 마지막 사용일 (YYYY-MM-DD) | `"2026-03-31"` |
+
+### policy 객체
+
+`templates/pipeline-protocol.md` §질문 정책의 정책 층 4개를 담는다.
+**선택 필드다** — 없으면 `/gx-spec` 이 Step 0-4 에서 묻고 저장하며, 단독 커맨드는
+기본값(권장안)으로 돈다. 기존 프로파일이 이 필드 없이도 계속 동작해야 한다.
+
+| 필드 | 타입 | 값 | 뜻 |
+|------|------|-----|-----|
+| `splitCriterion` | string | `"verification-unit"`(권장) · `"rfp-one-to-one"` · `"function-domain"` | 요구사항 행 분할 기준 |
+| `assumptionFill` | boolean | `true`(권장) · `false` | RFP 미규정 항목을 `[가정]` 으로 채울지. `false` 면 자동 보강이 돌지 않아 DE-13 밀도가 얇아진다 |
+| `testDensity` | number \| null | `null`(권장) · `3` · `5` | 기능당 케이스 수 **경고 임계값**. 하한 패딩이 아니다 — 못 미치는 기능을 게이트에 올려 사람이 판단하게 한다. 수로 채우면 근거 없는 케이스가 생겨 `[가정]` 규율과 충돌하고, 그때는 **`[가정]` 규율이 이긴다** |
+| `nonFunctionalVerification` | string | `"measurement-procedure"`(권장) · `"design-review"` · `"tool"` | 비기능 요구사항 검증 방법 |
+
+```json
+"policy": {
+  "splitCriterion": "verification-unit",
+  "assumptionFill": true,
+  "testDensity": null,
+  "nonFunctionalVerification": "measurement-procedure"
+}
+```
 
 ### assets 객체
 

@@ -776,6 +776,105 @@ class PipelineCommandTest(unittest.TestCase):
             "— 무엇을 건너뛰게 되는지가 사용자에게 안 보입니다",
         )
 
+    def test_질문_정책이_세_층으로_갈린다(self):
+        """상한을 층 구분 없이 걸면 이월 금지 항목과 충돌한다.
+
+        §이월 금지 항목은 "절대 게이트로 미루지 않는다" 인데, 상한 초과분을
+        확인요청서(게이트 3 산출물)로 올리면 정확히 그 금지 행위가 된다.
+        정책 위반 감지도 그 넷의 권장안을 정하는 질문이라 면제 쪽이다 —
+        중단점은 면제인데 그걸 푸는 질문이 상한에 걸리면 중단점이 못 선다.
+        """
+        본문 = (
+            PLUGIN_ROOT / "templates" / "pipeline-protocol.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(r"^## 질문 정책$(.*?)(?=^## |\Z)", 본문, re.M | re.S)
+        self.assertIsNotNone(구간, "pipeline-protocol.md 에 §질문 정책 절이 없습니다")
+        절 = 구간.group(1)
+        self.assertIn("면제", 절, "이월 금지 항목을 상한에서 면제한다는 규칙이 없습니다")
+        self.assertRegex(
+            절, r"정책 위반 감지[^\n]*면제|면제[^\n]*정책 위반 감지"
+            r"|\*\*정책 위반 감지도 면제 쪽이다",
+            "정책 위반 감지가 면제인지 상한 대상인지 정해져 있지 않습니다",
+        )
+        self.assertIn(
+            "5번째 이월 금지 항목이 새로 생기는 것이 아니다", 절,
+            "항목 수가 4개 그대로라는 못박음이 없습니다 — 이월 금지 4개 계약이 흔들립니다",
+        )
+
+    def test_애매성_상한에_초과_동작이_있다(self):
+        """상한만 정하고 초과 동작을 안 적으면 구현이 스스로 정한다.
+
+        추정해서 채우면 정직도가 무너지고, 이월 금지 4개를 확인요청서로 올리면
+        규약 위반이다. 6번째부터 무엇을 하는지 못박아야 한다.
+        """
+        본문 = (
+            PLUGIN_ROOT / "templates" / "pipeline-protocol.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(r"^## 질문 정책$(.*?)(?=^## |\Z)", 본문, re.M | re.S)
+        self.assertIsNotNone(구간)
+        절 = 구간.group(1)
+        self.assertIn("6번째", 절, "상한 초과 시 동작이 없습니다")
+        self.assertIn(
+            "추정해서 채우지 않는다", 절,
+            "초과분을 추정으로 채우지 말라는 금지가 없습니다",
+        )
+        self.assertIn(
+            "[미확정]", 절,
+            "초과분의 행선지(`[미확정]` + 확인요청서)가 없습니다",
+        )
+
+    def test_상한이_강제가_아니라_관측임을_밝힌다(self):
+        """프롬프트 플러그인에는 카운터 원시연산이 없다.
+
+        `강제한다` 고 적으면 지켜진다고 오해하게 된다 — 이 레포에는 규칙문은
+        있는데 실행이 안 지킨 전례가 있다(gx-spec 프로파일 하드 중단).
+        묶기로 회피되고 중복 출력도 막지 못한다는 것을 밝혀야, 3차 시험에서
+        결정 기록으로 실효를 판정할 근거가 생긴다.
+        """
+        본문 = (
+            PLUGIN_ROOT / "templates" / "pipeline-protocol.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(r"^## 질문 정책$(.*?)(?=^## |\Z)", 본문, re.M | re.S)
+        self.assertIsNotNone(구간)
+        절 = 구간.group(1)
+        self.assertIn("관측", 절)
+        self.assertIn(
+            "묶으면", 절,
+            "카운터가 묶기로 회피된다는 한계가 적혀 있지 않습니다",
+        )
+        self.assertIn("[애매성 3/5]", 절, "카운터 출력 형식 예시가 없습니다")
+
+    def test_정책_층이_Step_0_에_있고_프로파일에_저장된다(self):
+        """저장처가 없으면 재개할 때 정책을 다시 묻게 된다.
+
+        「통과한 게이트를 다시 세우지 않는다」와 어긋난다. `.dev` 결정 기록은
+        훅이 쓰는 런타임 파일이라 helpers.read_docs 가 계약 검사에서 제외하므로
+        저장처가 될 수 없다.
+        """
+        본문 = self._본문("gx-spec")
+        구간 = re.search(r"^### Step 0:(.*?)(?=^### |\Z)", 본문, re.M | re.S)
+        self.assertIsNotNone(구간)
+        절 = 구간.group(1)
+        self.assertIn("정책 층", 절, "Step 0 에 정책 층이 없습니다")
+        self.assertIn(
+            "templates/project-profile-schema.md", 절,
+            "정책의 저장 위치를 가리키지 않습니다",
+        )
+        스키마 = (
+            PLUGIN_ROOT / "templates" / "project-profile-schema.md"
+        ).read_text(encoding="utf-8")
+        for 필드 in (
+            "splitCriterion", "assumptionFill", "testDensity",
+            "nonFunctionalVerification",
+        ):
+            with self.subTest(필드=필드):
+                self.assertIn(필드, 스키마, f"policy.{필드} 가 스키마에 없습니다")
+        self.assertRegex(
+            스키마, r"`testDensity`[^\n]*경고 임계값",
+            "testDensity 가 하한 패딩인지 경고 임계값인지 정해져 있지 않습니다 "
+            "— 하한 패딩이면 근거 없는 케이스가 생겨 `[가정]` 규율과 충돌합니다",
+        )
+
     def test_확인요청서_반영_경로가_배선돼_있다(self):
         """스킬만 만들고 커맨드가 안 부르면 도달할 수 없다.
 
