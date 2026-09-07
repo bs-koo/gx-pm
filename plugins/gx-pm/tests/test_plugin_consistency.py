@@ -685,6 +685,71 @@ class PipelineCommandTest(unittest.TestCase):
                     f"'{낱말}' 이 규약의 이월 금지 항목에 없습니다: {규약항목}",
                 )
 
+    def test_gx_spec_이_프로파일_부재를_하드로_막는다(self):
+        """실행 중 프로파일 없이 `/gx-spec` 을 부르자 파이프라인이 종료하지 않고
+
+        프로파일을 그 자리에서 만들었다. `/gx-프로젝트설정` 의 `[필수 중단점]` 3개
+        (유형 선택·기본 정보·설정 승인)가 통째로 사라졌고, 유형은 사용자가 아니라
+        모델이 판정했다. 유형이 틀리면 5종 전부가 틀린다.
+
+        규약(`templates/prerequisites.md`)에는 프로파일이 하드 선행이라고 적혀 있었지만
+        Step 0 이 그걸 선언하는지 보는 검사가 없었다. 이월 금지 중단점은
+        test_gx_spec_이_이월_금지_중단점을_선언한다 가 절 단위로 잡는데,
+        하드 선행 중단은 잡는 것이 없었다.
+
+        Step 0 절로 범위를 좁혀서 본다 — 파일 어딘가에 낱말이 있는 것으로는
+        그 절이 종료를 지시한다는 보장이 안 된다.
+        """
+        본문 = self._본문("gx-spec")
+        구간 = re.search(r"^### Step 0:(.*?)(?=^### |\Z)", 본문, re.M | re.S)
+        self.assertIsNotNone(구간, "gx-spec.md 에서 '### Step 0:' 절을 찾지 못했습니다")
+        절 = 구간.group(1)
+
+        self.assertIn(
+            "안내 후 종료", 절,
+            "Step 0 에 프로파일 부재 시 종료 지시가 없습니다 "
+            "— 파이프라인이 프로파일을 대신 만들게 됩니다",
+        )
+        self.assertIn(
+            "`/gx-프로젝트설정`", 절,
+            "Step 0 이 선행 커맨드를 백틱으로 안내하지 않습니다",
+        )
+        self.assertIn(
+            "templates/prerequisites.md", 절,
+            "Step 0 이 하드 선행 정본을 가리키지 않습니다",
+        )
+        self.assertRegex(
+            절, r"대신 만들지 않는다",
+            "Step 0 에 '프로파일을 여기서 만들지 않는다' 는 금지가 없습니다 "
+            "— 종료 지시만으로는 채번 문장에 끌려갑니다",
+        )
+
+    def test_gx_spec_의_채번_질문이_프로파일_존재를_전제한다(self):
+        """Step 0 은 '프로파일이 없으면 종료' 와 '채번이 없으면 여기서 묻고 저장' 을
+
+        함께 담는다. 뒤 문장이 조건 없이 적히면 '프로파일 항목이 없으면 여기서 채운다'
+        로 확장 해석되어 앞 문장을 무력화한다. 실제로 그렇게 읽힌 실행이 있었다.
+        지시문(하라)이 금지문(하지 마라)보다 행동을 끌어당기므로, 조건을 붙여 둔다.
+        """
+        본문 = self._본문("gx-spec")
+        구간 = re.search(r"^### Step 0:(.*?)(?=^### |\Z)", 본문, re.M | re.S)
+        self.assertIsNotNone(구간, "gx-spec.md 에서 '### Step 0:' 절을 찾지 못했습니다")
+        절 = 구간.group(1)
+
+        채번문장 = re.search(r"^\*\*(.*?채번.*?|.*?idNaming.*?)\*\*", 절, re.M)
+        self.assertIsNotNone(
+            채번문장, "Step 0 에서 채번 규칙을 다루는 굵은 문장을 찾지 못했습니다"
+        )
+        self.assertRegex(
+            채번문장.group(1), r"프로파일은 있는데|프로파일이 있고",
+            "채번 질문이 프로파일 존재를 전제하지 않습니다 "
+            f"— 프로파일 전체를 여기서 채우는 것으로 읽힙니다: {채번문장.group(1)!r}",
+        )
+        self.assertIn(
+            "이 항목만 여기서 채운다", 절,
+            "다른 프로파일 항목까지 채우지 말라는 한정이 없습니다",
+        )
+
 
 class VersionConsistencyTest(unittest.TestCase):
     """버전과 개수 표기가 10개 지점에 흩어져 있어 한쪽만 갱신되기 쉽다.
@@ -1008,6 +1073,148 @@ class IdSuccessionTest(unittest.TestCase):
         self.assertIn("reconcile-ids", 구간.group(1))
 
 
+class RequirementStatusValueTest(unittest.TestCase):
+    """AN-02 `상태` 열은 3값이다 (`유지`/`변경`/`삭제`).
+
+    `신규`를 없앤 이유: 최초 작성이면 전건이 `신규`라 아무 정보가 없고, 재실행 때도
+    `신규`와 `유지`가 모두 "현재 유효함"을 뜻해 구분이 흐렸다. 무엇이 새로 들어왔는지는
+    `요구사항 근거` 열과 개정이력의 `개정 사유`가 이미 기록하므로, 상태 열은
+    "이번 개정에서 손댔는가"만 답하면 된다 — 그래서 최초 작성에도 전건 `유지`다.
+
+    정본은 templates/AN-02-requirements-definition.md 하나다. DE-08 `구분` 열의
+    `신규`(컬럼의 신규 여부)와 revision-history.md `개정 사유`의 `신규`(문서 최초 생성)는
+    다른 축이라 이 테스트의 대상이 아니다 — 그래서 절 범위를 좁혀서 검사한다.
+    """
+
+    def setUp(self):
+        self.정본파일 = (
+            PLUGIN_ROOT / "templates" / "AN-02-requirements-definition.md"
+        )
+        self.정본 = self.정본파일.read_text(encoding="utf-8")
+
+    def _컬럼_값규칙(self, 컬럼명: str) -> str:
+        """`본문 컬럼 (정본)` 표에서 지정 컬럼의 '값 규칙' 칸 원문을 돌려준다."""
+        구간 = re.search(
+            r"^## 본문 컬럼 \(정본\)$(.*?)(?=^## |\Z)", self.정본, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "§본문 컬럼 (정본) 절을 찾지 못했습니다")
+        for 줄 in 구간.group(1).splitlines():
+            벗긴줄 = 줄.strip()
+            if not (벗긴줄.startswith("|") and 벗긴줄.endswith("|")):
+                continue
+            칸 = [c.strip() for c in 벗긴줄.strip("|").split("|")]
+            if len(칸) < 3 or set("".join(칸)) <= set("-: "):
+                continue
+            if 칸[1] == 컬럼명:
+                return 칸[2]
+        self.fail(f"'{컬럼명}' 컬럼 행을 찾지 못했습니다")
+
+    def _상태_판정표_행(self) -> list[list[str]]:
+        """`## 상태 판정` 절의 판정표를 [대조 결과, 상태, 추가 동작] 행 목록으로 돌려준다."""
+        구간 = re.search(
+            r"^## 상태 판정[^\n]*\n(.*?)(?=^## |\Z)", self.정본, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "§상태 판정 절을 찾지 못했습니다")
+        행목록 = []
+        for 줄 in 구간.group(1).splitlines():
+            벗긴줄 = 줄.strip()
+            if not (벗긴줄.startswith("|") and 벗긴줄.endswith("|")):
+                continue
+            칸 = [c.strip() for c in 벗긴줄.strip("|").split("|")]
+            if len(칸) < 3 or set("".join(칸)) <= set("-: "):
+                continue
+            if 칸[0] == "대조 결과":
+                continue  # 머리행
+            행목록.append(칸)
+        return 행목록
+
+    def test_상태값이_정확히_3개다(self):
+        """컬럼 정본의 '값 규칙' 칸에서 첫 구획(— 앞)의 백틱 값만 상태값으로 센다.
+
+        — 뒤 설명문에는 `유지`가 다시 나온다("최초 작성 시 전건이 이 값") — 그건
+        상태값 목록이 아니라 뜻풀이라 다시 세면 안 된다.
+        """
+        값규칙 = self._컬럼_값규칙("상태")
+        목록구간 = 값규칙.split("—", 1)[0]
+        상태값 = re.findall(r"`([^`]+)`", 목록구간)
+        self.assertEqual(
+            set(상태값), {"유지", "변경", "삭제"},
+            f"AN-02 상태값이 3값(유지/변경/삭제)이 아닙니다: {상태값}",
+        )
+        self.assertNotIn("신규", 상태값, "`신규`가 상태값으로 남아 있습니다")
+
+    def test_상태_판정표의_상태_열도_3값_안에_있다(self):
+        상태열값 = set()
+        for 행 in self._상태_판정표_행():
+            상태열값.update(re.findall(r"`([^`]+)`", 행[1]))
+        self.assertTrue(
+            상태열값 <= {"유지", "변경", "삭제"},
+            f"판정표의 상태 열에 3값 밖의 값이 있습니다: {상태열값}",
+        )
+        self.assertNotIn("신규", 상태열값, "판정표의 상태 열에 `신규`가 남아 있습니다")
+
+    def test_상태_판정표가_네_갈래를_모두_덮는다(self):
+        갈래 = self._상태_판정표_행()
+        대조결과들 = "\n".join(행[0] for 행 in 갈래)
+        for 표지 in ("입력에만 있음", "동일", "다름", "기존에만 있음"):
+            with self.subTest(갈래=표지):
+                self.assertIn(표지, 대조결과들, f"'{표지}' 갈래가 판정표에 없습니다")
+        self.assertEqual(len(갈래), 4, f"판정표 행이 4개가 아닙니다: {len(갈래)}개")
+
+    def test_최초_작성도_유지로_성립한다는_근거가_있다(self):
+        """`유지`가 '이번 개정에서 손대지 않음'으로 정의되어 최초 작성에도 성립함을
+        정본이 스스로 설명해야 한다 — 안 그러면 다음에 읽는 사람이 버그로 본다."""
+        self.assertIn("손대지 않음", self.정본)
+        self.assertIn("최초 작성", self.정본)
+
+    def test_extract_requirements가_상태값을_복제하지_않고_정본을_가리킨다(self):
+        text = (
+            PLUGIN_ROOT / "skills" / "extract-requirements" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("templates/AN-02-requirements-definition.md", text)
+        self.assertNotRegex(
+            text, r"`유지`\s*/\s*`변경`\s*/\s*`삭제`",
+            "정본의 3값 나열을 그대로 복제하고 있습니다",
+        )
+        self.assertNotIn("전건 `신규`", text, "extract-requirements 에 옛 상태값이 남아 있습니다")
+
+    def test_요구사항정의서_커맨드가_상태값을_복제하지_않고_정본을_가리킨다(self):
+        text = (
+            PLUGIN_ROOT / "commands" / "gx-요구사항정의서.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("templates/AN-02-requirements-definition.md", text)
+        self.assertNotRegex(
+            text, r"`유지`\s*/\s*`변경`\s*/\s*`삭제`",
+            "정본의 3값 나열을 그대로 복제하고 있습니다",
+        )
+        self.assertNotIn("전건 `신규`", text, "커맨드에 옛 상태값이 남아 있습니다")
+
+    def test_순서_경고문이_두_파일에_있고_옛_문구가_없다(self):
+        """ID 승계 전에 상태를 판정하면 안 된다는 경고 — 3값 체계에서는 순서를 어기면
+        `변경`이 `유지`로 잡히고 `삭제`가 아예 안 잡히는 실제 피해를 말해야 한다.
+        옛 문구("전건이 `신규`로 나온다")는 4값 체계의 근거라 남아 있으면 안 된다.
+        """
+        옛문구 = re.compile(r"전건이\s*`?신규`?\s*로\s*나온다")
+        새경고_신호 = ("삭제", "잡히지 않는다")
+
+        커맨드 = (
+            PLUGIN_ROOT / "commands" / "gx-요구사항정의서.md"
+        ).read_text(encoding="utf-8")
+        reconcile = (
+            PLUGIN_ROOT / "skills" / "reconcile-ids" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+
+        for 라벨, text in (("commands/gx-요구사항정의서.md", 커맨드),
+                          ("skills/reconcile-ids/SKILL.md", reconcile)):
+            with self.subTest(파일=라벨):
+                self.assertIsNone(
+                    옛문구.search(text),
+                    f"{라벨} 에 4값 체계의 옛 경고 문구가 남아 있습니다",
+                )
+                for 신호 in 새경고_신호:
+                    self.assertIn(신호, text, f"{라벨} 에 새 경고의 '{신호}' 신호가 없습니다")
+
+
 class BoundaryRuleTest(unittest.TestCase):
     """드라이런에서 놓친 4건(영값·통과 측 경계·하위 정밀도)의 재발을 막는다.
 
@@ -1170,6 +1377,192 @@ class FiveDocumentContractTest(unittest.TestCase):
             for 낱말 in 잔재:
                 with self.subTest(문서=doc_label(path), 낱말=낱말):
                     self.assertNotIn(낱말, text)
+
+
+class SplitOmissionAndDataProvenanceTest(unittest.TestCase):
+    """분할 누락 되묻기와 데이터 출처 검사 — 실제 실행에서 뚫린 결함을 막는다.
+
+    SFR-012(벤치마크 산출)는 원본 기능 6건을 묶은 요구사항이었는데 gx-pm 은 3건으로만
+    갈랐고, 그중 "원본 보존 적재"가 통째로 사라졌다. 그 결과 SFR-017(통계 원본 세부
+    조회 + 이상값 조건부 재산출)에 해당하는 기능이 읽을 데이터를 만드는 기능이 없는
+    채로 남았다. 행 분할 규칙(`templates/AN-03-function-spec.md`)은 있었지만 적용을
+    빠뜨렸는지 보는 장치가 없어서 못 잡았다 — 같은 실행에서 SFR-022~024(로그인·
+    로그아웃·토큰갱신)는 요구사항 단계에서 뭉쳐 있던 것을 정확히 갈랐으니, 규칙이
+    아니라 적용이 흔들린 것이다.
+    """
+
+    def setUp(self):
+        self.스킬 = (
+            PLUGIN_ROOT / "skills" / "generate-function-spec" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(r"^### Step 6: 검증$(.*?)(?=^### |\Z)", self.스킬, re.M | re.S)
+        self.assertIsNotNone(구간, "generate-function-spec 의 Step 6 절을 찾지 못했습니다")
+        self.step6 = 구간.group(1)
+
+    def test_Step6_이_분할_누락을_되묻는다(self):
+        self.assertIn("분할 누락", self.step6)
+        self.assertRegex(
+            self.step6, r"되묻는다|되묻기",
+            "분할 누락은 차단이 아니라 되묻기여야 합니다",
+        )
+        # 실제로 뚫린 사례(SFR-012)가 판정 기준을 구체화한다 — 산출물 3종 열거
+        self.assertIn("원단위", self.step6)
+        self.assertIn("건물 등급", self.step6)
+
+    def test_Step6_이_데이터_출처를_검사한다(self):
+        self.assertIn("데이터 출처", self.step6)
+        self.assertIn("만드는 기능", self.step6)
+
+    def test_두_검사_모두_차단하지_않는다(self):
+        """정말 한 기능인 경우도, 외부에서 들어오는 데이터인 경우도 있다 — 되묻기·
+        목록 보고이지 차단이 아니다."""
+        for 라벨 in ("분할 누락", "데이터 출처"):
+            with self.subTest(검사=라벨):
+                시작 = self.step6.find(라벨)
+                self.assertNotEqual(시작, -1, f"'{라벨}' 문단을 찾지 못했습니다")
+                문단 = self.step6[시작:시작 + 400]
+                self.assertRegex(
+                    문단, r"차단(하지 않는다|이 아니라)",
+                    f"'{라벨}' 검사 문단에 차단하지 않는다는 선언이 없습니다",
+                )
+
+    def test_게이트2_집계가_5종으로_늘었다(self):
+        self.assertIn("집계 5종", self.스킬)
+        for 항목 in ("분할 누락 의심", "데이터 출처 없음"):
+            with self.subTest(항목=항목):
+                self.assertIn(항목, self.스킬)
+
+
+class Gate2ShowsSplitAndProvenanceTest(unittest.TestCase):
+    """계측하고 화면에 안 내면 계측하지 않은 것과 같다 — 근거 가용도 계측과 같은 원칙
+    (test_게이트2가_근거_집계를_보여준다 참조). Step 절로 범위를 좁혀서 본다."""
+
+    def setUp(self):
+        본문 = (PLUGIN_ROOT / "commands" / "gx-spec.md").read_text(encoding="utf-8")
+        구간 = re.search(
+            r"^### Step 6: 게이트 2(.*?)(?=^### |\Z)", 본문, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "gx-spec.md 에서 Step 6(게이트 2) 절을 찾지 못했습니다")
+        self.게이트2 = 구간.group(1)
+
+    def test_게이트2에_분할_누락과_데이터_출처_집계가_실린다(self):
+        for 항목 in ("분할 누락", "데이터 출처"):
+            with self.subTest(항목=항목):
+                self.assertIn(항목, self.게이트2, f"게이트 2 화면에 '{항목}' 이 없습니다")
+
+
+class DesignConstraintReflectionTest(unittest.TestCase):
+    """DAR-005(회차 누적 규칙)처럼 기능을 거치지 않는 데이터 요구사항이 DE-08 어디에도
+    반영되지 않고 조용히 사라지던 결함을 막는다. 원본 시스템은 이 규칙을 놓쳐 마지막
+    회차 대장 46건에 900만 건이 조인되는 사고가 실제로 났다. 기존 누락 판정 7유형은
+    전부 기능 축만 보고, `테이블·컬럼` 열은 DE-08 의 `연계기능ID` 역조회라 기능을
+    거치지 않는 데이터 요구사항은 대조 대상이 아니었다.
+    """
+
+    def setUp(self):
+        self.an05 = (
+            PLUGIN_ROOT / "templates" / "AN-05-traceability-matrix.md"
+        ).read_text(encoding="utf-8")
+
+    def _누락판정_유형행(self) -> list[str]:
+        구간 = re.search(r"^## 누락 판정$(.*?)(?=^## |\Z)", self.an05, re.M | re.S)
+        self.assertIsNotNone(구간, "AN-05 의 §누락 판정 절을 찾지 못했습니다")
+        유형행 = []
+        for 줄 in 구간.group(1).splitlines():
+            벗긴줄 = 줄.strip()
+            if not (벗긴줄.startswith("|") and 벗긴줄.endswith("|")):
+                continue
+            칸 = [c.strip() for c in 벗긴줄.strip("|").split("|")]
+            if len(칸) < 3 or set("".join(칸)) <= set("-: "):
+                continue
+            if 칸[0] == "유형":
+                continue  # 머리행
+            유형행.append(칸[0])
+        return 유형행
+
+    def test_누락_판정이_8유형이고_설계_제약_미반영이_있다(self):
+        유형행 = self._누락판정_유형행()
+        self.assertEqual(len(유형행), 8, f"누락 판정 유형이 8개가 아닙니다: {유형행}")
+        self.assertIn("설계 제약 미반영", 유형행)
+
+    def test_AN_05_컬럼_정본은_9개_그대로다(self):
+        """누락 열의 표기값만 늘어야 한다 — 컬럼 정본(9개)을 늘리거나 줄이면 안 된다."""
+        from helpers import parse_column_ssot
+        self.assertEqual(
+            len(parse_column_ssot("AN-05-traceability-matrix.md", "본문 컬럼 (정본)")), 9
+        )
+
+    def test_convert_ddl_이_데이터_요구사항_반영_단계를_갖는다(self):
+        """정본만 고치고 실행부를 안 고치면 규칙이 돌지 않는다 (기존 관례와 동일)."""
+        스킬 = (
+            PLUGIN_ROOT / "skills" / "convert-ddl-to-tablespec" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("데이터 요구사항", 스킬)
+        self.assertRegex(
+            스킬, r"차단하지 않(는다|고)",
+            "데이터 요구사항 반영 단계가 차단하지 않는다고 선언하지 않았습니다",
+        )
+        self.assertIn("templates/AN-05-traceability-matrix.md", 스킬)
+
+    def test_trace_requirements_가_8번째_유형을_판정한다(self):
+        """정본에 유형을 더하고 판정 순서를 안 고치면 그 유형이 영영 안 나온다.
+
+        AN-05 템플릿에 `설계 제약 미반영` 을 넣었을 때 실제로 그랬다 — 정본은 8유형인데
+        `trace-requirements` Step 5 의 판정 순서는 7개뿐이라, 매트릭스를 만들어도
+        그 값이 한 번도 찍히지 않았다. 이 플러그인이 반복해 겪은 형태다:
+        규칙은 정본에 있고 실행부가 그걸 안 한다.
+
+        Step 5 절로 범위를 좁혀서 본다.
+        """
+        스킬 = (
+            PLUGIN_ROOT / "skills" / "trace-requirements" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(r"^### Step 5: 누락 판정$(.*?)(?=^## |\Z)", 스킬, re.M | re.S)
+        self.assertIsNotNone(
+            구간, "trace-requirements 의 §Step 5 누락 판정 절을 찾지 못했습니다"
+        )
+        절 = 구간.group(1)
+        번호 = re.findall(r"^\d+\. ", 절, re.M)
+        self.assertEqual(
+            len(번호), 8,
+            f"판정 순서가 8단계가 아닙니다: {len(번호)}단계 "
+            "— 정본의 누락 유형 수와 어긋나면 안 나오는 유형이 생깁니다",
+        )
+        self.assertIn(
+            "설계 제약 미반영", 절,
+            "Step 5 판정 순서에 `설계 제약 미반영` 이 없습니다",
+        )
+        self.assertIn(
+            "skills/convert-ddl-to-tablespec/SKILL.md", 절,
+            "Step 5 가 반영 절차의 정본을 가리키지 않습니다",
+        )
+
+    def test_누락_유형_수_표기가_문서마다_같다(self):
+        """`7유형` 이라고 적힌 곳이 네 군데 있었다. 정본만 8로 늘리면 나머지가
+
+        낡은 수를 주장한다. 반대로 실행부가 못 미치는데 설명만 늘리면 없는 기능을
+        있다고 말한다 — 어느 쪽이든 문서가 서로를 부정한다.
+        """
+        유형수 = len(self._누락판정_유형행())
+        for 경로 in (
+            PLUGIN_ROOT / "skills" / "trace-requirements" / "SKILL.md",
+            PLUGIN_ROOT / "skills" / "id-trace" / "SKILL.md",
+            PLUGIN_ROOT / "commands" / "gx-추적매트릭스.md",
+        ):
+            본문 = 경로.read_text(encoding="utf-8")
+            with self.subTest(문서=경로.name):
+                낡은표기 = re.findall(r"누락[^\n]{0,20}?(\d+)(?:유형|가지 유형)", 본문)
+                for 수 in 낡은표기:
+                    self.assertEqual(
+                        int(수), 유형수,
+                        f"{경로.name} 이 누락 유형을 {수}개로 적었습니다 "
+                        f"— 정본은 {유형수}개입니다",
+                    )
+
+    def test_AN_05_가_데이터_요구사항_정의를_convert_ddl_로_가리킨다(self):
+        """정본을 옮겨 적지 않고 경로로 가리키는지 — 같은 개념이 두 곳에서 따로
+        정의되면 다음 수정에서 어긋난다."""
+        self.assertIn("skills/convert-ddl-to-tablespec/SKILL.md", self.an05)
 
 
 if __name__ == "__main__":

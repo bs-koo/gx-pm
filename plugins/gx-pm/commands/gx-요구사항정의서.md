@@ -51,10 +51,11 @@ argument-hint: "<RFP 텍스트 또는 파일>"
 - **행 분할이 먼저다** (Step 3). 이 건수가 뒤 산출물 전체의 행 수를 정한다
 - 요구사항ID 는 프로파일의 `idNaming.requirement` 를 따른다. 없으면 AskUserQuestion 으로
   한 번 묻고 저장한다 (기본 제안 `REQ-{3자리}`). 규칙의 정본은 `templates/id-naming-rules.md`
-- 상태는 최초 작성이면 전건 `신규`, 재실행이면
+- 상태는 최초 작성이면 전건 `유지`, 재실행이면
   `templates/AN-02-requirements-definition.md` 의 상태 판정표를 따른다.
   **그 판정은 요구사항ID 를 키로 대조하므로 Step 2-1 뒤에 채운다** — 앞에 두면
-  새로쓰기 경로에서 전건이 `신규` 로 나온다
+  기존 ID 를 못 찾아 `변경` 으로 잡혀야 할 것이 `유지` 로 나오고 `삭제` 가
+  아예 잡히지 않는다
 - **classify-requirements 의 분류 결과 표는 승인용 작업용 뷰다.** `구분`·`비기능유형`·
   `소분류`·`우선순위`·`영향도` 는 AN-02 10컬럼에 자리가 없다 — 그 뷰로 확인만 받고,
   AN-02 는 `templates/AN-02-requirements-definition.md` 의 컬럼 정본대로 만든다
