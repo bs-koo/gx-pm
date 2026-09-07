@@ -4,7 +4,12 @@ from pathlib import Path
 
 import openpyxl
 
-from helpers import load_export_module, parse_column_ssot, read_docs
+from helpers import (
+    load_export_module,
+    parse_column_ssot,
+    parse_enum_ssot,
+    read_docs,
+)
 
 
 def _다중세트(테스트: unittest.TestCase, 이름: str) -> str:
@@ -685,6 +690,111 @@ class AlignmentRenderTest(unittest.TestCase):
         # 대분류(C) 는 세로 병합 셀이지만 가로는 중앙이어야 한다
         self.assertEqual(ws["C2"].alignment.horizontal, "center")
         self.assertIn("C2:C3", [str(r) for r in ws.merged_cells.ranges])
+
+
+class DropdownTest(unittest.TestCase):
+    """열거형 열은 텍스트가 아니라 드롭다운이어야 한다.
+
+    사람이 xlsx 에서 손으로 채울 때 `신규`·`유지함` 처럼 정본 밖 값이 들어가면
+    다음 회차의 대조가 어긋난다. 값 목록을 코드에 적으면 템플릿 정본과 갈라지므로
+    parse_enum_ssot 로 대조해 갈라짐을 잡는다.
+    """
+
+    def setUp(self):
+        self.mod = load_export_module()
+
+    def test_dropdowns_길이가_columns_와_같다(self):
+        """세트가 여럿인 프로필에서 인덱스가 어긋나면 다른 시트의 값이 걸린다."""
+        for name, profile in self.mod.DOCUMENT_PROFILES.items():
+            if "dropdowns" not in profile:
+                continue
+            with self.subTest(프로필=name):
+                self.assertEqual(
+                    len(profile["dropdowns"]), len(profile["columns"]),
+                    f"{name} 의 dropdowns 가 columns 와 길이가 다릅니다 "
+                    "— 세트 인덱스가 어긋나면 다른 시트의 목록이 걸립니다",
+                )
+
+    def test_드롭다운_값이_템플릿_정본과_같다(self):
+        """값을 코드에 적어 두면 템플릿 정본이 바뀔 때 조용히 갈라진다.
+
+        AN-05 `상태` 의 값 정본은 AN-02 다 — AN-05 컬럼 정본표의 셋째 칸은
+        출처(`AN-02`)라 열거값이 없다. 여기서 3값을 복제하지 않는다.
+        """
+        정본 = {
+            ("요구사항정의서", "상태"): ("AN-02-requirements-definition.md", "상태"),
+            ("추적매트릭스", "상태"): ("AN-02-requirements-definition.md", "상태"),
+            ("테이블정의서", "구분"): ("DE-08-table-definition.md", "구분"),
+            ("테이블정의서", "표준 판정"): ("DE-08-table-definition.md", "표준 판정"),
+            ("단위테스트계획서", "결과"): ("DE-13-unit-test-plan.md", "결과"),
+        }
+        for (프로필명, 컬럼), (템플릿, 정본컬럼) in 정본.items():
+            with self.subTest(프로필=프로필명, 컬럼=컬럼):
+                실제 = self.mod.DOCUMENT_PROFILES[프로필명]["dropdowns"][0][컬럼]
+                기대 = parse_enum_ssot(템플릿, "본문 컬럼 (정본)", 정본컬럼)
+                self.assertEqual(
+                    실제, 기대,
+                    f"{프로필명}.{컬럼} 드롭다운이 {템플릿} 정본과 다릅니다: "
+                    f"{실제} != {기대}",
+                )
+
+    def test_드롭다운_범위가_데이터_행만_덮는다(self):
+        """열 전체로 걸면 헤더까지 검사 대상이 되어 목록 밖 값이라며 막힌다."""
+        md = (
+            "## 요구사항 명세\n\n"
+            "| 번호 | 요구사항ID | 대분류 | 중분류 | 요구사항명 | 요구사항 상세내용 "
+            "| 비고 | 상태 | 요구사항 근거 | 변경 근거 |\n"
+            "|---|---|---|---|---|---|---|---|---|---|\n"
+            "| 1 | REQ-001 | 가 | 나 | 산출 | 상세 | | 유지 | RFP | |\n"
+            "| 2 | REQ-002 | 가 | 나 | 산출2 | 상세2 | | 유지 | RFP | |\n"
+        )
+        tables = self.mod.parse_markdown_tables(md)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = str(Path(tmp) / "out.xlsx")
+            self.mod.create_xlsx([("ACT-요구사항정의서.md", tables)], out)
+            wb = openpyxl.load_workbook(out)
+        ws = wb["요구사항 명세"]
+        범위 = [str(dv.sqref) for dv in ws.data_validations.dataValidation]
+        self.assertEqual(
+            범위, ["H2:H3"],
+            f"드롭다운 범위가 데이터 행(H2:H3)과 다릅니다: {범위} "
+            "— 헤더(1행)를 포함하면 헤더 문자열이 목록 밖 값으로 막힙니다",
+        )
+
+    def test_제목_행이_있으면_드롭다운_범위가_밀린다(self):
+        """개정이력처럼 표 위 제목 행이 있는 시트는 데이터가 한 행 밀린다.
+
+        현역 프로필 중 sheet_title 을 가진 것은 개정이력뿐이고 거기엔 드롭다운이
+        없다. 그래도 row_offset 보정이 빠지면 확인요청서 같은 뒤 프로필에서
+        범위가 한 행씩 어긋나므로 합성 프로필로 그 경로를 검사한다.
+        """
+        원본 = self.mod.DOCUMENT_PROFILES.get("개정이력")
+        self.assertIsNotNone(원본, "개정이력 프로필이 없습니다")
+        고친것 = dict(원본)
+        고친것["dropdowns"] = [{"개정 사유": ["신규", "변경"]}]
+        self.mod.DOCUMENT_PROFILES["개정이력"] = 고친것
+        try:
+            md = (
+                "## 개정이력\n\n"
+                "| 버전 | 개정일 | 개정 사유 | 개정 내용 | 작성자 | 승인자 |\n"
+                "|---|---|---|---|---|---|\n"
+                "| 1.0 | 2026.09.07 | 신규 | 최초 작성 | 구본승 | |\n"
+            )
+            tables = self.mod.parse_markdown_tables(md)
+            with tempfile.TemporaryDirectory() as tmp:
+                out = str(Path(tmp) / "out.xlsx")
+                self.mod.create_xlsx([("ACT-요구사항정의서.md", tables)], out)
+                wb = openpyxl.load_workbook(out)
+            ws = wb[원본["sheet_name"]]
+            범위 = [str(dv.sqref) for dv in ws.data_validations.dataValidation]
+            # openpyxl 은 단일 셀 범위를 `C3:C3` 가 아니라 `C3` 로 정규화한다.
+            self.assertEqual(
+                범위, ["C3"],
+                f"제목 행(1) + 헤더(2) 뒤 데이터는 3행부터입니다: {범위} "
+                "— row_offset 보정이 빠지면 2행(헤더)부터 걸립니다",
+            )
+        finally:
+            self.mod.DOCUMENT_PROFILES["개정이력"] = 원본
 
 
 if __name__ == "__main__":
