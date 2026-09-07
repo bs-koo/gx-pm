@@ -42,16 +42,20 @@ class LoaderTest(unittest.TestCase):
         self.mod = load_export_module()
 
     def test_모듈이_로드되고_산출물_프로필을_노출한다(self):
-        """기능 축 전환(v3.0.0) 후 프로필은 5종 + 개정이력 = 6개다.
+        """5종 + 개정이력 + 확인요청서 = 7개다.
 
         화면 축 산출물의 프로필을 지우지 않으면 그 컬럼명을 어떤 문서도 만들지 않게 되어
         test_모든_프로필_컬럼이_문서에_존재한다 가 잡는다. 되살리는 법은 archive/README.md.
+
+        확인요청서는 5종 산출물이 아니라 미결사항 관리대장이다 — 산출물 코드를
+        갖지 않으며 컬럼 정본은 templates/confirmation-request.md 다.
         """
         self.assertEqual(
             sorted(self.mod.DOCUMENT_PROFILES),
             sorted([
                 "개정이력", "요구사항정의서", "기능명세서",
                 "테이블정의서", "단위테스트계획서", "추적매트릭스",
+                "확인요청서",
             ]),
         )
 
@@ -690,6 +694,76 @@ class AlignmentRenderTest(unittest.TestCase):
         # 대분류(C) 는 세로 병합 셀이지만 가로는 중앙이어야 한다
         self.assertEqual(ws["C2"].alignment.horizontal, "center")
         self.assertIn("C2:C3", [str(r) for r in ws.merged_cells.ranges])
+
+
+class ConfirmationRequestTest(unittest.TestCase):
+    """확인요청서는 현역 프로필 중 유일하게 컬럼 세트가 둘이다.
+
+    다중 세트 경로는 그동안 임시 프로필로만 검증됐다 — 첫 현역 사용처라
+    시트명·드롭다운이 세트별로 갈리는지 실제 프로필로 고정한다.
+    """
+
+    def setUp(self):
+        self.mod = load_export_module()
+        self.profile = self.mod.DOCUMENT_PROFILES["확인요청서"]
+
+    def test_컬럼_세트가_둘이고_시트명도_둘이다(self):
+        """sheet_names 가 없으면 둘째 시트가 `확인요청서_1` 로 밀린다.
+
+        gx-spec 이 경계하는 「개정이력_1~_4 로 흩어짐」과 같은 모양이다.
+        """
+        self.assertEqual(len(self.profile["columns"]), 2)
+        self.assertEqual(
+            self.profile["sheet_names"], ["가정 확인", "미확정 확인"],
+            "세트별 시트명이 없으면 둘째 시트 이름이 중복 회피로 밀립니다",
+        )
+
+    def test_컬럼이_템플릿_정본과_같다(self):
+        """양식 템플릿과 프로필이 갈라지면 재배열이 조용히 어긋난다."""
+        for 세트, 절 in enumerate(
+            ["시트 1 · 가정 확인 — 본문 컬럼 (정본)",
+             "시트 2 · 미확정 확인 — 본문 컬럼 (정본)"]
+        ):
+            with self.subTest(세트=세트):
+                self.assertEqual(
+                    self.profile["columns"][세트],
+                    parse_column_ssot("confirmation-request.md", 절),
+                    f"세트 {세트} 컬럼이 confirmation-request.md 정본과 다릅니다",
+                )
+
+    def test_세트마다_다른_드롭다운을_건다(self):
+        """인덱스가 어긋나면 미확정 시트에 판정 목록이 걸린다."""
+        self.assertEqual(
+            self.profile["dropdowns"],
+            [
+                {"판정": ["맞음", "수정", "미확정으로"]},
+                {"상태": ["대기", "확정", "해당없음"]},
+            ],
+        )
+
+    def test_두_시트가_각자_이름과_드롭다운을_갖는다(self):
+        md = (
+            "## 가정 확인\n\n"
+            "| # | 위치 | 가정한 값 | 근거 | 판정 | 정정값 | 비고 |\n"
+            "|---|---|---|---|---|---|---|\n"
+            "| 1 | SFR-027 | 100자 | RFP 미규정 | 맞음 | | |\n\n"
+            "## 미확정 확인\n\n"
+            "| # | 위치 | 무엇이 없나 | 왜 못 정했나 | 상태 | 응답 | 확정일 |\n"
+            "|---|---|---|---|---|---|---|\n"
+            "| 1 | SFR-016 | 기준값 | 판정 불가 | 대기 | | |\n"
+        )
+        tables = self.mod.parse_markdown_tables(md)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = str(Path(tmp) / "out.xlsx")
+            self.mod.create_xlsx([("REB-확인요청서.md", tables)], out)
+            wb = openpyxl.load_workbook(out)
+        self.assertEqual(wb.sheetnames, ["가정 확인", "미확정 확인"])
+        걸린값 = {
+            ws.title: [d.formula1 for d in ws.data_validations.dataValidation]
+            for ws in wb.worksheets
+        }
+        self.assertEqual(걸린값["가정 확인"], ['"맞음,수정,미확정으로"'])
+        self.assertEqual(걸린값["미확정 확인"], ['"대기,확정,해당없음"'])
 
 
 class DropdownTest(unittest.TestCase):
