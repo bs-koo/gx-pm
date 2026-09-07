@@ -10,7 +10,7 @@ argument-hint: "<RFP 텍스트 또는 파일>"
 
 > **공통 규칙**: `templates/approval-protocol.md`의 승인 루프 프로토콜을 적용한다.
 > **선행조건**: `templates/prerequisites.md` 의 `/gx-spec` 행을 따른다.
-> **실행 규약**: `templates/pipeline-protocol.md` 를 따른다. 개별 커맨드의 산출물별 승인 루프는 게이트로 이월하고, **이월 금지 3항목은 이월하지 않는다**.
+> **실행 규약**: `templates/pipeline-protocol.md` 를 따른다. 개별 커맨드의 산출물별 승인 루프는 게이트로 이월하고, **이월 금지 4항목은 이월하지 않는다**.
 
 ## 만드는 것
 
