@@ -750,6 +750,274 @@ class PipelineCommandTest(unittest.TestCase):
             "다른 프로파일 항목까지 채우지 말라는 한정이 없습니다",
         )
 
+    def test_gx_spec_이_종료_화면을_리터럴로_준다(self):
+        """"안내 후 종료한다" 라는 문장만으로는 실행이 종료하지 않는다.
+
+        v3.2.0 은 그 문장을 갖고도 프로파일을 대신 만들었다 — 규칙문은 설치본에
+        그대로 있었는데 실행이 안 지켰다. 안내 문구를 주지 않으면 실행이 자기
+        나름대로 안내하다가 "이왕이면 만들어주자" 로 간다. 완성된 출력 블록은
+        재해석할 여지가 없고, 모델이 자기 출력으로 종료를 선언하게 만든다.
+
+        기존 리터럴 4개는 test_gx_spec_이_프로파일_부재를_하드로_막는다 가 지킨다.
+        이 테스트는 그것을 교체하지 않고 **추가**했는지를 본다.
+        """
+        본문 = self._본문("gx-spec")
+        구간 = re.search(r"^### Step 0:(.*?)(?=^### |\Z)", 본문, re.M | re.S)
+        self.assertIsNotNone(구간, "gx-spec.md 에서 '### Step 0:' 절을 찾지 못했습니다")
+        절 = 구간.group(1)
+        self.assertIn(
+            "/gx-spec 을 종료합니다", 절,
+            "프로파일 부재 시 출력할 종료 화면이 리터럴로 없습니다 "
+            "— 문장으로만 적은 종료 지시는 v3.2.0 에서 지켜지지 않았습니다",
+        )
+        self.assertIn(
+            "A 신규구축", 절,
+            "종료 화면이 프로젝트 유형 4개를 보여주지 않습니다 "
+            "— 무엇을 건너뛰게 되는지가 사용자에게 안 보입니다",
+        )
+
+    def test_질문_정책이_세_층으로_갈린다(self):
+        """상한을 층 구분 없이 걸면 이월 금지 항목과 충돌한다.
+
+        §이월 금지 항목은 "절대 게이트로 미루지 않는다" 인데, 상한 초과분을
+        확인요청서(게이트 3 산출물)로 올리면 정확히 그 금지 행위가 된다.
+        정책 위반 감지도 그 넷의 권장안을 정하는 질문이라 면제 쪽이다 —
+        중단점은 면제인데 그걸 푸는 질문이 상한에 걸리면 중단점이 못 선다.
+        """
+        본문 = (
+            PLUGIN_ROOT / "templates" / "pipeline-protocol.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(r"^## 질문 정책$(.*?)(?=^## |\Z)", 본문, re.M | re.S)
+        self.assertIsNotNone(구간, "pipeline-protocol.md 에 §질문 정책 절이 없습니다")
+        절 = 구간.group(1)
+        self.assertIn("면제", 절, "이월 금지 항목을 상한에서 면제한다는 규칙이 없습니다")
+        self.assertRegex(
+            절, r"정책 위반 감지[^\n]*면제|면제[^\n]*정책 위반 감지"
+            r"|\*\*정책 위반 감지도 면제 쪽이다",
+            "정책 위반 감지가 면제인지 상한 대상인지 정해져 있지 않습니다",
+        )
+        self.assertIn(
+            "5번째 이월 금지 항목이 새로 생기는 것이 아니다", 절,
+            "항목 수가 4개 그대로라는 못박음이 없습니다 — 이월 금지 4개 계약이 흔들립니다",
+        )
+
+    def test_애매성_상한에_초과_동작이_있다(self):
+        """상한만 정하고 초과 동작을 안 적으면 구현이 스스로 정한다.
+
+        추정해서 채우면 정직도가 무너지고, 이월 금지 4개를 확인요청서로 올리면
+        규약 위반이다. 6번째부터 무엇을 하는지 못박아야 한다.
+        """
+        본문 = (
+            PLUGIN_ROOT / "templates" / "pipeline-protocol.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(r"^## 질문 정책$(.*?)(?=^## |\Z)", 본문, re.M | re.S)
+        self.assertIsNotNone(구간)
+        절 = 구간.group(1)
+        self.assertIn("6번째", 절, "상한 초과 시 동작이 없습니다")
+        self.assertIn(
+            "추정해서 채우지 않는다", 절,
+            "초과분을 추정으로 채우지 말라는 금지가 없습니다",
+        )
+        self.assertIn(
+            "[미확정]", 절,
+            "초과분의 행선지(`[미확정]` + 확인요청서)가 없습니다",
+        )
+
+    def test_상한이_강제가_아니라_관측임을_밝힌다(self):
+        """프롬프트 플러그인에는 카운터 원시연산이 없다.
+
+        `강제한다` 고 적으면 지켜진다고 오해하게 된다 — 이 레포에는 규칙문은
+        있는데 실행이 안 지킨 전례가 있다(gx-spec 프로파일 하드 중단).
+        묶기로 회피되고 중복 출력도 막지 못한다는 것을 밝혀야, 3차 시험에서
+        결정 기록으로 실효를 판정할 근거가 생긴다.
+        """
+        본문 = (
+            PLUGIN_ROOT / "templates" / "pipeline-protocol.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(r"^## 질문 정책$(.*?)(?=^## |\Z)", 본문, re.M | re.S)
+        self.assertIsNotNone(구간)
+        절 = 구간.group(1)
+        self.assertIn("관측", 절)
+        self.assertIn(
+            "묶으면", 절,
+            "카운터가 묶기로 회피된다는 한계가 적혀 있지 않습니다",
+        )
+        self.assertIn("[애매성 3/5]", 절, "카운터 출력 형식 예시가 없습니다")
+
+    def test_정책_층이_Step_0_에_있고_프로파일에_저장된다(self):
+        """저장처가 없으면 재개할 때 정책을 다시 묻게 된다.
+
+        「통과한 게이트를 다시 세우지 않는다」와 어긋난다. `.dev` 결정 기록은
+        훅이 쓰는 런타임 파일이라 helpers.read_docs 가 계약 검사에서 제외하므로
+        저장처가 될 수 없다.
+        """
+        본문 = self._본문("gx-spec")
+        구간 = re.search(r"^### Step 0:(.*?)(?=^### |\Z)", 본문, re.M | re.S)
+        self.assertIsNotNone(구간)
+        절 = 구간.group(1)
+        self.assertIn("정책 층", 절, "Step 0 에 정책 층이 없습니다")
+        self.assertIn(
+            "templates/project-profile-schema.md", 절,
+            "정책의 저장 위치를 가리키지 않습니다",
+        )
+        스키마 = (
+            PLUGIN_ROOT / "templates" / "project-profile-schema.md"
+        ).read_text(encoding="utf-8")
+        for 필드 in (
+            "splitCriterion", "assumptionFill", "testDensity",
+            "nonFunctionalVerification",
+        ):
+            with self.subTest(필드=필드):
+                self.assertIn(필드, 스키마, f"policy.{필드} 가 스키마에 없습니다")
+        self.assertRegex(
+            스키마, r"`testDensity`[^\n]*경고 임계값",
+            "testDensity 가 하한 패딩인지 경고 임계값인지 정해져 있지 않습니다 "
+            "— 하한 패딩이면 근거 없는 케이스가 생겨 `[가정]` 규율과 충돌합니다",
+        )
+
+    def test_확인요청서_반영_경로가_배선돼_있다(self):
+        """스킬만 만들고 커맨드가 안 부르면 도달할 수 없다.
+
+        커맨드를 늘리지 않는 대신 Step 0-2 의 기존 산출물 분기에 선택지를 얹었다.
+        선택지 문구가 없으면 사용자가 이 경로를 찾을 방법이 없고, 스킬 굵게 표기가
+        없으면 도달 가능성 검사(test_문서의_스킬_경로가_모두_존재한다)가 놓친다.
+        """
+        본문 = self._본문("gx-spec")
+        구간 = re.search(r"^### Step 0:(.*?)(?=^### |\Z)", 본문, re.M | re.S)
+        self.assertIsNotNone(구간, "Step 0 절을 찾지 못했습니다")
+        절 = 구간.group(1)
+        self.assertIn(
+            "**apply-confirmations**", 절,
+            "Step 0 이 apply-confirmations 스킬을 굵게 부르지 않습니다",
+        )
+        self.assertIn(
+            "확인요청서 반영하고 확정", 절,
+            "확인요청서 반영 선택지가 없습니다 — 사용자가 이 경로를 찾을 수 없습니다",
+        )
+
+    def test_확인요청서_임계치가_정본에_있다(self):
+        """임계치를 정하지 않으면 매번 다른 기준으로 파일이 생긴다."""
+        양식 = (
+            PLUGIN_ROOT / "templates" / "confirmation-request.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("10건", 양식, "확인요청서 생성 임계치가 없습니다")
+        self.assertIn(
+            "개정이력", 양식,
+            "개정이력을 붙이는지 안 붙이는지가 정해져 있지 않습니다 "
+            "— revision-history 는 5종의 첫 시트를 개정이력으로 정합니다",
+        )
+        본문 = self._본문("gx-spec")
+        self.assertIn(
+            "templates/confirmation-request.md", 본문,
+            "gx-spec 이 확인요청서 양식 정본을 가리키지 않습니다",
+        )
+
+    def test_반영_무응답이_묵시적_승인이다(self):
+        """무응답에서 멈추면 파이프라인이 사람을 기다린다.
+
+        착수 전에는 답할 수 없는 것이 많아 무응답이 정상이다. 이 규칙이 없으면
+        확인요청서가 파이프라인을 막는 새 관문이 된다 — 없애려던 문제 그 자체다.
+        """
+        스킬 = (
+            PLUGIN_ROOT / "skills" / "apply-confirmations" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("묵시적 승인", 스킬)
+        self.assertRegex(
+            스킬, r"무응답도 정상 종료",
+            "무응답으로도 끝난다는 규칙이 없습니다",
+        )
+        self.assertIn(
+            "templates/pipeline-protocol.md", 스킬,
+            "파급 규칙 정본을 가리키지 않습니다 — 여기서 복제하면 두 벌이 갈립니다",
+        )
+
+    def test_게이트마다_저장한다(self):
+        """저장이 Step 10 한 곳뿐이면 중간에 끊겼을 때 승인분이 사라진다.
+
+        `templates/pipeline-protocol.md` §중단 후 재개는 "이미 저장된 산출물은
+        그대로 둔다" 고 정해두었는데, 정작 저장이 맨 끝에만 있어 규약이 헛돌았다.
+        MCP 를 Step 1 에서 하드로 막던 것도 이 손실 때문이었다.
+
+        "게이트마다 저장한다" 한 줄을 어딘가에 적는 것으로는 통과하지 않도록
+        게이트 세 절을 각각 본다 — 한 절만 고치고 나머지를 빠뜨리는 것이
+        이 레포가 반복해 겪은 형태다.
+        """
+        본문 = self._본문("gx-spec")
+        for 절제목 in ("Step 3: 게이트 1", "Step 6: 게이트 2", "Step 9: 게이트 3"):
+            with self.subTest(게이트=절제목):
+                구간 = re.search(
+                    rf"^### {re.escape(절제목)}(.*?)(?=^### |\Z)", 본문, re.M | re.S
+                )
+                self.assertIsNotNone(구간, f"{절제목} 절을 찾지 못했습니다")
+                self.assertRegex(
+                    구간.group(1), r"파일로 저장한다",
+                    f"{절제목} 통과 후 저장한다는 지시가 없습니다",
+                )
+
+    def test_생성_표지의_자리가_정해져_있다(self):
+        """표지가 없으면 파일 존재만으로 게이트 통과를 판정할 수 없다.
+
+        단독 커맨드도 같은 파일을 만들기 때문이다. 자리를 안 정하면 게이트 화면에만
+        찍히고 파일에 안 남아 다음 세션이 못 읽는다.
+        """
+        본문 = self._본문("gx-spec")
+        구간 = re.search(r"^## 생성 표지$(.*?)(?=^## |\Z)", 본문, re.M | re.S)
+        self.assertIsNotNone(구간, "gx-spec.md 에 §생성 표지 절이 없습니다")
+        절 = 구간.group(1)
+        self.assertIn(
+            "개정이력", 절,
+            "표지 자리가 `## 개정이력` 기준으로 명시돼 있지 않습니다",
+        )
+        self.assertIn("게이트 1 통과", 절, "표지 문구 예시가 없습니다")
+
+    def test_중간_산출물은_백업_대상이_아니다(self):
+        """게이트 저장분을 백업하면 같은 날짜 파일명이 진짜 직전 버전을 덮어쓴다.
+
+        `reconcile-ids` Step 1 은 그 백업을 ID 승계의 유일한 기준선으로 읽으므로,
+        반쯤 만들다 만 산출물이 기준선이 되면 승계가 통째로 어긋난다.
+        데이터 손실 경로라 순번 규칙도 함께 본다.
+        """
+        스킬 = (
+            PLUGIN_ROOT / "skills" / "detect-existing-artifact" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(
+            r"^#### 2\. 새로쓰기 선택 시$(.*?)(?=^#### |\Z)", 스킬, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "새로쓰기 절을 찾지 못했습니다")
+        절 = 구간.group(1)
+        self.assertIn(
+            "게이트", 절,
+            "게이트 통과 표지가 붙은 중간 산출물을 백업에서 빼라는 규칙이 없습니다",
+        )
+        self.assertIn(
+            "_2", 절,
+            "같은 날 두 번 백업할 때의 순번 규칙이 없습니다 — 앞 백업을 덮어씁니다",
+        )
+
+    def test_gx_spec_step0가_하위_절로_갈린다(self):
+        """Step 0 이 한 덩어리면 종료 지시 뒤 문장들이 이어서 읽힌다.
+
+        프로파일 검사·산출물 감지·채번이 같은 절에 붙어 있으면, 종료해야 할
+        자리에서 실행이 계속 읽어 내려간다. 하위 절로 끊어 각각의 시작과 끝을
+        분명히 한다.
+
+        `#### ` 은 `^### ` 정규식에 안 걸리므로 Step 0 절 범위는 그대로다 —
+        기존 두 테스트(프로파일 하드 중단 · 채번 질문 전제)가 계속 통과한다.
+        """
+        본문 = self._본문("gx-spec")
+        구간 = re.search(r"^### Step 0:(.*?)(?=^### |\Z)", 본문, re.M | re.S)
+        self.assertIsNotNone(구간, "gx-spec.md 에서 '### Step 0:' 절을 찾지 못했습니다")
+        하위 = re.findall(r"^#### (0-\d)\. ", 구간.group(1), re.M)
+        self.assertEqual(
+            하위, sorted(하위),
+            f"Step 0 하위 절의 번호 순서가 어긋납니다: {하위}",
+        )
+        self.assertGreaterEqual(
+            len(하위), 3,
+            f"Step 0 이 하위 절로 갈리지 않았습니다: {하위} "
+            "— 프로파일 검사·산출물 감지·채번은 각각 독립된 절이어야 합니다",
+        )
+
 
 class VersionConsistencyTest(unittest.TestCase):
     """버전과 개수 표기가 10개 지점에 흩어져 있어 한쪽만 갱신되기 쉽다.
@@ -855,10 +1123,51 @@ class EvidenceRuleTest(unittest.TestCase):
             with self.subTest(근거=근거):
                 self.assertIn(근거, 구간.group(1))
 
-    def test_확인필요가_두_종류로_갈린다(self):
-        for 종류 in ("[확인필요:항목]", "[확인필요:제약]"):
+    def test_가정과_미확정이_2단_판정으로_갈린다(self):
+        """옛 분류(`항목`/`제약`)는 무엇이 비었는가를 갈랐다.
+
+        그것으로는 「지어내도 되는 값」과 「발주기관만 아는 값」이 구별되지 않아,
+        표본 최소 수 같은 판정 기준값을 관행값으로 채우는 것을 막지 못했다.
+        새 분류는 **누가 정할 값인가**를 가른다.
+
+        표만 있고 판정 순서가 없으면 실행이 순서를 스스로 정하므로 순서 문자열도 본다.
+        """
+        for 종류 in ("[가정]", "[미확정]"):
             with self.subTest(종류=종류):
                 self.assertIn(종류, self.text, f"{종류} 정의가 없습니다")
+        self.assertIn(
+            "RFP 가 그 값을 줬는가", self.text,
+            "2단 판정의 1번(RFP 가 값을 줬는가)이 없습니다",
+        )
+        self.assertRegex(
+            self.text, r"없으면 요구사항을 구현할 수 없는가",
+            "2단 판정의 2번(없으면 구현 불가인가)이 없습니다 "
+            "— 이것이 발주기관 몫과 설계 재량을 가르는 기준입니다",
+        )
+        self.assertIn(
+            "RFP 미규정", self.text,
+            "`[가정]` 근거에 `RFP 미규정` 을 적으라는 규칙이 없습니다 "
+            "— 그것이 2단 판정을 통과했다는 증거입니다",
+        )
+
+    def test_가정_표식이_세_홉을_관통한다(self):
+        """AN-03 에만 적으면 DE-13 이 무표식 값에서 경계를 뽑는다.
+
+        제약의 최종 승자는 DE-08 이므로(generate-unit-test-plan Step 2),
+        AN-03 비고의 태그는 DE-08 길이 열에서 숫자만 남기고 끊긴다. 그러면
+        감리에 나가는 DE-13 에서 가정값 검증과 RFP 값 검증이 구별되지 않는다.
+
+        한 홉만 적혀 있어도 통과하지 않도록 세 자리를 각각 본다.
+        """
+        구간 = re.search(
+            r"^### 표식은 세 홉을 관통한다$(.*?)(?=^#{2,3} |\Z)", self.text, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "§표식은 세 홉을 관통한다 절을 찾지 못했습니다")
+        절 = 구간.group(1)
+        for 홉, 자리 in (("AN-03", "입력항목"), ("DE-08", "근거"), ("DE-13", "입력")):
+            with self.subTest(홉=홉):
+                self.assertIn(홉, 절, f"{홉} 홉이 표식 경로에 없습니다")
+                self.assertIn(자리, 절, f"{홉} 의 표식 자리({자리})가 없습니다")
 
     def test_제약이_빈_것의_판정_기준이_있다(self):
         """'제약이 비었다' 를 정의하지 않으면 판정이 사람마다 달라진다."""
@@ -874,16 +1183,82 @@ class EvidenceRuleTest(unittest.TestCase):
         self.assertIn("4/4 미만", 구간.group(1))
         self.assertIn("0건", 구간.group(1))
 
-    def test_제약_미상은_자동보강하지_않는다(self):
-        self.assertIn("제약 미상", self.text)
-        self.assertIn("지어내", self.text)
+    def test_미확정_제약만_자동보강에서_빠진다(self):
+        """자동 보강을 두 갈래로 가르지 않으면 배선이 반쪽이 된다.
+
+        옛 규칙은 "제약이 비면 보강하지 않는다" 였다. 그 전제는 "제약이 비면
+        근거가 없다" 였는데, 2단 판정이 RFP 미규정 항목에 근거를 만들면서
+        전제가 바뀌었다. `[가정]` 은 보강하고 `[미확정]` 은 보강하지 않는다.
+
+        한쪽만 적혀 있으면 실행이 나머지를 스스로 정하므로 둘 다 본다.
+        DE-13 밀도가 이 갈래에 달려 있다 — `[가정]` 을 보강하지 않으면 경계
+        케이스가 안 나와 밀도가 그대로다.
+        """
+        구간 = re.search(
+            r"^## \[미확정\] 제약은 자동 보강 대상이 아니다$(.*?)(?=^## |\Z)",
+            self.text, re.M | re.S,
+        )
+        self.assertIsNotNone(
+            구간, "§[미확정] 제약은 자동 보강 대상이 아니다 절을 찾지 못했습니다"
+        )
+        절 = 구간.group(1)
+        self.assertIn("지어내", 절, "보강하지 않는 이유(지어내기)가 없습니다")
+        self.assertRegex(
+            절, r"\[가정\][^\n]*\|[^\n]*한다",
+            "`[가정]` 제약을 보강한다는 갈래가 없습니다 — 밀도가 오르지 않습니다",
+        )
+        self.assertRegex(
+            절, r"\[미확정\][^\n]*\|[^\n]*하지 않는다",
+            "`[미확정]` 제약을 보강하지 않는다는 갈래가 없습니다",
+        )
+
+    def test_옛_확인필요_표기가_남아_있지_않다(self):
+        """정본만 새 표기로 바꾸고 실행부에 옛 표기가 남으면 둘이 갈린다.
+
+        이 플러그인이 반복해 겪은 형태다 — 규칙은 정본에 있고 실행부가 안 한다.
+        `read_docs()` 범위(archive·.dev·tests/fixtures 제외) 전체를 훑는다.
+        `CHANGELOG.md` 만 예외다: 과거 기록이라 그때의 표기가 남는 것이 맞다.
+        """
+        남은 = [
+            path.relative_to(REPO_ROOT)
+            for path, text in read_docs()
+            if path.name != "CHANGELOG.md" and "[확인필요" in text
+        ]
+        self.assertEqual(
+            남은, [],
+            f"옛 `[확인필요]` 표기가 남아 있습니다: {남은} "
+            "— `[가정]`/`[미확정]` 2단 판정으로 바꾸세요",
+        )
+
+    def test_가정_표식을_세_홉의_실행부가_모두_안다(self):
+        """정본에 경로를 그려도 각 홉의 실행부가 모르면 표식이 끊긴다.
+
+        AN-03 비고에만 적히면 DE-08 `길이` 열에는 숫자만 남고, 제약의 최종 승자가
+        DE-08 이라 그 뒤로는 되살릴 자리가 없다. DE-13 은 무표식 값에서 경계를
+        뽑고, 감리에서 가정값 검증이 RFP 값 검증처럼 보인다.
+
+        한 홉만 알아도 통과하지 않도록 세 파일을 각각 본다.
+        """
+        for 파일 in (
+            PLUGIN_ROOT / "templates" / "DE-08-table-definition.md",
+            PLUGIN_ROOT / "templates" / "DE-13-unit-test-plan.md",
+            PLUGIN_ROOT / "skills" / "convert-ddl-to-tablespec" / "SKILL.md",
+        ):
+            with self.subTest(파일=파일.name):
+                text = 파일.read_text(encoding="utf-8")
+                self.assertIn(
+                    "[가정]", text,
+                    f"{파일.name} 이 `[가정]` 표식을 다루지 않습니다 "
+                    "— 이 홉에서 표식이 끊깁니다",
+                )
 
     def test_AN_03_이_근거_정본을_참조한다(self):
         an03 = (PLUGIN_ROOT / "templates" / "AN-03-function-spec.md").read_text(
             encoding="utf-8"
         )
         self.assertIn("templates/evidence-rules.md", an03)
-        self.assertIn("[확인필요:제약]", an03)
+        self.assertIn("[미확정]", an03)
+        self.assertIn("[가정]", an03)
 
     def test_AN_03_도출_출처가_네_단이다(self):
         """3단(요구사항·역산·DDL)만 적혀 있으면 소스 근거가 다시 사라진다."""
@@ -899,16 +1274,20 @@ class EvidenceRuleTest(unittest.TestCase):
         self.assertEqual(len(단), 4, f"도출 출처가 4단이 아닙니다: {len(단)}개")
         self.assertIn("기존 소스", 구간.group(1))
 
-    def test_기능명세_스킬이_확인필요_두_종류를_모두_안다(self):
+    def test_기능명세_스킬이_가정과_미확정을_모두_안다(self):
         """정본만 고치고 실행부를 안 고치면 규칙이 돌지 않는다."""
         스킬 = (
             PLUGIN_ROOT / "skills" / "generate-function-spec" / "SKILL.md"
         ).read_text(encoding="utf-8")
-        for 종류 in ("[확인필요:항목]", "[확인필요:제약]"):
+        for 종류 in ("[가정]", "[미확정]"):
             with self.subTest(종류=종류):
                 self.assertIn(종류, 스킬)
         self.assertIn("templates/evidence-rules.md", 스킬)
-        for 집계 in ("근거 가용도", "제약 미상"):
+        self.assertIn(
+            "RFP 미규정", 스킬,
+            "`[가정]` 근거에 `RFP 미규정` 을 적으라는 지시가 실행부에 없습니다",
+        )
+        for 집계 in ("근거 가용도", "[미확정] 제약"):
             with self.subTest(집계=집계):
                 self.assertIn(집계, 스킬)
 
@@ -922,16 +1301,27 @@ class EvidenceRuleTest(unittest.TestCase):
         스킬 = (
             PLUGIN_ROOT / "skills" / "generate-unit-test-plan" / "SKILL.md"
         ).read_text(encoding="utf-8")
-        self.assertIn("제약 미상", 스킬)
+        self.assertIn("[미확정] 제약", 스킬)
         self.assertIn("templates/evidence-rules.md", 스킬)
         구간 = re.search(
             r"^### Step 6: 충분성 검증$(.*?)(?=^### |\Z)", 스킬, re.M | re.S
         )
         self.assertIsNotNone(구간, "generate-unit-test-plan 의 Step 6 절을 찾지 못했습니다")
-        self.assertIn("제약 미상", 구간.group(1))
+        절 = 구간.group(1)
+        self.assertIn("[미확정] 제약", 절)
         self.assertRegex(
-            구간.group(1), r"보강하지 않는다|지어내",
-            "Step 6 에 '제약이 없으면 보강하지 않는다' 는 지시가 없습니다",
+            절, r"보강하지 않는다|지어내",
+            "Step 6 에 '[미확정] 제약은 보강하지 않는다' 는 지시가 없습니다",
+        )
+        self.assertRegex(
+            절, r"\[가정\].*보강",
+            "Step 6 이 `[가정]` 제약을 보강한다고 말하지 않습니다 "
+            "— 이 갈래가 없으면 DE-13 밀도가 오르지 않습니다",
+        )
+        self.assertIn(
+            "[가정:", 절,
+            "보강한 케이스에 `[가정:N]` 표식을 붙이라는 지시가 없습니다 "
+            "— 감리에서 RFP 값 검증과 구별되지 않습니다",
         )
 
     def test_게이트2가_근거_집계를_보여준다(self):
@@ -945,18 +1335,18 @@ class EvidenceRuleTest(unittest.TestCase):
             r"^### Step 6: 게이트 2(.*?)(?=^### |\Z)", 본문, re.M | re.S
         )
         self.assertIsNotNone(구간, "gx-spec.md 에서 Step 6(게이트 2) 절을 찾지 못했습니다")
-        for 항목 in ("근거 가용도", "[확인필요]", "제약 미상"):
+        for 항목 in ("근거 가용도", "[가정]", "[미확정]"):
             with self.subTest(항목=항목):
                 self.assertIn(항목, 구간.group(1), f"게이트 2 에 '{항목}' 이 없습니다")
         self.assertIn("templates/evidence-rules.md", 구간.group(1))
 
-    def test_게이트3이_제약_미상을_보여준다(self):
+    def test_게이트3이_미확정_제약을_보여준다(self):
         본문 = (PLUGIN_ROOT / "commands" / "gx-spec.md").read_text(encoding="utf-8")
         구간 = re.search(
             r"^### Step 9: 게이트 3(.*?)(?=^### |\Z)", 본문, re.M | re.S
         )
         self.assertIsNotNone(구간, "gx-spec.md 에서 Step 9(게이트 3) 절을 찾지 못했습니다")
-        self.assertIn("제약 미상", 구간.group(1))
+        self.assertIn("[미확정] 제약", 구간.group(1))
 
 
 class DdlAbsenceNoticeTest(unittest.TestCase):
@@ -1535,6 +1925,96 @@ class DesignConstraintReflectionTest(unittest.TestCase):
         self.assertIn(
             "skills/convert-ddl-to-tablespec/SKILL.md", 절,
             "Step 5 가 반영 절차의 정본을 가리키지 않습니다",
+        )
+
+    def _step5절(self) -> str:
+        스킬 = (
+            PLUGIN_ROOT / "skills" / "trace-requirements" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(r"^### Step 5: 누락 판정$(.*?)(?=^## |\Z)", 스킬, re.M | re.S)
+        self.assertIsNotNone(
+            구간, "trace-requirements 의 §Step 5 누락 판정 절을 찾지 못했습니다"
+        )
+        return 구간.group(1)
+
+    def test_미수행이_판정_사다리_맨_뒤에_온다(self):
+        """`미수행` 이 앞에 있으면 그 뒤 판정이 한 번도 발화하지 못한다.
+
+        계획 단계 산출물은 `결과` 가 언제나 전건 공란이라, `미수행` 조건이
+        테스트를 가진 행을 전부 선점한다. v3.2.0 시험에서 실제로 AN-05 86행
+        전건이 `미수행` 으로 나왔고, v3.2.0 이 새로 넣은 `설계 제약 미반영` 은
+        한 번도 찍히지 않는 죽은 코드였다.
+
+        개수만 세는 test_trace_requirements_가_8번째_유형을_판정한다 로는 이걸
+        못 잡는다 — 여덟 개가 다 있어도 순서가 틀리면 안 나온다. 그래서 순서를 본다.
+
+        `미수행` 은 진행 상태이고 나머지는 산출물 결함이라, 결함이 먼저 걸려야 한다.
+        """
+        절 = self._step5절()
+        미수행 = 절.find("`미수행`")
+        self.assertNotEqual(미수행, -1, "Step 5 에 `미수행` 판정이 없습니다")
+        for 앞 in ("실패 {N}건", "예외 케이스 없음", "설계 제약 미반영"):
+            위치 = 절.find(앞)
+            self.assertNotEqual(위치, -1, f"Step 5 에 `{앞}` 이 없습니다")
+            self.assertLess(
+                위치, 미수행,
+                f"`{앞}` 이 `미수행` 보다 뒤에 있습니다 — 계획 단계 문서는 `결과` 가 "
+                "전건 공란이라 `미수행` 이 먼저 걸리면 이 판정은 영영 발화하지 못합니다",
+            )
+
+    def test_비기능_경로가_데이터_축_판정까지_적용한다(self):
+        """비기능 경로에서 데이터 축 판정을 빼면 데이터 요구사항이 빈칸으로 남는다.
+
+        데이터 요구사항은 기능을 거치지 않아 비기능 경로로 흐른다. 그 경로가
+        `테스트 수 기준` 판정만 적용하면 `설계 제약 미반영` 이 걸리지 않는다.
+        판정 사다리 맨 앞의 `미수행` 선점과 함께, 이것이 그 유형이 한 번도
+        발화하지 못한 두 번째 원인이었다.
+
+        범위 표기(`3~7번`)만 검사하면 괄호가 옛말로 남아도 통과하므로 괄호도 본다.
+        """
+        절 = self._step5절()
+        self.assertIn(
+            "3~7번", 절,
+            "비기능 경로가 데이터 축 판정(`설계 제약 미반영`)까지 적용하지 않습니다",
+        )
+        self.assertNotIn(
+            "테스트 수 기준", 절,
+            "범위는 넓혔는데 괄호가 `테스트 수 기준` 으로 남아 있습니다 "
+            "— 데이터 축 판정이 들어왔으므로 거짓입니다",
+        )
+
+    def test_AN_05_예시의_상태가_정본_3값_안에_있다(self):
+        """예시가 정본을 어기면 그 예시를 보고 만든 산출물이 정본을 어긴다.
+
+        AN-02 정본은 `신규` 가 상태값이 아니라고 못박았는데 AN-05 예시 행은
+        `신규` 를 쓰고 있었다. xlsx 드롭다운을 걸면 정본이 자기 예시를 거부한다.
+        """
+        본문 = (
+            PLUGIN_ROOT / "templates" / "AN-05-traceability-matrix.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(r"^## 예시 행$(.*?)(?=^## |\Z)", 본문, re.M | re.S)
+        self.assertIsNotNone(구간, "AN-05 템플릿의 §예시 행 절을 찾지 못했습니다")
+        for 행 in re.findall(r"^\| REQ-\d+ \|.*$", 구간.group(1), re.M):
+            상태 = [칸.strip() for 칸 in 행.split("|")][3]
+            self.assertIn(
+                상태, {"유지", "변경", "삭제"},
+                f"AN-05 예시의 상태값 {상태!r} 이 AN-02 정본의 3값 밖입니다: {행}",
+            )
+
+    def test_AN_05_Pass_Fail_설명이_미수행을_못박지_않는다(self):
+        """컬럼 정본이 특정 판정을 못박으면 판정 순서를 바꿀 때 정본이 갈라진다.
+
+        `0/0`(누락 열에 `미수행`) 이라고 적혀 있었는데, `미수행` 이 사다리 맨 뒤로
+        가면서 테스트 1건짜리 행은 `예외 케이스 없음` 을 받는다. 괄호가 거짓이 된다.
+        """
+        본문 = (
+            PLUGIN_ROOT / "templates" / "AN-05-traceability-matrix.md"
+        ).read_text(encoding="utf-8")
+        행 = next(줄 for 줄 in 본문.splitlines() if "| 8 | Pass/Fail |" in 줄)
+        self.assertNotIn(
+            "누락 열에 `미수행`", 행,
+            "Pass/Fail 컬럼 정의가 `미수행` 을 못박고 있습니다 "
+            "— 판정 순서가 바뀌면 거짓이 됩니다. `누락` 열을 가리키기만 하세요",
         )
 
     def test_누락_유형_수_표기가_문서마다_같다(self):

@@ -83,6 +83,9 @@ DOCUMENT_PROFILES = {
         "left_align": [
             "요구사항명", "요구사항 상세내용", "비고", "요구사항 근거", "변경 근거",
         ],
+        # 값 정본은 templates/AN-02-requirements-definition.md 「상태 판정」이다.
+        # 여기 목록이 정본과 갈라지면 test_드롭다운_값이_템플릿_정본과_같다 가 잡는다.
+        "dropdowns": [{"상태": ["유지", "변경", "삭제"]}],
     },
     "기능명세서": {
         "sheet_name": "기능명세",
@@ -106,6 +109,10 @@ DOCUMENT_PROFILES = {
         ]],
         "merge_columns": ["테이블명"],
         "left_align": ["테이블 논리명", "컬럼 논리명", "표준 권고명", "근거"],
+        "dropdowns": [{
+            "구분": ["기존", "신규", "변경"],
+            "표준 판정": ["표준준수", "현행유지", "신규적용"],
+        }],
     },
     "단위테스트계획서": {
         "sheet_name": "단위테스트계획",
@@ -116,6 +123,26 @@ DOCUMENT_PROFILES = {
         ]],
         "merge_columns": [],
         "left_align": ["사전조건", "입력", "기대결과", "사후조건"],
+        # 계획서는 `결과` 가 공란이 정상이므로 allow_blank 로 건다.
+        "dropdowns": [{"결과": ["Pass", "Fail"]}],
+    },
+    "확인요청서": {
+        # 5종 산출물이 아니라 미결사항 관리대장이라 산출물 코드를 갖지 않는다.
+        # 컬럼 정본은 templates/confirmation-request.md 의 두 「본문 컬럼 (정본)」 절이다.
+        # 현역 프로필 중 유일하게 컬럼 세트가 둘이다 — sheet_names 가 없으면
+        # 둘째 시트가 "확인요청서_1" 로 밀려 개정이력_1~_4 와 같은 모양이 된다.
+        "sheet_name": "가정 확인",
+        "sheet_names": ["가정 확인", "미확정 확인"],
+        "columns": [
+            ["#", "위치", "가정한 값", "근거", "판정", "정정값", "비고"],
+            ["#", "위치", "무엇이 없나", "왜 못 정했나", "상태", "응답", "확정일"],
+        ],
+        "merge_columns": [],
+        "left_align": ["위치", "근거", "비고", "무엇이 없나", "왜 못 정했나", "응답"],
+        "dropdowns": [
+            {"판정": ["맞음", "수정", "미확정으로"]},
+            {"상태": ["대기", "확정", "해당없음"]},
+        ],
     },
     "추적매트릭스": {
         "sheet_name": "추적매트릭스",
@@ -127,6 +154,8 @@ DOCUMENT_PROFILES = {
         ]],
         "merge_columns": ["요구사항ID"],
         "left_align": ["요구사항명", "기능명", "테이블·컬럼", "누락"],
+        # `누락` 은 `실패 3건` 처럼 가변값이 섞여 드롭다운을 걸지 않는다.
+        "dropdowns": [{"상태": ["유지", "변경", "삭제"]}],
     },
 }
 
@@ -376,6 +405,45 @@ def merge_ranges(
     return ranges
 
 
+def _apply_dropdowns(ws, doc_profile, set_index, header_names, first_row, last_row):
+    """열거형 열에 데이터 검증(드롭다운)을 건다.
+
+    값 목록은 DOCUMENT_PROFILES 의 `dropdowns` 에서 온다. `columns` 와 같은
+    인덱스의 리스트라 시트가 여럿인 프로필도 시트마다 다른 목록을 갖는다.
+
+    **범위는 데이터 행만이다.** 열 전체(`C:C`)로 걸면 헤더와 제목 병합 셀까지
+    검사 대상이 되어 목록 밖 값이라며 막힌다. 개정이력처럼 표 위 제목 행이 있는
+    시트는 `row_offset` 만큼 밀려 있으므로 호출부가 보정한 행 번호를 넘긴다.
+
+    `allow_blank` 를 켠다 — DE-13 `결과` 는 계획서 단계에서 전건 공란이 정상이다.
+    """
+    if not doc_profile or set_index is None or last_row < first_row:
+        return
+    목록 = doc_profile.get("dropdowns") or []
+    if set_index >= len(목록):
+        return
+
+    from openpyxl.worksheet.datavalidation import DataValidation
+    from openpyxl.utils import get_column_letter as _letter
+
+    for 컬럼, 값들 in (목록[set_index] or {}).items():
+        if 컬럼 not in header_names or not 값들:
+            continue
+        letter = _letter(header_names.index(컬럼) + 1)
+        dv = DataValidation(
+            type="list",
+            formula1='"{}"'.format(",".join(값들)),
+            allow_blank=True,
+            showErrorMessage=True,
+        )
+        dv.errorTitle = "값이 목록에 없습니다"
+        dv.error = "{} 은(는) 다음 중 하나여야 합니다: {}".format(
+            컬럼, " / ".join(값들)
+        )
+        ws.add_data_validation(dv)
+        dv.add(f"{letter}{first_row}:{letter}{last_row}")
+
+
 def _column_width(values: list[str], min_width: int = 0) -> int:
     """열의 자동 계산 너비와 최소 너비 중 큰 값을 60 이내로 돌려준다.
 
@@ -553,6 +621,13 @@ def create_xlsx(
             last_col_letter = get_column_letter(len(rows[0]))
             ws.freeze_panes = f"A{header_row + 1}"
             ws.auto_filter.ref = f"A{header_row}:{last_col_letter}{last_row}"
+
+            # 열거형 열에 드롭다운(데이터 검증)을 건다.
+            # 범위는 데이터 행만이다 — 열 전체로 걸면 제목 병합 셀과 헤더까지
+            # 검사해서 목록 밖 값이라며 막는다. row_offset 만큼 밀려 있다.
+            _apply_dropdowns(
+                ws, doc_profile, set_index, header_names, header_row + 1, last_row
+            )
 
     if not wb.sheetnames:
         ws = wb.create_sheet(title="빈 시트")

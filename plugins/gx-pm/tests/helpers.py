@@ -152,3 +152,44 @@ def parse_column_ssot(template_name: str, section_title: str) -> list[str]:
             continue  # 머리행
         컬럼.append(칸[1])
     return 컬럼
+
+
+def parse_enum_ssot(template_name: str, section_title: str, column: str) -> list[str]:
+    """컬럼 정본 표의 셋째 칸에서 열거값을 뽑는다.
+
+    `parse_column_ssot` 는 둘째 칸(컬럼명)만 돌려주므로 드롭다운 값 대조에 쓸 수
+    없다. 열거값은 셋째 칸에 백틱으로 감싸여 있다.
+
+        | 11 | 구분 | `기존` / `신규` / `변경` |
+
+    셋째 칸의 형식이 문서마다 달라 두 단계로 자른다.
+
+    1. 첫 `—` 앞까지만 본다. AN-02 `상태` 는 뒤에 설명문이 붙고 거기서 `유지` 가
+       다시 나온다 — 자르지 않으면 4값이 된다.
+    2. 그 구간의 백틱 토큰을 순서대로 뽑고, 그래도 겹치면 첫 등장만 남긴다.
+
+    산문이 앞에 붙어도 무방하다 (DE-13 `결과` 는 "계획서는 공란. `Pass` / `Fail`").
+    """
+    import re
+
+    text = (PLUGIN_ROOT / "templates" / template_name).read_text(encoding="utf-8")
+    구간 = re.search(
+        rf"^#{{1,4}} {re.escape(section_title)}$(.*?)(?=^#{{1,4}} |\Z)",
+        text, re.M | re.S,
+    )
+    if 구간 is None:
+        return []
+    for 줄 in 구간.group(1).splitlines():
+        벗긴줄 = 줄.strip()
+        if not (벗긴줄.startswith("|") and 벗긴줄.endswith("|")):
+            continue
+        칸 = [c.strip() for c in 벗긴줄.strip("|").split("|")]
+        if len(칸) < 3 or 칸[1] != column:
+            continue
+        머리 = 칸[2].split("—")[0]
+        값: list[str] = []
+        for 토큰 in re.findall(r"`([^`]+)`", 머리):
+            if 토큰 not in 값:
+                값.append(토큰)
+        return 값
+    return []
