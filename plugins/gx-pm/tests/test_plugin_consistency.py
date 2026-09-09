@@ -2437,6 +2437,16 @@ class ApplyConfirmationsRoundTest(unittest.TestCase):
         self.assertIn("요청 이력", 절, "Step 4-1 절에 「요청 이력」 기록 규칙이 없습니다")
         self.assertIn("미응답", 절, "Step 4-1 절에 「미응답」 기록 규칙이 없습니다")
 
+    def test_시트0_안내를_매_차수_갱신한다(self):
+        """confirmation-request.md §시트 0 은 `현재`·건수를 매 차수 다시 쓴다고
+        못박는다. 시트 0 은 사람이 파일을 열고 맨 처음 읽는 자리라, Step 4-1 이
+        이 갱신을 빠뜨리면 다음 차수 파일을 열었을 때도 이전 차수·건수가 그대로
+        보인다 — 이 양식이 없애려던 혼란이 그 자리에서 재발한다.
+        """
+        절 = self._절("Step 4-1:")
+        self.assertIn("시트 0", 절, "Step 4-1 절에 시트 0 갱신 지시가 없습니다")
+        self.assertIn("안내", 절, "시트 0 갱신 지시가 「안내」 시트를 가리키지 않습니다")
+
     def test_확인요청서_양식_정본을_가리킨다(self):
         """이 스킬이 양식 정본을 안 가리키면 둘이 조용히 갈린다.
 
