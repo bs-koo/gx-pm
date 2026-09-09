@@ -2038,7 +2038,7 @@ class DesignConstraintReflectionTest(unittest.TestCase):
         절 = self._step5절()
         미수행 = 절.find("`미수행`")
         self.assertNotEqual(미수행, -1, "Step 5 에 `미수행` 판정이 없습니다")
-        for 앞 in ("실패 {N}건", "예외 케이스 없음", "설계 제약 미반영"):
+        for 앞 in ("실패 {N}건", "예외 케이스 없음", "설계 제약 미반영", "임시확정"):
             위치 = 절.find(앞)
             self.assertNotEqual(위치, -1, f"Step 5 에 `{앞}` 이 없습니다")
             self.assertLess(
@@ -2157,6 +2157,34 @@ class DesignConstraintReflectionTest(unittest.TestCase):
         """정본을 옮겨 적지 않고 경로로 가리키는지 — 같은 개념이 두 곳에서 따로
         정의되면 다음 수정에서 어긋난다."""
         self.assertIn("skills/convert-ddl-to-tablespec/SKILL.md", self.an05)
+
+    def test_누락_리포트_출력_템플릿에_임시확정_섹션이_있다(self):
+        """표기 일치 테스트(`test_누락_유형_수_표기가_문서마다_같다`)는 `\\d+(유형|가지 유형)`
+        형태의 숫자 표기만 본다. 이 출력 템플릿은 유형 이름을 숫자 없이 그냥 나열만
+        하므로, 유형이 9개로 늘어도 이 블록만 8개에 머물러 있어도 그 테스트에 안 걸린다.
+
+        `## 출력` 의 `### 누락 리포트` 코드블록 안을 직접 확인한다 — 이 블록 안에도
+        `### 요약` 처럼 문서 헤딩과 같은 표기(`##`/`###`)가 리터럴로 들어 있어서,
+        "다음 `## ` 헤딩까지" 로 자르는 방식은 이 코드블록의 첫 줄에서 잘못 멈춘다.
+        그래서 코드펜스(```) 로 직접 범위를 잡는다.
+        """
+        스킬 = (
+            PLUGIN_ROOT / "skills" / "trace-requirements" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(r"^### 누락 리포트\n\n```\n(.*?)\n```", 스킬, re.M | re.S)
+        self.assertIsNotNone(구간, "trace-requirements 의 §누락 리포트 코드블록을 찾지 못했습니다")
+        절 = 구간.group(1)
+        self.assertIn(
+            "### 임시확정", 절,
+            "누락 리포트 출력 템플릿에 `### 임시확정` 섹션이 없습니다 "
+            "— 정본은 9유형인데 리포트 서식은 8개뿐입니다",
+        )
+        self.assertNotEqual(절.find("### 요약"), -1, "누락 리포트 템플릿에 `### 요약` 이 없습니다")
+        self.assertLess(
+            절.find("### 임시확정"), 절.find("### 요약"),
+            "`### 임시확정` 섹션이 `### 요약` 뒤에 있습니다 "
+            "— 요약 앞에서 유형별 세부를 나열하는 자리입니다",
+        )
 
 
 class ConfirmationSheetTest(unittest.TestCase):
