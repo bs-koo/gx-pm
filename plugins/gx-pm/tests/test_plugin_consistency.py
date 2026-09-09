@@ -885,6 +885,48 @@ class PipelineCommandTest(unittest.TestCase):
         )
         self.assertIn("[애매성 3/5]", 절, "카운터 출력 형식 예시가 없습니다")
 
+    def test_되묻기가_엑셀로_간다는_것이_정책에_있다(self):
+        """§질문 정책이 대화 질문만 다루면 엑셀 경로가 정책 밖에 남는다.
+
+        어느 질문이 대화이고 어느 것이 파일인지가 한 곳에 없으면, 뒤에
+        누가 되묻기를 다시 AskUserQuestion 으로 되돌려도 근거가 없다.
+        """
+        본문 = (
+            PLUGIN_ROOT / "templates" / "pipeline-protocol.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(r"^## 질문 정책$(.*?)(?=^## |\Z)", 본문, re.M | re.S)
+        self.assertIsNotNone(구간)
+        절 = 구간.group(1)
+        self.assertIn("확인요청서", 절, "확인요청서 경로가 질문 정책에 없습니다")
+        self.assertRegex(
+            절, r"엑셀|파일로",
+            "질문을 파일로 주고받는다는 층이 없습니다",
+        )
+
+    def test_세_층_표현이_대화_층으로_한정된다(self):
+        """서두의 '세 층'이 무한정이면 네 번째(파일) 층과 층 수가 안 맞는다.
+
+        확인요청서 층은 대화가 아니라 파일이다. 서두가 '대화로 묻는' 한정
+        없이 '세 층'이라고만 하면, 이 절에 실제로는 네 층(대화 셋 + 파일
+        하나)이 있다는 사실과 충돌한다 — 뒤에 읽는 사람이 어느 쪽을 믿을지
+        모르게 된다.
+        """
+        본문 = (
+            PLUGIN_ROOT / "templates" / "pipeline-protocol.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(r"^## 질문 정책$(.*?)(?=^## |\Z)", 본문, re.M | re.S)
+        self.assertIsNotNone(구간)
+        절 = 구간.group(1)
+        서두 = re.search(r"^질문은[^\n]*세 층[^\n]*$", 절, re.M)
+        self.assertIsNotNone(
+            서두, "질문 정책 서두에서 '질문은 ... 세 층' 문장을 찾지 못했습니다",
+        )
+        self.assertIn(
+            "대화", 서두.group(0),
+            "'세 층' 문장이 대화 층으로 한정돼 있지 않습니다 "
+            "— 네 번째(파일) 층과 합치면 절 안의 층 수가 안 맞습니다",
+        )
+
     def test_정책_층이_Step_0_에_있고_프로파일에_저장된다(self):
         """저장처가 없으면 재개할 때 정책을 다시 묻게 된다.
 
