@@ -128,20 +128,34 @@ DOCUMENT_PROFILES = {
     },
     "확인요청서": {
         # 5종 산출물이 아니라 미결사항 관리대장이라 산출물 코드를 갖지 않는다.
-        # 컬럼 정본은 templates/confirmation-request.md 의 두 「본문 컬럼 (정본)」 절이다.
-        # 현역 프로필 중 유일하게 컬럼 세트가 둘이다 — sheet_names 가 없으면
-        # 둘째 시트가 "확인요청서_1" 로 밀려 개정이력_1~_4 와 같은 모양이 된다.
-        "sheet_name": "가정 확인",
-        "sheet_names": ["가정 확인", "미확정 확인"],
+        # 컬럼 정본은 templates/confirmation-request.md 의 네 「본문 컬럼 (정본)」 절이다.
+        # 현역 프로필 중 유일하게 컬럼 세트가 넷이다 — sheet_names 가 없으면
+        # 둘째 시트부터 "확인요청서_1" 로 밀려 개정이력_1~_4 와 같은 모양이 된다.
+        "sheet_name": "안내",
+        "sheet_names": ["안내", "가정 확인", "미확정 확인", "요청 이력"],
         "columns": [
-            ["#", "위치", "가정한 값", "근거", "판정", "정정값", "비고"],
-            ["#", "위치", "무엇이 없나", "왜 못 정했나", "상태", "응답", "확정일"],
+            ["구분", "안내"],
+            ["#", "차수", "위치", "AI 가 정한 값", "근거", "판정", "정정값", "비고"],
+            ["#", "차수", "위치", "무엇이 없나", "왜 못 정했나", "상태", "응답", "확정일"],
+            ["차수", "발행일", "위치", "물은 것", "받은 답", "처리"],
         ],
         "merge_columns": [],
-        "left_align": ["위치", "근거", "비고", "무엇이 없나", "왜 못 정했나", "응답"],
+        "left_align": [
+            "안내", "위치", "근거", "비고", "무엇이 없나", "왜 못 정했나", "응답",
+            "물은 것", "받은 답",
+        ],
         "dropdowns": [
+            {},
             {"판정": ["맞음", "수정", "미확정으로"]},
             {"상태": ["대기", "확정", "해당없음"]},
+            {},
+        ],
+        # 사람이 채울 칸. 안내·요청 이력은 읽기 전용이라 비운다.
+        "input_columns": [
+            [],
+            ["판정", "정정값", "비고"],
+            ["상태", "응답", "확정일"],
+            [],
         ],
     },
     "추적매트릭스": {
@@ -405,6 +419,37 @@ def merge_ranges(
     return ranges
 
 
+INPUT_FILL_RGB = "FFF9E3"
+
+
+def _apply_input_fill(ws, doc_profile, set_index, header_names, first_row, last_row):
+    """사람이 채울 칸에 연노랑 배경을 준다.
+
+    확인요청서는 8열 중 3열만 입력란이라 색이 없으면 어디를 채울지 모른다.
+    드롭다운이 걸린 열과 겹치지만, 드롭다운이 없는 `정정값`·`응답` 도 칠해야
+    "여기 뭔가 써야 하는구나" 가 보인다.
+
+    **헤더는 칠하지 않는다.** 헤더에는 이미 헤더 색이 있고, 덮으면 표 머리가
+    사라져 보인다. 호출부가 데이터 첫 행부터 넘긴다.
+    """
+    if not doc_profile or set_index is None or last_row < first_row:
+        return
+    목록 = doc_profile.get("input_columns") or []
+    if set_index >= len(목록):
+        return
+
+    from openpyxl.styles import PatternFill
+    from openpyxl.utils import get_column_letter as _letter
+
+    fill = PatternFill("solid", start_color=INPUT_FILL_RGB, end_color=INPUT_FILL_RGB)
+    for 컬럼 in 목록[set_index] or []:
+        if 컬럼 not in header_names:
+            continue
+        letter = _letter(header_names.index(컬럼) + 1)
+        for row in range(first_row, last_row + 1):
+            ws[f"{letter}{row}"].fill = fill
+
+
 def _apply_dropdowns(ws, doc_profile, set_index, header_names, first_row, last_row):
     """열거형 열에 데이터 검증(드롭다운)을 건다.
 
@@ -628,6 +673,9 @@ def create_xlsx(
             _apply_dropdowns(
                 ws, doc_profile, set_index, header_names, header_row + 1, last_row
             )
+            _apply_input_fill(
+                ws, doc_profile, set_index, header_names, header_row + 1, last_row
+            )
 
     if not wb.sheetnames:
         ws = wb.create_sheet(title="빈 시트")
@@ -650,6 +698,7 @@ def main():
   python export-xlsx.py ACT-요구사항정의서.md
   python export-xlsx.py --dir ../결과물/
   python export-xlsx.py file1.md file2.md --output merged.xlsx
+  python export-xlsx.py --separate --output xlsx ACT-확인요청서.md
         """,
     )
     parser.add_argument(
@@ -659,7 +708,10 @@ def main():
         "--dir", help="마크다운 파일이 있는 폴더 (폴더 내 모든 .md 처리)"
     )
     parser.add_argument(
-        "--output", "-o", help="출력 xlsx 파일 경로 (미지정 시 자동 생성)"
+        "--output",
+        "-o",
+        help="출력 경로. 합본이면 xlsx 파일 경로, --separate 면 출력 폴더 "
+        "(미지정 시 합본은 자동 생성, --separate 는 .md 옆)",
     )
     parser.add_argument(
         "--separate",
@@ -700,11 +752,20 @@ def main():
         sys.exit(1)
 
     if args.separate:
-        # 각 파일을 별도 xlsx로 생성
+        # 각 파일을 별도 xlsx로 생성.
+        # --separate 는 필연적으로 결과가 여럿이라 --output 은 파일명일 수 없다.
+        # 출력 **폴더**로 해석한다 — 프로젝트 폴더 규약의 xlsx/ 가 그 자리다
+        # (templates/project-profile-schema.md).
+        out_dir = Path(args.output) if args.output else None
+        if out_dir is not None:
+            out_dir.mkdir(parents=True, exist_ok=True)
         for md_file in md_files:
             text = md_file.read_text(encoding="utf-8")
             tables = parse_markdown_tables(text)
-            out = md_file.with_suffix(".xlsx")
+            if out_dir is not None:
+                out = out_dir / f"{md_file.stem}.xlsx"
+            else:
+                out = md_file.with_suffix(".xlsx")
             if tables:
                 result, total_sheets = create_xlsx([(md_file.name, tables)], str(out))
                 print(f"✅ {md_file.name} → {result} ({total_sheets}개 시트)")

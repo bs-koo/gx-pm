@@ -1,5 +1,9 @@
+import contextlib
+import io
+import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 import openpyxl
@@ -697,33 +701,31 @@ class AlignmentRenderTest(unittest.TestCase):
 
 
 class ConfirmationRequestTest(unittest.TestCase):
-    """확인요청서는 현역 프로필 중 유일하게 컬럼 세트가 둘이다.
+    """확인요청서는 현역 프로필 중 유일하게 컬럼 세트가 넷이다.
 
-    다중 세트 경로는 그동안 임시 프로필로만 검증됐다 — 첫 현역 사용처라
-    시트명·드롭다운이 세트별로 갈리는지 실제 프로필로 고정한다.
+    다중 세트 경로는 v3.3.0 에서 2세트가 처음이었다. 4세트는 시트명·드롭다운·
+    입력란 색이 전부 세트별로 갈려야 하므로 실제 프로필로 고정한다.
     """
 
     def setUp(self):
         self.mod = load_export_module()
         self.profile = self.mod.DOCUMENT_PROFILES["확인요청서"]
 
-    def test_컬럼_세트가_둘이고_시트명도_둘이다(self):
-        """sheet_names 가 없으면 둘째 시트가 `확인요청서_1` 로 밀린다.
-
-        gx-명세일괄 이 경계하는 「개정이력_1~_4 로 흩어짐」과 같은 모양이다.
-        """
-        self.assertEqual(len(self.profile["columns"]), 2)
+    def test_컬럼_세트가_넷이고_시트명도_넷이다(self):
+        self.assertEqual(len(self.profile["columns"]), 4)
         self.assertEqual(
-            self.profile["sheet_names"], ["가정 확인", "미확정 확인"],
-            "세트별 시트명이 없으면 둘째 시트 이름이 중복 회피로 밀립니다",
+            self.profile["sheet_names"],
+            ["안내", "가정 확인", "미확정 확인", "요청 이력"],
+            "세트별 시트명이 없으면 둘째 시트부터 이름이 중복 회피로 밀립니다",
         )
 
     def test_컬럼이_템플릿_정본과_같다(self):
-        """양식 템플릿과 프로필이 갈라지면 재배열이 조용히 어긋난다."""
-        for 세트, 절 in enumerate(
-            ["시트 1 · 가정 확인 — 본문 컬럼 (정본)",
-             "시트 2 · 미확정 확인 — 본문 컬럼 (정본)"]
-        ):
+        for 세트, 절 in enumerate([
+            "시트 0 · 안내 — 본문 컬럼 (정본)",
+            "시트 1 · 가정 확인 — 본문 컬럼 (정본)",
+            "시트 2 · 미확정 확인 — 본문 컬럼 (정본)",
+            "시트 3 · 요청 이력 — 본문 컬럼 (정본)",
+        ]):
             with self.subTest(세트=세트):
                 self.assertEqual(
                     self.profile["columns"][세트],
@@ -731,39 +733,78 @@ class ConfirmationRequestTest(unittest.TestCase):
                     f"세트 {세트} 컬럼이 confirmation-request.md 정본과 다릅니다",
                 )
 
-    def test_세트마다_다른_드롭다운을_건다(self):
-        """인덱스가 어긋나면 미확정 시트에 판정 목록이 걸린다."""
+    def test_입력_시트에만_드롭다운을_건다(self):
+        """안내·요청 이력은 읽기 전용이라 드롭다운이 없어야 한다."""
         self.assertEqual(
             self.profile["dropdowns"],
             [
+                {},
                 {"판정": ["맞음", "수정", "미확정으로"]},
                 {"상태": ["대기", "확정", "해당없음"]},
+                {},
             ],
         )
 
-    def test_두_시트가_각자_이름과_드롭다운을_갖는다(self):
-        md = (
-            "## 가정 확인\n\n"
-            "| # | 위치 | 가정한 값 | 근거 | 판정 | 정정값 | 비고 |\n"
-            "|---|---|---|---|---|---|---|\n"
-            "| 1 | SFR-027 | 100자 | RFP 미규정 | 맞음 | | |\n\n"
-            "## 미확정 확인\n\n"
-            "| # | 위치 | 무엇이 없나 | 왜 못 정했나 | 상태 | 응답 | 확정일 |\n"
-            "|---|---|---|---|---|---|---|\n"
-            "| 1 | SFR-016 | 기준값 | 판정 불가 | 대기 | | |\n"
+    def test_입력_시트에만_입력란_색을_준다(self):
+        self.assertEqual(
+            self.profile["input_columns"],
+            [
+                [],
+                ["판정", "정정값", "비고"],
+                ["상태", "응답", "확정일"],
+                [],
+            ],
         )
+
+
+class InputColumnFillTest(unittest.TestCase):
+    """8열 중 3열만 입력란이라 색이 없으면 어디를 채울지 모른다.
+
+    프로필만 검사하면 색칠 코드가 죽어 있어도 통과하므로 실물 셀 배경을 본다.
+    """
+
+    def setUp(self):
+        self.mod = load_export_module()
+
+    def _생성(self, md, sheet):
         tables = self.mod.parse_markdown_tables(md)
         with tempfile.TemporaryDirectory() as tmp:
             out = str(Path(tmp) / "out.xlsx")
             self.mod.create_xlsx([("REB-확인요청서.md", tables)], out)
             wb = openpyxl.load_workbook(out)
-        self.assertEqual(wb.sheetnames, ["가정 확인", "미확정 확인"])
-        걸린값 = {
-            ws.title: [d.formula1 for d in ws.data_validations.dataValidation]
-            for ws in wb.worksheets
-        }
-        self.assertEqual(걸린값["가정 확인"], ['"맞음,수정,미확정으로"'])
-        self.assertEqual(걸린값["미확정 확인"], ['"대기,확정,해당없음"'])
+        return wb[sheet]
+
+    def test_입력란은_연노랑이고_읽는_칸은_아니다(self):
+        md = (
+            "## 가정 확인\n\n"
+            "| # | 차수 | 위치 | AI 가 정한 값 | 근거 | 판정 | 정정값 | 비고 |\n"
+            "|---|---|---|---|---|---|---|---|\n"
+            "| 1 | 1 | SFR-027 | 100자 | RFP 미규정 | 맞음 | | |\n"
+        )
+        ws = self._생성(md, "가정 확인")
+        # F=판정(입력) · C=위치(읽기). 헤더는 1행, 데이터는 2행.
+        self.assertEqual(
+            ws["F2"].fill.start_color.rgb, "00FFF9E3",
+            "입력란(판정)이 연노랑이 아닙니다 — 어디를 채울지 안 보입니다",
+        )
+        self.assertNotEqual(
+            ws["C2"].fill.start_color.rgb, "00FFF9E3",
+            "읽는 칸(위치)까지 노란색이면 입력란 표시가 무의미합니다",
+        )
+
+    def test_헤더는_칠하지_않는다(self):
+        """헤더는 이미 헤더 색이 있다. 덮으면 표 머리가 사라져 보인다."""
+        md = (
+            "## 미확정 확인\n\n"
+            "| # | 차수 | 위치 | 무엇이 없나 | 왜 못 정했나 | 상태 | 응답 | 확정일 |\n"
+            "|---|---|---|---|---|---|---|---|\n"
+            "| 1 | 1 | SFR-016 | 기준값 | 판정 불가 | 대기 | | |\n"
+        )
+        ws = self._생성(md, "미확정 확인")
+        self.assertNotEqual(
+            ws["F1"].fill.start_color.rgb, "00FFF9E3",
+            "헤더 행까지 입력란 색으로 덮였습니다",
+        )
 
 
 class DropdownTest(unittest.TestCase):
@@ -869,6 +910,57 @@ class DropdownTest(unittest.TestCase):
             )
         finally:
             self.mod.DOCUMENT_PROFILES["개정이력"] = 원본
+
+
+class SeparateOutputDirTest(unittest.TestCase):
+    """`--separate` 의 `--output` 은 출력 **폴더**다.
+
+    산출물·확인요청서 xlsx 의 자리는 `{프로젝트폴더}/xlsx/` 로 정해져 있다
+    (`templates/project-profile-schema.md`, `commands/gx-프로젝트설정.md` 가 그
+    폴더를 만든다). `--separate` 는 결과가 필연적으로 여럿이라 `--output` 이
+    파일명일 수 없다. 이 검사가 없으면 도구가 .md 옆에 쓰고, 게이트 화면이
+    안내한 경로와 실제로 나오는 자리가 갈린다 — 사람이 채울 파일을 못 찾는다.
+    """
+
+    def _변환(self, argv: list[str]) -> None:
+        mod = load_export_module()
+        with contextlib.redirect_stdout(io.StringIO()):
+            with unittest.mock.patch.object(sys, "argv", ["export-xlsx.py", *argv]):
+                mod.main()
+
+    def _마크다운(self, 경로: Path) -> None:
+        경로.write_text(
+            "# 확인요청서\n\n## 시트 1\n\n| 판정 | 정정값 |\n|---|---|\n| 맞음 | |\n",
+            encoding="utf-8",
+        )
+
+    def test_separate_는_output_폴더에_쓴다(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            뿌리 = Path(tmp)
+            md = 뿌리 / "ACT-확인요청서.md"
+            self._마크다운(md)
+            xlsx폴더 = 뿌리 / "xlsx"  # 없는 폴더여야 한다 — 만들어 주는지도 본다
+            self._변환(["--separate", "--output", str(xlsx폴더), str(md)])
+            self.assertTrue(
+                (xlsx폴더 / "ACT-확인요청서.xlsx").exists(),
+                "--separate 가 --output 폴더에 쓰지 않았습니다 "
+                "— 게이트 화면이 안내하는 xlsx/ 경로에 파일이 생기지 않습니다",
+            )
+            self.assertFalse(
+                md.with_suffix(".xlsx").exists(),
+                "--output 을 줬는데도 .md 옆에 썼습니다",
+            )
+
+    def test_output_이_없으면_md_옆에_쓴다(self):
+        """기본 동작은 그대로다 — Step 10 의 `--dir . --separate` 가 이 경로다."""
+        with tempfile.TemporaryDirectory() as tmp:
+            md = Path(tmp) / "ACT-요구사항정의서.md"
+            self._마크다운(md)
+            self._변환(["--separate", str(md)])
+            self.assertTrue(
+                md.with_suffix(".xlsx").exists(),
+                "--output 없는 --separate 가 .md 옆에 쓰지 않았습니다",
+            )
 
 
 if __name__ == "__main__":
