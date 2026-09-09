@@ -698,6 +698,7 @@ def main():
   python export-xlsx.py ACT-요구사항정의서.md
   python export-xlsx.py --dir ../결과물/
   python export-xlsx.py file1.md file2.md --output merged.xlsx
+  python export-xlsx.py --separate --output xlsx ACT-확인요청서.md
         """,
     )
     parser.add_argument(
@@ -707,7 +708,10 @@ def main():
         "--dir", help="마크다운 파일이 있는 폴더 (폴더 내 모든 .md 처리)"
     )
     parser.add_argument(
-        "--output", "-o", help="출력 xlsx 파일 경로 (미지정 시 자동 생성)"
+        "--output",
+        "-o",
+        help="출력 경로. 합본이면 xlsx 파일 경로, --separate 면 출력 폴더 "
+        "(미지정 시 합본은 자동 생성, --separate 는 .md 옆)",
     )
     parser.add_argument(
         "--separate",
@@ -748,11 +752,20 @@ def main():
         sys.exit(1)
 
     if args.separate:
-        # 각 파일을 별도 xlsx로 생성
+        # 각 파일을 별도 xlsx로 생성.
+        # --separate 는 필연적으로 결과가 여럿이라 --output 은 파일명일 수 없다.
+        # 출력 **폴더**로 해석한다 — 프로젝트 폴더 규약의 xlsx/ 가 그 자리다
+        # (templates/project-profile-schema.md).
+        out_dir = Path(args.output) if args.output else None
+        if out_dir is not None:
+            out_dir.mkdir(parents=True, exist_ok=True)
         for md_file in md_files:
             text = md_file.read_text(encoding="utf-8")
             tables = parse_markdown_tables(text)
-            out = md_file.with_suffix(".xlsx")
+            if out_dir is not None:
+                out = out_dir / f"{md_file.stem}.xlsx"
+            else:
+                out = md_file.with_suffix(".xlsx")
             if tables:
                 result, total_sheets = create_xlsx([(md_file.name, tables)], str(out))
                 print(f"✅ {md_file.name} → {result} ({total_sheets}개 시트)")

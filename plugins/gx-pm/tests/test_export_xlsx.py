@@ -1,5 +1,9 @@
+import contextlib
+import io
+import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 import openpyxl
@@ -906,6 +910,57 @@ class DropdownTest(unittest.TestCase):
             )
         finally:
             self.mod.DOCUMENT_PROFILES["개정이력"] = 원본
+
+
+class SeparateOutputDirTest(unittest.TestCase):
+    """`--separate` 의 `--output` 은 출력 **폴더**다.
+
+    산출물·확인요청서 xlsx 의 자리는 `{프로젝트폴더}/xlsx/` 로 정해져 있다
+    (`templates/project-profile-schema.md`, `commands/gx-프로젝트설정.md` 가 그
+    폴더를 만든다). `--separate` 는 결과가 필연적으로 여럿이라 `--output` 이
+    파일명일 수 없다. 이 검사가 없으면 도구가 .md 옆에 쓰고, 게이트 화면이
+    안내한 경로와 실제로 나오는 자리가 갈린다 — 사람이 채울 파일을 못 찾는다.
+    """
+
+    def _변환(self, argv: list[str]) -> None:
+        mod = load_export_module()
+        with contextlib.redirect_stdout(io.StringIO()):
+            with unittest.mock.patch.object(sys, "argv", ["export-xlsx.py", *argv]):
+                mod.main()
+
+    def _마크다운(self, 경로: Path) -> None:
+        경로.write_text(
+            "# 확인요청서\n\n## 시트 1\n\n| 판정 | 정정값 |\n|---|---|\n| 맞음 | |\n",
+            encoding="utf-8",
+        )
+
+    def test_separate_는_output_폴더에_쓴다(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            뿌리 = Path(tmp)
+            md = 뿌리 / "ACT-확인요청서.md"
+            self._마크다운(md)
+            xlsx폴더 = 뿌리 / "xlsx"  # 없는 폴더여야 한다 — 만들어 주는지도 본다
+            self._변환(["--separate", "--output", str(xlsx폴더), str(md)])
+            self.assertTrue(
+                (xlsx폴더 / "ACT-확인요청서.xlsx").exists(),
+                "--separate 가 --output 폴더에 쓰지 않았습니다 "
+                "— 게이트 화면이 안내하는 xlsx/ 경로에 파일이 생기지 않습니다",
+            )
+            self.assertFalse(
+                md.with_suffix(".xlsx").exists(),
+                "--output 을 줬는데도 .md 옆에 썼습니다",
+            )
+
+    def test_output_이_없으면_md_옆에_쓴다(self):
+        """기본 동작은 그대로다 — Step 10 의 `--dir . --separate` 가 이 경로다."""
+        with tempfile.TemporaryDirectory() as tmp:
+            md = Path(tmp) / "ACT-요구사항정의서.md"
+            self._마크다운(md)
+            self._변환(["--separate", str(md)])
+            self.assertTrue(
+                md.with_suffix(".xlsx").exists(),
+                "--output 없는 --separate 가 .md 옆에 쓰지 않았습니다",
+            )
 
 
 if __name__ == "__main__":
