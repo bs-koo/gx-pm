@@ -2193,5 +2193,64 @@ class ConfirmationSheetTest(unittest.TestCase):
         self.assertIn("FFF9E3", self.text, "입력란 배경색 값이 없습니다")
 
 
+class ConfirmationRoundTest(unittest.TestCase):
+    """게이트 2 시점에 미확정 73/80 이 이미 나온다.
+
+    2차 시험 실측 분포는 AN-03 65 · DE-08 8 · DE-13 7 이었다. 확인요청서를
+    게이트 3 뒤에 내면 답을 받은 뒤 이미 만든 DE-13 의 경계 케이스를 파급
+    처리로 다시 쓴다. 게이트 2 에서 받으면 처음부터 맞게 만든다.
+    """
+
+    def setUp(self):
+        self.본문 = (
+            PLUGIN_ROOT / "commands" / "gx-명세일괄.md"
+        ).read_text(encoding="utf-8")
+
+    def _절(self, 제목):
+        구간 = re.search(
+            rf"^### {re.escape(제목)}(.*?)(?=^### |\Z)", self.본문, re.M | re.S
+        )
+        self.assertIsNotNone(구간, f"{제목} 절을 찾지 못했습니다")
+        return 구간.group(1)
+
+    def test_게이트2가_1차를_발행하고_중단한다(self):
+        절 = self._절("Step 6: 게이트 2")
+        self.assertIn("1차 확인요청서", 절, "게이트 2 가 1차를 발행하지 않습니다")
+        self.assertIn(
+            "중단", 절,
+            "발행 후 중단한다는 지시가 없습니다 — 계속 가면 경계 케이스가 "
+            "가정값으로 만들어지고 뒤에 파급 처리로 다시 씁니다",
+        )
+        self.assertIn(
+            "10건", 절,
+            "소수일 때 멈추지 않는다는 임계가 없습니다 — 2건 때문에 왕복을 "
+            "만들 이유가 없습니다",
+        )
+
+    def test_중단_안내가_다음_할_일을_알려준다(self):
+        """화면만 보고 다음에 무엇을 할지 알 수 있어야 한다.
+
+        경로가 없으면 파일을 못 찾고, 다시 부르는 법이 없으면 멈춘 채로 끝난다.
+        """
+        절 = self._절("Step 6: 게이트 2")
+        self.assertIn("xlsx/", 절, "확인요청서 파일 경로가 화면에 없습니다")
+        self.assertIn(
+            "노란 칸", 절,
+            "어디를 채우는지 안내가 없습니다",
+        )
+        self.assertIn(
+            "빈칸", 절,
+            "빈칸으로 둬도 된다는 안내가 없습니다 — 다 채워야 하는 줄 압니다",
+        )
+        self.assertRegex(
+            절, r"/gx-명세일괄.*다시",
+            "다시 부르는 방법이 화면에 없습니다",
+        )
+
+    def test_게이트3은_2차를_발행한다(self):
+        절 = self._절("Step 9: 게이트 3")
+        self.assertIn("2차", 절, "게이트 3 이 2차를 발행하지 않습니다")
+
+
 if __name__ == "__main__":
     unittest.main()
