@@ -2130,5 +2130,68 @@ class DesignConstraintReflectionTest(unittest.TestCase):
         self.assertIn("skills/convert-ddl-to-tablespec/SKILL.md", self.an05)
 
 
+class ConfirmationSheetTest(unittest.TestCase):
+    """확인요청서는 시트를 「답할 사람」으로 나눈다.
+
+    시트 1 은 PM 이, 시트 2 는 발주기관이 답한다. 시트 2 만 떼어 메일에 붙일 수
+    있어야 하므로 한 시트에 섞으면 안 된다. 시트 수만 세면 역할이 뒤바뀌어도
+    통과하므로 「누가 채우나」 문자열까지 본다.
+    """
+
+    def setUp(self):
+        self.text = (
+            PLUGIN_ROOT / "templates" / "confirmation-request.md"
+        ).read_text(encoding="utf-8")
+
+    def test_시트가_네_장이고_각각_역할이_있다(self):
+        for 시트, 역할 in (
+            ("시트 0 · 안내", "읽기만"),
+            ("시트 1 · 가정 확인", "PM"),
+            ("시트 2 · 미확정 확인", "발주기관"),
+            ("시트 3 · 요청 이력", "읽기만"),
+        ):
+            with self.subTest(시트=시트):
+                self.assertIn(시트, self.text, f"{시트} 절이 없습니다")
+                self.assertIn(
+                    역할, self.text,
+                    f"{시트} 의 「누가 채우나」({역할})가 없습니다",
+                )
+
+    def test_네_시트가_모두_컬럼_정본_절을_갖는다(self):
+        """정본 절이 없으면 parse_column_ssot 가 빈 목록을 내고
+
+        xlsx 프로필과의 대조가 조용히 통과한다.
+        """
+        for 절 in (
+            "시트 0 · 안내 — 본문 컬럼 (정본)",
+            "시트 1 · 가정 확인 — 본문 컬럼 (정본)",
+            "시트 2 · 미확정 확인 — 본문 컬럼 (정본)",
+            "시트 3 · 요청 이력 — 본문 컬럼 (정본)",
+        ):
+            with self.subTest(절=절):
+                self.assertIn(f"## {절}", self.text, f"「{절}」 절이 없습니다")
+
+    def test_차수_열과_상한이_있다(self):
+        """차수가 없으면 이력이 안 쌓이고, 상한이 없으면 끝나지 않는다."""
+        self.assertIn("차수", self.text)
+        self.assertIn("최대 3차", self.text, "차수 상한이 없습니다")
+
+    def test_빈칸이_정상임을_밝힌다(self):
+        """사람이 한 줄도 안 써도 넘어간다는 것이 이 설계의 핵심이다.
+
+        이 문장이 없으면 확인요청서가 파이프라인을 막는 새 관문이 된다.
+        """
+        self.assertIn("빈칸", self.text)
+        self.assertRegex(
+            self.text, r"그대로 진행|그 값으로 진행",
+            "빈칸을 두면 어떻게 되는지가 없습니다",
+        )
+
+    def test_입력란_색_규칙이_있다(self):
+        """8열 중 3열만 입력란이라 색이 없으면 어디를 채울지 모른다."""
+        self.assertIn("연노랑", self.text)
+        self.assertIn("FFF9E3", self.text, "입력란 배경색 값이 없습니다")
+
+
 if __name__ == "__main__":
     unittest.main()
