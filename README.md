@@ -6,7 +6,7 @@
 
 요구사항 분석부터 기능명세, 테이블 설계, 단위테스트, ID 추적까지
 
-[![Version](https://img.shields.io/badge/version-3.4.0-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-3.4.1-blue.svg)]()
 [![Skills](https://img.shields.io/badge/skills-17-green.svg)]()
 [![Commands](https://img.shields.io/badge/commands-7-orange.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)

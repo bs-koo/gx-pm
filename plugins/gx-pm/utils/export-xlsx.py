@@ -241,12 +241,26 @@ def parse_markdown_tables(text: str) -> list[tuple[str, list[str]]]:
     return tables
 
 
+def strip_markdown(text: str) -> str:
+    """셀 안의 마크다운 강조 표기를 걷어낸다.
+
+    엑셀은 마크다운을 모른다. `**PM 이 답합니다.**` 를 그대로 쓰면 별표가
+    글자로 보인다 — 사람이 읽는 안내 시트에서 특히 나쁘다. 굵게·기울임·
+    코드 표기를 걷어내고 알맹이만 남긴다. `[가정]` 같은 대괄호 표식은
+    산출물의 뜻이므로 건드리지 않는다.
+    """
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+    text = re.sub(r"__(.+?)__", r"\1", text)
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    return text
+
+
 def table_lines_to_rows(table_lines: list[str]) -> list[list[str]]:
     """마크다운 표 라인 → 2D 배열 (구분선 제거)"""
     rows = []
     for line in table_lines:
         # 구분선 ( |---|---| ) 건너뛰기
-        cells = [c.strip() for c in line.split("|")[1:-1]]
+        cells = [strip_markdown(c.strip()) for c in line.split("|")[1:-1]]
         if cells and not all(re.match(r"^[\s\-:]+$", c) for c in cells):
             rows.append(cells)
     return rows
