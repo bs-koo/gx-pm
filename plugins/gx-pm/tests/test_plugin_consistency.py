@@ -2363,5 +2363,93 @@ class ConfirmationRoundTest(unittest.TestCase):
         )
 
 
+class ApplyConfirmationsRoundTest(unittest.TestCase):
+    """되묻기가 대화로 남으면 왕복이 20회가 된다.
+
+    80건을 AskUserQuestion 으로 물으면 한 화면에 4개씩 20 화면이고 매 화면이
+    세션 왕복이다. 답변이 새 애매성을 만들면 즉시 되묻지 않고 다음 차수 행으로
+    써야 왕복이 0이 된다.
+    """
+
+    def setUp(self):
+        self.text = (
+            PLUGIN_ROOT / "skills" / "apply-confirmations" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+
+    def _절(self, 제목):
+        구간 = re.search(
+            rf"^### {re.escape(제목)}(.*?)(?=^### |\Z)", self.text, re.M | re.S
+        )
+        self.assertIsNotNone(구간, f"{제목} 절을 찾지 못했습니다")
+        return 구간.group(1)
+
+    def test_AskUserQuestion_을_쓰지_않는다(self):
+        """문장만 바꾸면 통과하므로 도구 이름의 부재를 직접 본다."""
+        self.assertNotIn(
+            "AskUserQuestion", self.text,
+            "되묻기에 AskUserQuestion 이 남아 있습니다 "
+            "— 다음 차수 엑셀 행으로 보내야 왕복이 사라집니다",
+        )
+
+    def test_되묻던_네_경우가_다음_차수_행이_된다(self):
+        """네 경우 낱말은 옛 「되묻기 — 네 경우뿐」 절에도 그대로 있던 말이라,
+        전체 텍스트 검사로는 Step 4 를 안 바꿔도 통과한다. Step 4 절로 범위를
+        좁히고, 옛 상한 문구(5건 · [반영 N/5])가 그 절에서 사라졌는지도 함께
+        본다 — 그래야 "대화식 되묻기가 실제로는 안 바뀐" 경우를 잡는다.
+        """
+        절 = self._절("Step 4:")
+        self.assertIn("다음 차수", 절, "Step 4 절에 「다음 차수」가 없습니다")
+        for 경우 in ("정정값이 비었", "형식", "충돌", "파급"):
+            with self.subTest(경우=경우):
+                self.assertIn(
+                    경우, 절, f"Step 4 절에 되묻던 경우 「{경우}」 가 없습니다"
+                )
+        self.assertNotIn(
+            "5건", 절,
+            "Step 4 에 옛 되묻기 상한 문구(5건)가 남아 있습니다 "
+            "— 대화식 되묻기 설계가 실제로는 안 바뀐 것입니다",
+        )
+        self.assertNotIn(
+            "[반영", 절,
+            "Step 4 에 옛 되묻기 카운터 표기([반영 N/5])가 남아 있습니다",
+        )
+
+    def test_3차_상한과_임시확정_전환이_있다(self):
+        self.assertIn("3차", self.text)
+        self.assertIn("[임시확정]", self.text)
+        절 = self._절("Step 4-2:")
+        self.assertIn(
+            "templates/evidence-rules.md", 절,
+            "Step 4-2 절이 전환 규칙의 정본을 가리키지 않습니다 — 이 경로 "
+            "문자열은 Step 3 에도 이미 있어 전체 텍스트 검사로는 이 절이 "
+            "정본을 안 가리켜도 통과합니다",
+        )
+
+    def test_요청_이력을_남긴다(self):
+        """3차까지 요청했다는 증거가 없으면 [임시확정] 이 지어낸 값과 같아진다.
+
+        `## 출력` 의 예시 문구에만 두 낱말이 있고 Step 4-1 의 기록 규칙 자체가
+        없으면, 실제로는 이번 차수의 요청·미응답이 시트 3 에 쌓이지 않는다 —
+        전체 텍스트 검사는 예시 문구만으로도 속는다. 규칙이 선 Step 4-1 절로
+        범위를 좁힌다.
+        """
+        절 = self._절("Step 4-1:")
+        self.assertIn("요청 이력", 절, "Step 4-1 절에 「요청 이력」 기록 규칙이 없습니다")
+        self.assertIn("미응답", 절, "Step 4-1 절에 「미응답」 기록 규칙이 없습니다")
+
+    def test_확인요청서_양식_정본을_가리킨다(self):
+        """이 스킬이 양식 정본을 안 가리키면 둘이 조용히 갈린다.
+
+        Task 2 가 확인요청서를 4시트로 재편했을 때 이 스킬은 그걸 모른 채
+        대화식 되묻기 설계를 유지하고 있었다 — 리뷰가 Important 로 잡았다.
+        경로 참조가 없으면 같은 어긋남이 다시 생겨도 아무도 모른다.
+        """
+        self.assertIn(
+            "templates/confirmation-request.md", self.text,
+            "확인요청서 양식 정본을 가리키지 않습니다 "
+            "— 시트 구조가 바뀌어도 이 스킬이 모르게 됩니다",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
