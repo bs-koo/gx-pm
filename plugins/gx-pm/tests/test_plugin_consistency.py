@@ -2653,5 +2653,53 @@ class ApplyConfirmationsRoundTest(unittest.TestCase):
         )
 
 
+
+class ConfirmationCloseoutTest(unittest.TestCase):
+    """발행을 건너뛰면 왕복이 끝나는데 파일은 남는다.
+
+    1차 시험에서 실제로 어긋났다. 반영 뒤 남은 것이 1건이라 게이트 3 이 발행을
+    건너뛰었는데, 시트 0 은 「게이트 3 이후 2차 발행 예정」인 채로 끝났다.
+    **오지 않을 차수를 파일이 약속한다.**
+
+    원인이 둘이라 양쪽을 다 지킨다 — 반영 스킬이 앞으로 낼 차수를 예고했고,
+    게이트는 건너뛸 때 안내를 닫지 않았다.
+    """
+
+    def _절(self, 파일: str, 제목: str) -> str:
+        본문 = (PLUGIN_ROOT / 파일).read_text(encoding="utf-8")
+        구간 = re.search(
+            rf"^#+ {re.escape(제목)}$(.*?)(?=^#{{1,3}} |\Z)", 본문, re.M | re.S
+        )
+        self.assertIsNotNone(구간, f"{파일} 에 §{제목} 절이 없습니다")
+        return 구간.group(1)
+
+    def test_반영_스킬이_다음_차수를_예고하지_않는다(self):
+        절 = self._절(
+            "skills/apply-confirmations/SKILL.md", "다음 차수를 예고하지 않는다"
+        )
+        self.assertRegex(
+            절, r"[^\n]*발행 여부는[^\n]*게이트[^\n]*정한다",
+            "발행을 게이트가 정한다는 근거가 없습니다",
+        )
+        self.assertRegex(
+            절, r"[^\n]*지금 상태만[^\n]*",
+            "시트 0 에 지금 상태만 쓰라는 지시가 없습니다",
+        )
+
+    def test_게이트가_건너뛸_때_안내를_닫는다(self):
+        본문 = (
+            PLUGIN_ROOT / "commands" / "gx-명세일괄.md"
+        ).read_text(encoding="utf-8")
+        닫기 = re.search(r"^[^\n]*시트 0[^\n]*닫는[^\n]*$", 본문, re.M)
+        self.assertIsNotNone(
+            닫기,
+            "발행을 건너뛸 때 시트 0 을 닫으라는 지시가 없습니다",
+        )
+        self.assertIn(
+            "다시 쓴다", 닫기.group(0),
+            "닫는다고만 하고 다시 쓰라는 말이 없습니다",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
