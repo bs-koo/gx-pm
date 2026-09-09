@@ -1955,9 +1955,9 @@ class DesignConstraintReflectionTest(unittest.TestCase):
             유형행.append(칸[0])
         return 유형행
 
-    def test_누락_판정이_8유형이고_설계_제약_미반영이_있다(self):
+    def test_누락_판정이_9유형이고_설계_제약_미반영이_있다(self):
         유형행 = self._누락판정_유형행()
-        self.assertEqual(len(유형행), 8, f"누락 판정 유형이 8개가 아닙니다: {유형행}")
+        self.assertEqual(len(유형행), 9, f"누락 판정 유형이 9개가 아닙니다: {유형행}")
         self.assertIn("설계 제약 미반영", 유형행)
 
     def test_AN_05_컬럼_정본은_9개_그대로다(self):
@@ -1999,8 +1999,8 @@ class DesignConstraintReflectionTest(unittest.TestCase):
         절 = 구간.group(1)
         번호 = re.findall(r"^\d+\. ", 절, re.M)
         self.assertEqual(
-            len(번호), 8,
-            f"판정 순서가 8단계가 아닙니다: {len(번호)}단계 "
+            len(번호), 9,
+            f"판정 순서가 9단계가 아닙니다: {len(번호)}단계 "
             "— 정본의 누락 유형 수와 어긋나면 안 나오는 유형이 생깁니다",
         )
         self.assertIn(
@@ -2031,7 +2031,7 @@ class DesignConstraintReflectionTest(unittest.TestCase):
         한 번도 찍히지 않는 죽은 코드였다.
 
         개수만 세는 test_trace_requirements_가_8번째_유형을_판정한다 로는 이걸
-        못 잡는다 — 여덟 개가 다 있어도 순서가 틀리면 안 나온다. 그래서 순서를 본다.
+        못 잡는다 — 아홉 개가 다 있어도 순서가 틀리면 안 나온다. 그래서 순서를 본다.
 
         `미수행` 은 진행 상태이고 나머지는 산출물 결함이라, 결함이 먼저 걸려야 한다.
         """
@@ -2055,11 +2055,11 @@ class DesignConstraintReflectionTest(unittest.TestCase):
         판정 사다리 맨 앞의 `미수행` 선점과 함께, 이것이 그 유형이 한 번도
         발화하지 못한 두 번째 원인이었다.
 
-        범위 표기(`3~7번`)만 검사하면 괄호가 옛말로 남아도 통과하므로 괄호도 본다.
+        범위 표기(`3~8번`)만 검사하면 괄호가 옛말로 남아도 통과하므로 괄호도 본다.
         """
         절 = self._step5절()
         self.assertIn(
-            "3~7번", 절,
+            "3~8번", 절,
             "비기능 경로가 데이터 축 판정(`설계 제약 미반영`)까지 적용하지 않습니다",
         )
         self.assertNotIn(
@@ -2100,6 +2100,35 @@ class DesignConstraintReflectionTest(unittest.TestCase):
             "누락 열에 `미수행`", 행,
             "Pass/Fail 컬럼 정의가 `미수행` 을 못박고 있습니다 "
             "— 판정 순서가 바뀌면 거짓이 됩니다. `누락` 열을 가리키기만 하세요",
+        )
+
+    def test_임시확정이_아홉번째_유형이다(self):
+        """정본에 유형을 더하고 판정 순서를 안 고치면 그 유형이 영영 안 나온다.
+
+        v3.2.0 의 `설계 제약 미반영` 이 그랬다 — 정본은 8유형인데 Step 5 는
+        7개뿐이라 매트릭스를 만들어도 한 번도 찍히지 않았다.
+
+        `임시확정` 은 값이 채워져 있어 다른 판정에 안 걸리므로, 사다리에
+        자리를 주지 않으면 빈칸으로 남는다.
+        """
+        정본 = (
+            PLUGIN_ROOT / "templates" / "AN-05-traceability-matrix.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(r"^## 누락 판정$(.*?)(?=^## |\Z)", 정본, re.M | re.S)
+        self.assertIsNotNone(구간, "AN-05 의 §누락 판정 절을 찾지 못했습니다")
+        유형 = re.findall(r"^\| (\S[^|]*?) \|", 구간.group(1), re.M)
+        유형 = [t for t in 유형 if t not in ("유형",) and "---" not in t]
+        self.assertEqual(
+            len(유형), 9,
+            f"누락 유형이 9개가 아닙니다: {len(유형)}개 — {유형}",
+        )
+        self.assertIn("임시확정", 구간.group(1))
+
+        절 = self._step5절()
+        self.assertIn(
+            "임시확정", 절,
+            "Step 5 판정 순서에 `임시확정` 이 없습니다 — 정본에만 넣으면 "
+            "매트릭스에 한 번도 안 찍힙니다",
         )
 
     def test_누락_유형_수_표기가_문서마다_같다(self):
