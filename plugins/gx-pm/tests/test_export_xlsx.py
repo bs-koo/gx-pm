@@ -710,7 +710,7 @@ class ConfirmationRequestTest(unittest.TestCase):
     def test_컬럼_세트가_둘이고_시트명도_둘이다(self):
         """sheet_names 가 없으면 둘째 시트가 `확인요청서_1` 로 밀린다.
 
-        gx-spec 이 경계하는 「개정이력_1~_4 로 흩어짐」과 같은 모양이다.
+        gx-명세일괄 이 경계하는 「개정이력_1~_4 로 흩어짐」과 같은 모양이다.
         """
         self.assertEqual(len(self.profile["columns"]), 2)
         self.assertEqual(

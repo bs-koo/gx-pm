@@ -154,7 +154,7 @@ class CrossReferenceTest(unittest.TestCase):
 
         v3.0.0 에서 `/gx-testplan` 이 archive 로 내려가 진입점이 셋에서 둘로 줄었다.
         """
-        진입점 = ("gx-프로젝트설정", "gx-spec")
+        진입점 = ("gx-프로젝트설정", "gx-명세일괄")
         도달가능 = set()
         for 이름 in 진입점:
             path = PLUGIN_ROOT / "commands" / f"{이름}.md"
@@ -223,7 +223,7 @@ class SurfaceTest(unittest.TestCase):
         self.assertEqual(
             sorted(command_names()),
             sorted([
-                "gx-프로젝트설정", "gx-spec",
+                "gx-프로젝트설정", "gx-명세일괄",
                 "gx-요구사항정의서", "gx-기능명세서", "gx-테이블정의서",
                 "gx-단위테스트계획서", "gx-추적매트릭스",
             ]),
@@ -240,7 +240,7 @@ class SurfaceTest(unittest.TestCase):
                 self.assertNotIn(내린것, command_names())
 
     def test_spec_파이프라인이_다섯_산출물을_순서대로_부른다(self):
-        text = (PLUGIN_ROOT / "commands" / "gx-spec.md").read_text(encoding="utf-8")
+        text = (PLUGIN_ROOT / "commands" / "gx-명세일괄.md").read_text(encoding="utf-8")
         순서 = [
             "/gx-요구사항정의서", "/gx-기능명세서", "/gx-테이블정의서",
             "/gx-단위테스트계획서", "/gx-추적매트릭스",
@@ -250,7 +250,7 @@ class SurfaceTest(unittest.TestCase):
         self.assertEqual(위치, sorted(위치), "파이프라인 산출물이 파생 순서대로가 아닙니다")
 
     def test_spec_파이프라인에_게이트가_세_개다(self):
-        text = (PLUGIN_ROOT / "commands" / "gx-spec.md").read_text(encoding="utf-8")
+        text = (PLUGIN_ROOT / "commands" / "gx-명세일괄.md").read_text(encoding="utf-8")
         for 게이트 in ["게이트 1", "게이트 2", "게이트 3"]:
             with self.subTest(게이트=게이트):
                 self.assertIn(게이트, text)
@@ -333,7 +333,7 @@ class PipelineProtocolTest(unittest.TestCase):
         """§이월 금지 항목 절 안에서만 검사한다.
 
         extract-requirements 의 '애매하면 묻는다' 는 사용자를 세우는 중단점인데
-        규약의 어느 표에도 분류돼 있지 않았다. 분류되지 않으면 /gx-spec 실행 중
+        규약의 어느 표에도 분류돼 있지 않았다. 분류되지 않으면 /gx-명세일괄 실행 중
         Claude 는 거기서 멈춰야 하는지 게이트 1 로 미뤄야 하는지 지시를 받지 못한다.
         """
         구간 = re.search(
@@ -454,6 +454,47 @@ class CommandStructureTest(unittest.TestCase):
             "skills/extract-requirements/SKILL.md Step 2 를 참조로 바꾸세요",
         )
 
+    def test_커맨드_이름이_모두_한국어다(self):
+        """한글과 영어가 섞이면 목록에서 눈으로 찾는 비용이 올라간다.
+
+        이 플러그인의 사용자는 공공·SI PM 이고, 커맨드 이름이 과업지시서의
+        산출물명과 **글자 그대로 같은 것**이 가장 낮은 진입 장벽이다.
+        `gx-spec` 하나만 영어였던 것을 `gx-명세일괄` 로 맞췄다 — 다시 영어가
+        섞이면 그 이유를 여기서 다시 논의하게 된다.
+
+        `gx-` 접두는 영문 그대로다. 그 뒤만 본다.
+        """
+        어긴것 = [
+            path.stem
+            for path in sorted((PLUGIN_ROOT / "commands").glob("*.md"))
+            if not re.fullmatch(r"gx-[가-힣]+", path.stem)
+        ]
+        self.assertEqual(
+            어긴것, [],
+            f"한국어가 아닌 커맨드 이름이 있습니다: {어긴것} "
+            "— 커맨드 이름은 `gx-` 뒤가 전부 한글이어야 합니다",
+        )
+
+    def test_파이프라인과_설정_커맨드가_순서를_보여준다(self):
+        """목록은 가나다순으로 뜨므로 실행 순서가 드러나지 않는다.
+
+        제일 먼저 써야 할 `/gx-프로젝트설정` 이 ㅍ이라 맨 아래로 가고,
+        두 번째인 `/gx-명세일괄` 은 중간에 묻힌다. description 앞머리의
+        번호가 목록에서 그 순서를 대신 알려준다.
+        """
+        for 커맨드, 번호 in (("gx-프로젝트설정", "①"), ("gx-명세일괄", "②")):
+            with self.subTest(커맨드=커맨드):
+                본문 = (PLUGIN_ROOT / "commands" / f"{커맨드}.md").read_text(
+                    encoding="utf-8"
+                )
+                설명 = re.search(r"^description:\s*\"?(.*)$", 본문, re.M)
+                self.assertIsNotNone(설명, f"{커맨드} 의 description 을 찾지 못했습니다")
+                self.assertTrue(
+                    설명.group(1).lstrip().startswith(번호),
+                    f"{커맨드} description 이 {번호} 로 시작하지 않습니다 "
+                    "— 가나다순 목록에서 실행 순서가 안 보입니다",
+                )
+
     def test_다음_제안의_커맨드가_백틱으로_감싸져_있다(self):
         맨커맨드 = re.compile(r"(?<![`/\w])/gx-[가-힣A-Za-z-]+")
         for path in sorted((PLUGIN_ROOT / "commands").glob("*.md")):
@@ -469,10 +510,10 @@ class CommandStructureTest(unittest.TestCase):
                 )
 
 
-# v3.0.0 기능 축 전환으로 파이프라인은 `/gx-spec` 하나만 남았다.
+# v3.0.0 기능 축 전환으로 파이프라인은 `/gx-명세일괄` 하나만 남았다.
 # `/gx-testplan` 과 화면 축 산출물은 archive/ 에 있다 — 되살리는 법은 archive/README.md.
 PIPELINE_ARTIFACTS = {
-    "gx-spec": [
+    "gx-명세일괄": [
         "gx-요구사항정의서",
         "gx-기능명세서",
         "gx-테이블정의서",
@@ -483,7 +524,7 @@ PIPELINE_ARTIFACTS = {
 
 # 파이프라인별 게이트 수. 게이트는 사용자가 멈춰서 판단하는 자리이므로
 # 개수가 조용히 줄면 승인 없이 지나가는 산출물이 생긴다.
-PIPELINE_GATES = {"gx-spec": 3}
+PIPELINE_GATES = {"gx-명세일괄": 3}
 
 
 class PipelineCommandTest(unittest.TestCase):
@@ -577,7 +618,7 @@ class PipelineCommandTest(unittest.TestCase):
                 self.assertIn("templates/pipeline-protocol.md", 본문)
                 self.assertIn("templates/prerequisites.md", 본문)
 
-    # 이월 금지 중단점이 gx-spec.md 의 어느 Step 에서 지켜지는가.
+    # 이월 금지 중단점이 gx-명세일괄.md 의 어느 Step 에서 지켜지는가.
     # 정본은 templates/pipeline-protocol.md §이월 금지 항목이고, 이 표는 그 항목들이
     # 파이프라인 본문의 어디에 내려앉는지를 적는다. 항목이 늘면 여기도 늘려야 하며,
     # 늘리지 않으면 아래 개수 대조가 잡는다.
@@ -611,7 +652,7 @@ class PipelineCommandTest(unittest.TestCase):
         """이월 금지 중단점은 `[필수 중단점]` 라벨을 달 수 없다 — 게이트 수가 틀어진다.
 
         라벨이 없으니 게이트 개수 정규식이 세지 못하고, 문단을 통째로 지워도 아무 테스트도
-        걸리지 않는다. 문단이 사라지면 /gx-spec 은 그 자리에서 멈추지 않고 다음 게이트까지
+        걸리지 않는다. 문단이 사라지면 /gx-명세일괄 은 그 자리에서 멈추지 않고 다음 게이트까지
         간다 — 그때는 이미 그 판정 위에 뒤 산출물이 다 만들어진 뒤다.
 
         **Step 절로 범위를 좁혀서 본다.** 파일 전체에서 낱말의 존재만 세면 결속이 없다.
@@ -623,14 +664,14 @@ class PipelineCommandTest(unittest.TestCase):
         종전에는 화면 분리 미결정 중단점을 같은 취지로 고정하고 있었다. 화면 축이
         사라지면서 그 중단점은 소멸했고, 남은 세 항목이 같은 위험을 물려받는다.
         """
-        본문 = self._본문("gx-spec")
+        본문 = self._본문("gx-명세일괄")
         for 항목 in self.이월금지_중단점:
             구간 = re.search(
                 rf"^### Step {항목['step']}:(.*?)(?=^### |\Z)", 본문, re.M | re.S
             )
             self.assertIsNotNone(
                 구간,
-                f"gx-spec.md 에서 '### Step {항목['step']}:' 절을 찾지 못했습니다",
+                f"gx-명세일괄.md 에서 '### Step {항목['step']}:' 절을 찾지 못했습니다",
             )
             절 = 구간.group(1)
             with self.subTest(step=항목["step"]):
@@ -675,7 +716,7 @@ class PipelineCommandTest(unittest.TestCase):
         )
         self.assertEqual(
             len(선언된것), len(규약항목),
-            f"규약의 이월 금지 항목 {len(규약항목)}개 중 gx-spec.md 가 선언하는 것은 "
+            f"규약의 이월 금지 항목 {len(규약항목)}개 중 gx-명세일괄.md 가 선언하는 것은 "
             f"{len(선언된것)}개입니다: 규약={규약항목} / 선언={선언된것}",
         )
         for 낱말 in 선언된것:
@@ -686,7 +727,7 @@ class PipelineCommandTest(unittest.TestCase):
                 )
 
     def test_gx_spec_이_프로파일_부재를_하드로_막는다(self):
-        """실행 중 프로파일 없이 `/gx-spec` 을 부르자 파이프라인이 종료하지 않고
+        """실행 중 프로파일 없이 `/gx-명세일괄` 을 부르자 파이프라인이 종료하지 않고
 
         프로파일을 그 자리에서 만들었다. `/gx-프로젝트설정` 의 `[필수 중단점]` 3개
         (유형 선택·기본 정보·설정 승인)가 통째로 사라졌고, 유형은 사용자가 아니라
@@ -700,9 +741,9 @@ class PipelineCommandTest(unittest.TestCase):
         Step 0 절로 범위를 좁혀서 본다 — 파일 어딘가에 낱말이 있는 것으로는
         그 절이 종료를 지시한다는 보장이 안 된다.
         """
-        본문 = self._본문("gx-spec")
+        본문 = self._본문("gx-명세일괄")
         구간 = re.search(r"^### Step 0:(.*?)(?=^### |\Z)", 본문, re.M | re.S)
-        self.assertIsNotNone(구간, "gx-spec.md 에서 '### Step 0:' 절을 찾지 못했습니다")
+        self.assertIsNotNone(구간, "gx-명세일괄.md 에서 '### Step 0:' 절을 찾지 못했습니다")
         절 = 구간.group(1)
 
         self.assertIn(
@@ -731,9 +772,9 @@ class PipelineCommandTest(unittest.TestCase):
         로 확장 해석되어 앞 문장을 무력화한다. 실제로 그렇게 읽힌 실행이 있었다.
         지시문(하라)이 금지문(하지 마라)보다 행동을 끌어당기므로, 조건을 붙여 둔다.
         """
-        본문 = self._본문("gx-spec")
+        본문 = self._본문("gx-명세일괄")
         구간 = re.search(r"^### Step 0:(.*?)(?=^### |\Z)", 본문, re.M | re.S)
-        self.assertIsNotNone(구간, "gx-spec.md 에서 '### Step 0:' 절을 찾지 못했습니다")
+        self.assertIsNotNone(구간, "gx-명세일괄.md 에서 '### Step 0:' 절을 찾지 못했습니다")
         절 = 구간.group(1)
 
         채번문장 = re.search(r"^\*\*(.*?채번.*?|.*?idNaming.*?)\*\*", 절, re.M)
@@ -761,12 +802,12 @@ class PipelineCommandTest(unittest.TestCase):
         기존 리터럴 4개는 test_gx_spec_이_프로파일_부재를_하드로_막는다 가 지킨다.
         이 테스트는 그것을 교체하지 않고 **추가**했는지를 본다.
         """
-        본문 = self._본문("gx-spec")
+        본문 = self._본문("gx-명세일괄")
         구간 = re.search(r"^### Step 0:(.*?)(?=^### |\Z)", 본문, re.M | re.S)
-        self.assertIsNotNone(구간, "gx-spec.md 에서 '### Step 0:' 절을 찾지 못했습니다")
+        self.assertIsNotNone(구간, "gx-명세일괄.md 에서 '### Step 0:' 절을 찾지 못했습니다")
         절 = 구간.group(1)
         self.assertIn(
-            "/gx-spec 을 종료합니다", 절,
+            "/gx-명세일괄 을 종료합니다", 절,
             "프로파일 부재 시 출력할 종료 화면이 리터럴로 없습니다 "
             "— 문장으로만 적은 종료 지시는 v3.2.0 에서 지켜지지 않았습니다",
         )
@@ -827,7 +868,7 @@ class PipelineCommandTest(unittest.TestCase):
         """프롬프트 플러그인에는 카운터 원시연산이 없다.
 
         `강제한다` 고 적으면 지켜진다고 오해하게 된다 — 이 레포에는 규칙문은
-        있는데 실행이 안 지킨 전례가 있다(gx-spec 프로파일 하드 중단).
+        있는데 실행이 안 지킨 전례가 있다(gx-명세일괄 프로파일 하드 중단).
         묶기로 회피되고 중복 출력도 막지 못한다는 것을 밝혀야, 3차 시험에서
         결정 기록으로 실효를 판정할 근거가 생긴다.
         """
@@ -851,7 +892,7 @@ class PipelineCommandTest(unittest.TestCase):
         훅이 쓰는 런타임 파일이라 helpers.read_docs 가 계약 검사에서 제외하므로
         저장처가 될 수 없다.
         """
-        본문 = self._본문("gx-spec")
+        본문 = self._본문("gx-명세일괄")
         구간 = re.search(r"^### Step 0:(.*?)(?=^### |\Z)", 본문, re.M | re.S)
         self.assertIsNotNone(구간)
         절 = 구간.group(1)
@@ -882,7 +923,7 @@ class PipelineCommandTest(unittest.TestCase):
         선택지 문구가 없으면 사용자가 이 경로를 찾을 방법이 없고, 스킬 굵게 표기가
         없으면 도달 가능성 검사(test_문서의_스킬_경로가_모두_존재한다)가 놓친다.
         """
-        본문 = self._본문("gx-spec")
+        본문 = self._본문("gx-명세일괄")
         구간 = re.search(r"^### Step 0:(.*?)(?=^### |\Z)", 본문, re.M | re.S)
         self.assertIsNotNone(구간, "Step 0 절을 찾지 못했습니다")
         절 = 구간.group(1)
@@ -906,10 +947,10 @@ class PipelineCommandTest(unittest.TestCase):
             "개정이력을 붙이는지 안 붙이는지가 정해져 있지 않습니다 "
             "— revision-history 는 5종의 첫 시트를 개정이력으로 정합니다",
         )
-        본문 = self._본문("gx-spec")
+        본문 = self._본문("gx-명세일괄")
         self.assertIn(
             "templates/confirmation-request.md", 본문,
-            "gx-spec 이 확인요청서 양식 정본을 가리키지 않습니다",
+            "gx-명세일괄 이 확인요청서 양식 정본을 가리키지 않습니다",
         )
 
     def test_반영_무응답이_묵시적_승인이다(self):
@@ -942,7 +983,7 @@ class PipelineCommandTest(unittest.TestCase):
         게이트 세 절을 각각 본다 — 한 절만 고치고 나머지를 빠뜨리는 것이
         이 레포가 반복해 겪은 형태다.
         """
-        본문 = self._본문("gx-spec")
+        본문 = self._본문("gx-명세일괄")
         for 절제목 in ("Step 3: 게이트 1", "Step 6: 게이트 2", "Step 9: 게이트 3"):
             with self.subTest(게이트=절제목):
                 구간 = re.search(
@@ -960,9 +1001,9 @@ class PipelineCommandTest(unittest.TestCase):
         단독 커맨드도 같은 파일을 만들기 때문이다. 자리를 안 정하면 게이트 화면에만
         찍히고 파일에 안 남아 다음 세션이 못 읽는다.
         """
-        본문 = self._본문("gx-spec")
+        본문 = self._본문("gx-명세일괄")
         구간 = re.search(r"^## 생성 표지$(.*?)(?=^## |\Z)", 본문, re.M | re.S)
-        self.assertIsNotNone(구간, "gx-spec.md 에 §생성 표지 절이 없습니다")
+        self.assertIsNotNone(구간, "gx-명세일괄.md 에 §생성 표지 절이 없습니다")
         절 = 구간.group(1)
         self.assertIn(
             "개정이력", 절,
@@ -1004,9 +1045,9 @@ class PipelineCommandTest(unittest.TestCase):
         `#### ` 은 `^### ` 정규식에 안 걸리므로 Step 0 절 범위는 그대로다 —
         기존 두 테스트(프로파일 하드 중단 · 채번 질문 전제)가 계속 통과한다.
         """
-        본문 = self._본문("gx-spec")
+        본문 = self._본문("gx-명세일괄")
         구간 = re.search(r"^### Step 0:(.*?)(?=^### |\Z)", 본문, re.M | re.S)
-        self.assertIsNotNone(구간, "gx-spec.md 에서 '### Step 0:' 절을 찾지 못했습니다")
+        self.assertIsNotNone(구간, "gx-명세일괄.md 에서 '### Step 0:' 절을 찾지 못했습니다")
         하위 = re.findall(r"^#### (0-\d)\. ", 구간.group(1), re.M)
         self.assertEqual(
             하위, sorted(하위),
@@ -1330,22 +1371,22 @@ class EvidenceRuleTest(unittest.TestCase):
         Step 절로 범위를 좁혀서 본다 — 파일 어딘가에 낱말이 있는 것으로는
         게이트 화면에 실린다는 보장이 안 된다.
         """
-        본문 = (PLUGIN_ROOT / "commands" / "gx-spec.md").read_text(encoding="utf-8")
+        본문 = (PLUGIN_ROOT / "commands" / "gx-명세일괄.md").read_text(encoding="utf-8")
         구간 = re.search(
             r"^### Step 6: 게이트 2(.*?)(?=^### |\Z)", 본문, re.M | re.S
         )
-        self.assertIsNotNone(구간, "gx-spec.md 에서 Step 6(게이트 2) 절을 찾지 못했습니다")
+        self.assertIsNotNone(구간, "gx-명세일괄.md 에서 Step 6(게이트 2) 절을 찾지 못했습니다")
         for 항목 in ("근거 가용도", "[가정]", "[미확정]"):
             with self.subTest(항목=항목):
                 self.assertIn(항목, 구간.group(1), f"게이트 2 에 '{항목}' 이 없습니다")
         self.assertIn("templates/evidence-rules.md", 구간.group(1))
 
     def test_게이트3이_미확정_제약을_보여준다(self):
-        본문 = (PLUGIN_ROOT / "commands" / "gx-spec.md").read_text(encoding="utf-8")
+        본문 = (PLUGIN_ROOT / "commands" / "gx-명세일괄.md").read_text(encoding="utf-8")
         구간 = re.search(
             r"^### Step 9: 게이트 3(.*?)(?=^### |\Z)", 본문, re.M | re.S
         )
-        self.assertIsNotNone(구간, "gx-spec.md 에서 Step 9(게이트 3) 절을 찾지 못했습니다")
+        self.assertIsNotNone(구간, "gx-명세일괄.md 에서 Step 9(게이트 3) 절을 찾지 못했습니다")
         self.assertIn("[미확정] 제약", 구간.group(1))
 
 
@@ -1828,11 +1869,11 @@ class Gate2ShowsSplitAndProvenanceTest(unittest.TestCase):
     (test_게이트2가_근거_집계를_보여준다 참조). Step 절로 범위를 좁혀서 본다."""
 
     def setUp(self):
-        본문 = (PLUGIN_ROOT / "commands" / "gx-spec.md").read_text(encoding="utf-8")
+        본문 = (PLUGIN_ROOT / "commands" / "gx-명세일괄.md").read_text(encoding="utf-8")
         구간 = re.search(
             r"^### Step 6: 게이트 2(.*?)(?=^### |\Z)", 본문, re.M | re.S
         )
-        self.assertIsNotNone(구간, "gx-spec.md 에서 Step 6(게이트 2) 절을 찾지 못했습니다")
+        self.assertIsNotNone(구간, "gx-명세일괄.md 에서 Step 6(게이트 2) 절을 찾지 못했습니다")
         self.게이트2 = 구간.group(1)
 
     def test_게이트2에_분할_누락과_데이터_출처_집계가_실린다(self):
