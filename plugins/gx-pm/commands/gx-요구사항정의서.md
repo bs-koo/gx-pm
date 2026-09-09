@@ -7,7 +7,7 @@ argument-hint: "<RFP 텍스트 또는 파일>"
 
 > **공통 규칙**: `templates/approval-protocol.md`의 승인 루프 프로토콜을 적용한다.
 > **선행조건**: `templates/prerequisites.md` 의 이 커맨드 행을 따른다.
-> **파이프라인**: `/gx-spec` 에서 호출된 경우 `templates/pipeline-protocol.md` 의 규약을 따른다.
+> **파이프라인**: `/gx-명세일괄` 에서 호출된 경우 `templates/pipeline-protocol.md` 의 규약을 따른다.
 
 ## 워크플로우
 

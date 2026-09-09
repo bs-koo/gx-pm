@@ -36,14 +36,14 @@
 | `networkType` | string | Y | 망 구분. **현재 소비처 없음** — 아래 §소비처 없는 필드 | `"internal"`, `"external"`, `"mixed"` |
 | `auditDate` | string | N | 감리 일정 (YYYY-MM-DD) | `"2026-06-15"` |
 | `assets` | object | N | 기존 자산 경로 정보 | 아래 참조 |
-| `policy` | object | N | 질문 정책 4개. `/gx-spec` Step 0-4 가 묻고 저장한다 | 아래 참조 |
+| `policy` | object | N | 질문 정책 4개. `/gx-명세일괄` Step 0-4 가 묻고 저장한다 | 아래 참조 |
 | `createdAt` | string | Y | 프로파일 생성일 (YYYY-MM-DD) | `"2026-03-31"` |
 | `lastUsed` | string | Y | 마지막 사용일 (YYYY-MM-DD) | `"2026-03-31"` |
 
 ### policy 객체
 
 `templates/pipeline-protocol.md` §질문 정책의 정책 층 4개를 담는다.
-**선택 필드다** — 없으면 `/gx-spec` 이 Step 0-4 에서 묻고 저장하며, 단독 커맨드는
+**선택 필드다** — 없으면 `/gx-명세일괄` 이 Step 0-4 에서 묻고 저장하며, 단독 커맨드는
 기본값(권장안)으로 돈다. 기존 프로파일이 이 필드 없이도 계속 동작해야 한다.
 
 | 필드 | 타입 | 값 | 뜻 |

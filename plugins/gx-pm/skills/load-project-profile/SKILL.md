@@ -42,7 +42,7 @@ Glob 패턴: profile.json, */profile.json
 profile.json 파일이 존재하지만 JSON 파싱에 실패하거나, 필수 필드(`name`, `type`, `systemCode`, `prefix`, `framework`, `db`, `author`, `networkType`)가 누락된 경우:
 
 **`idNaming`·`assets`·`policy` 는 선택 필드다** — 없어도 여기서 막지 않는다.
-`policy` 는 `/gx-spec` Step 0-4 가 묻고 저장하며, 단독 커맨드는 기본값으로 돈다
+`policy` 는 `/gx-명세일괄` Step 0-4 가 묻고 저장하며, 단독 커맨드는 기본값으로 돈다
 (`templates/pipeline-protocol.md` §질문 정책). 기존 프로파일이 이 필드 없이도
 계속 동작해야 한다.
 
