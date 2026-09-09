@@ -2269,9 +2269,19 @@ class ConfirmationRoundTest(unittest.TestCase):
             "**apply-confirmations**", 절,
             "반영 스킬을 굵게 부르지 않습니다 — 도달 가능성 검사가 놓칩니다",
         )
+        상태줄 = re.search(r"확인요청서가 있습니다[^\n]*", 절)
+        self.assertIsNotNone(
+            상태줄,
+            "재개 화면에 현재 상태 줄이 없습니다 "
+            "— 사용자가 지금 어디까지 왔는지 알 방법이 없습니다",
+        )
         self.assertRegex(
-            절, r"\d차.*응답|응답.*\d차",
-            "차수와 응답 건수를 보여주지 않습니다",
+            상태줄.group(0), r"\d차",
+            "재개 화면이 지금 몇 차인지 보여주지 않습니다",
+        )
+        self.assertRegex(
+            상태줄.group(0), r"\d+건[^\n]*응답",
+            "재개 화면이 응답 건수를 보여주지 않습니다",
         )
 
     def test_반영하지_않고_계속하는_길이_있다(self):
