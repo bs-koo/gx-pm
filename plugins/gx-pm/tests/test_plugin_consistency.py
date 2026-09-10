@@ -2860,5 +2860,65 @@ class RequestHistoryTest(unittest.TestCase):
         )
 
 
+
+class CounterQuestionTest(unittest.TestCase):
+    """값 대신 질문이 오면 파일로 답한다.
+
+    1차 시험에서 `[미확정]` 두 건에 값이 아니라 자유 텍스트 요청이 달려 왔다 —
+    「설명을 다시해줘」·「너가 직접 정해줘」. 분기표에 그 경우가 없어서 답변이
+    **대화로만 나가고 파일에는 안 남았다.** 다음에 파일을 여는 사람은 질문만
+    보고 답은 못 본다. 이 양식이 대화를 대신하려던 이유가 무너진다.
+    """
+
+    def setUp(self):
+        self.스킬 = (
+            PLUGIN_ROOT / "skills" / "apply-confirmations" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.정본 = (
+            PLUGIN_ROOT / "templates" / "confirmation-request.md"
+        ).read_text(encoding="utf-8")
+
+    def test_분기표가_되질문을_다룬다(self):
+        구간 = re.search(
+            r"^### Step 2: 분기$(.*?)(?=^### )", self.스킬, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "Step 2 분기 절이 없습니다")
+        절 = 구간.group(1)
+        행 = re.search(r"^\|[^\n|]*값 대신 질문[^\n|]*\|[^\n]*$", 절, re.M)
+        self.assertIsNotNone(행, "분기표에 「값 대신 질문」 행이 없습니다")
+        self.assertIn(
+            "파일로 답한다", 행.group(0),
+            "되질문에 대화로 답하지 않는다는 것이 분기표에 없습니다",
+        )
+
+    def test_되질문_절이_세_성격을_가른다(self):
+        구간 = re.search(
+            r"^### 되질문에 답한다$(.*?)(?=^### )", self.스킬, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "§되질문에 답한다 절이 없습니다")
+        절 = 구간.group(1)
+        self.assertRegex(
+            절, r"대화로 답하지 않는다",
+            "대화로 답하지 않는다는 규칙이 없습니다",
+        )
+        for 성격, 처리 in (("설명해달라", "답을 먼저 적고"), ("네가 정해라", "가정"),
+                          ("선택지", "근거")):
+            with self.subTest(성격=성격):
+                행 = re.search(rf"^\|[^\n|]*{re.escape(성격)}[^\n|]*\|[^\n]*$", 절, re.M)
+                self.assertIsNotNone(행, f"「{성격}」 갈래가 없습니다")
+                self.assertIn(
+                    처리, 행.group(0),
+                    f"「{성격}」 갈래의 처리가 「{처리}」 를 말하지 않습니다",
+                )
+
+    def test_정본_처리값에_되질문이_있다(self):
+        행 = re.search(r"^\|\s*6\s*\|\s*처리\s*\|([^\n|]*)\|", self.정본, re.M)
+        self.assertIsNotNone(행, "시트 3 정본에 `처리` 열이 없습니다")
+        self.assertIn(
+            "되질문", 행.group(1),
+            "`처리` 값에 되질문이 없어 주고받은 것이 이력에 안 남습니다",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
