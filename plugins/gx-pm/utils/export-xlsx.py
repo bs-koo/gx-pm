@@ -252,6 +252,11 @@ def strip_markdown(text: str) -> str:
     """
     text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
     text = re.sub(r"__(.+?)__", r"\1", text)
+    # 굵게를 먼저 걷어낸 뒤라 남은 홑표는 기울임이다. 앞뒤로 같은 기호가
+    # 붙지 않은 것만 잡아 `a*b*c` 같은 수식 표기를 건드리지 않는다.
+    text = re.sub(r"(?<!\*)\*([^*\n]+?)\*(?!\*)", r"\1", text)
+    # 밑줄 기울임은 낱말 안(`TB_USER_ID`)에서 쓰이므로 낱말 경계를 요구한다.
+    text = re.sub(r"(?<![\w_])_([^_\n]+?)_(?![\w_])", r"\1", text)
     text = re.sub(r"`([^`]+)`", r"\1", text)
     return text
 

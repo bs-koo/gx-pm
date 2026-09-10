@@ -3048,5 +3048,113 @@ class StalenessTest(unittest.TestCase):
         )
 
 
+
+class SkillOutputShapeTest(unittest.TestCase):
+    """스킬의 출력 형식이 컬럼 정본과 어긋나면 그 열이 조용히 사라진다.
+
+    v3.5.0 이 DE-13 에 `요구사항명` 을 더했는데 **생성 스킬의 출력 블록은 11열로
+    남았다.** `utils/export-xlsx.py` 의 `_best_column_set` 은 11/12 도 매칭으로
+    보고 **있는 열만** 낸다 — 오류가 안 뜬다. 정본만 늘리고 실행부가 안 따라온
+    이 레포의 단골 결함이다.
+    """
+
+    def test_생성_스킬의_출력_블록이_컬럼_정본과_같다(self):
+        from helpers import parse_column_ssot
+        정본 = parse_column_ssot("DE-13-unit-test-plan.md", "본문 컬럼 (정본)")
+        본문 = (
+            PLUGIN_ROOT / "skills" / "generate-unit-test-plan" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        헤더 = re.search(r"^\| 테스트ID \|[^\n]*\|$", 본문, re.M)
+        self.assertIsNotNone(헤더, "생성 스킬에 DE-13 출력 헤더가 없습니다")
+        열 = [c.strip() for c in 헤더.group(0).strip("|").split("|")]
+        self.assertEqual(
+            열, 정본,
+            "생성 스킬의 출력 헤더가 컬럼 정본과 다릅니다 — 빠진 열은 "
+            "xlsx 에서 조용히 사라집니다",
+        )
+
+    def test_비기능_예시도_같은_열을_쓴다(self):
+        """비기능 행은 `연계기능ID` 가 공란이라 `요구사항명` 이 가장 필요하다."""
+        본문 = (
+            PLUGIN_ROOT / "templates" / "DE-13-unit-test-plan.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(
+            r"^## 비기능 요구사항의 처리$(.*?)(?=^## )", 본문, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "§비기능 요구사항의 처리 절이 없습니다")
+        헤더 = re.search(r"^\| 테스트ID \|[^\n]*\|$", 구간.group(1), re.M)
+        self.assertIsNotNone(헤더, "비기능 예시 표가 없습니다")
+        self.assertIn(
+            "요구사항명", 헤더.group(0),
+            "비기능 예시 표에 `요구사항명` 이 없습니다 — 이 예시를 따라 만들면 "
+            "비기능 행만 열이 어긋납니다",
+        )
+
+
+class BasisStampTest(unittest.TestCase):
+    """근거 줄을 무조건 지금 버전으로 스탬프하면 낡음이 영구히 숨는다.
+
+    AN-02 를 고쳐 v3.0 이 되고 AN-03 이 안 따라오면 낡음으로 잡힌다. 그런데
+    나중에 AN-03 에서 **무관한 오타 하나**를 고치면 개정이력이 갱신되며 근거가
+    `AN-02 v3.0` 으로 다시 써진다 — 요구사항 변경은 여전히 미반영인데
+    **경고만 사라진다.**
+    """
+
+    def setUp(self):
+        self.기록 = (
+            PLUGIN_ROOT / "skills" / "manage-revision-history" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.정본 = (
+            PLUGIN_ROOT / "templates" / "revision-history.md"
+        ).read_text(encoding="utf-8")
+
+    def test_무관한_개정은_근거를_갱신하지_않는다(self):
+        self.assertRegex(
+            self.기록, r"무조건 지금 버전으로 스탬프하지 않는다",
+            "무조건 갱신하지 않는다는 규칙이 없습니다",
+        )
+        행 = re.search(
+            r"^\|[^\n|]*상위 변경과 무관하다[^\n|]*\|([^\n|]*)\|", self.기록, re.M
+        )
+        self.assertIsNotNone(행, "무관한 개정의 갈래가 없습니다")
+        self.assertIn(
+            "그대로", 행.group(1),
+            "무관한 개정에서 근거 줄을 그대로 두라는 지시가 없습니다",
+        )
+
+    def test_DE13_근거에_AN02_가_언제나_있다(self):
+        """`요구사항명` 열이 AN-02 의 이름을 싣는다. 조건부로 두면 대조가 샌다."""
+        행 = re.search(
+            r"^\|[^\n|]*DE-13[^\n|]*\|([^\n|]*)\|", self.정본, re.M
+        )
+        self.assertIsNotNone(행, "DE-13 근거 대상 행이 없습니다")
+        self.assertIn("AN-02", 행.group(1), "DE-13 근거에 AN-02 가 없습니다")
+        self.assertNotIn(
+            "비기능 케이스가 있으면", 행.group(1),
+            "AN-02 가 조건부로 남아 있습니다 — 기능만 있는 프로젝트에서 "
+            "요구사항명 낡음을 못 잡습니다",
+        )
+
+
+class ConversationAnswerTraceTest(unittest.TestCase):
+    """1~5건을 대화로 물어 받은 답도 요청 이력에 남아야 한다.
+
+    안 남기면 그 항목의 마지막 행이 `이월` 로 끝나, 「`이월` 로 끝나는 항목은
+    없다」와 「마지막 행의 `처리` 가 최종 결론이다」가 **그 경로에서만** 깨진다.
+    어디로 답이 들어왔든 이력은 한 곳이어야 한다.
+    """
+
+    def test_세_자리_모두_시트3에_남기라고_한다(self):
+        본문 = (
+            PLUGIN_ROOT / "commands" / "gx-명세일괄.md"
+        ).read_text(encoding="utf-8")
+        남김 = re.findall(r"시트 3 「요청 이력」에도 남긴다", 본문)
+        self.assertGreaterEqual(
+            len(남김), 3,
+            f"대화 경로의 답을 시트 3 에 남기라는 지시가 {len(남김)}곳뿐입니다 — "
+            "게이트 2 · 게이트 3 · Step 10 세 자리에 다 있어야 합니다",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
