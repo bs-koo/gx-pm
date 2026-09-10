@@ -988,7 +988,7 @@ class PipelineCommandTest(unittest.TestCase):
         양식 = (
             PLUGIN_ROOT / "templates" / "confirmation-request.md"
         ).read_text(encoding="utf-8")
-        self.assertIn("10건", 양식, "확인요청서 생성 임계치가 없습니다")
+        self.assertIn("6건 이상", 양식, "확인요청서 생성 임계치가 없습니다")
         self.assertIn(
             "개정이력", 양식,
             "개정이력을 붙이는지 안 붙이는지가 정해져 있지 않습니다 "
@@ -1890,7 +1890,7 @@ class FiveDocumentContractTest(unittest.TestCase):
             ("AN-02-requirements-definition.md", 10),
             ("AN-03-function-spec.md", 10),
             ("DE-08-table-definition.md", 15),
-            ("DE-13-unit-test-plan.md", 11),
+            ("DE-13-unit-test-plan.md", 12),
             ("AN-05-traceability-matrix.md", 9),
         ]:
             with self.subTest(템플릿=템플릿):
@@ -2390,14 +2390,14 @@ class ConfirmationRoundTest(unittest.TestCase):
             "가정값으로 만들어지고 뒤에 파급 처리로 다시 씁니다",
         )
         self.assertRegex(
-            절, r"\[가정\][^\n]*\[미확정\][^\n]*합계[^\n]*10건[^\n]*넘으면[^\n]*중단",
+            절, r"\[가정\][^\n]*\[미확정\][^\n]*합계[^\n]*6건 이상[^\n]*중단",
             "게이트 2 의 발행 기준이 「`[가정]` + `[미확정]` 합계」가 아닙니다 "
             "— 기준어를 보지 않으면 다른 기준으로 바뀌어도 "
-            "「10건…넘으면…중단」 만으로 조용히 통과합니다",
+            "「6건 이상…중단」 만으로 조용히 통과합니다",
         )
         self.assertRegex(
-            절, r"10건 이하[^\n]*(갈음|목록)",
-            "게이트 2 에 「10건 이하 → 갈음」 분기가 없습니다 "
+            절, r"1~5건[^\n]*대화로 묻",
+            "게이트 2 에 「1~5건 → 대화로 묻는다」 분기가 없습니다 "
             "— 이 문단이 사라지면 2건 때문에도 무조건 발행·중단합니다",
         )
 
@@ -2532,25 +2532,25 @@ class ConfirmationRoundTest(unittest.TestCase):
             "서술하는데 위치가 반대라, 실행이 3분기를 먼저 묻게 됩니다",
         )
 
-    def test_게이트3도_10건_이하면_멈추지_않는다(self):
+    def test_게이트3도_5건_이하면_멈추지_않는다(self):
         """소수를 위해 왕복을 만들지 않는다는 규칙은 게이트 2·3 이 같아야 한다.
 
-        confirmation-request.md §언제 만드나 는 10건 임계를 라운드 구분 없는
+        confirmation-request.md §언제 만드나 는 6건 임계를 라운드 구분 없는
         일반 규칙으로 정한다. 게이트 3 만 "남아 있으면 무조건 중단" 이면
         1차 후 2~3건만 남아도 파일 재작성과 중단이 강제된다 — 이 기능이
         막으려는 왕복을 정확히 그 지점에서 만든다.
         """
         절 = self._절("Step 9: 게이트 3")
         self.assertRegex(
-            절, r"\[가정\][^\n]*\[미확정\][^\n]*합계[^\n]*10건[^\n]*넘으면[^\n]*중단",
+            절, r"\[가정\][^\n]*\[미확정\][^\n]*합계[^\n]*6건 이상[^\n]*중단",
             "게이트 3 의 발행 기준이 「`[가정]` + `[미확정]` 합계」가 아닙니다 "
             "— 정본(confirmation-request.md §언제 만드나)과 게이트 2 가 합계로 "
             "재는데 여기만 「남은 미확정」이면, 미확정 8건에 후속 확인 30건이 "
             "남은 상황에서 정본은 발행·게이트 3 은 미발행으로 갈립니다",
         )
         self.assertRegex(
-            절, r"10건 이하[^\n]*(갈음|목록)",
-            "게이트 3 에 「10건 이하 → 갈음」 분기가 없습니다 "
+            절, r"1~5건[^\n]*대화로 묻",
+            "게이트 3 에 「1~5건 → 대화로 묻는다」 분기가 없습니다 "
             "— 이 문단이 사라지면 1차 후 2~3건만 남아도 무조건 중단합니다",
         )
 
@@ -2698,6 +2698,128 @@ class ConfirmationCloseoutTest(unittest.TestCase):
         self.assertIn(
             "다시 쓴다", 닫기.group(0),
             "닫는다고만 하고 다시 쓰라는 말이 없습니다",
+        )
+
+
+
+class QuestionThresholdTest(unittest.TestCase):
+    """미결 건수가 대화와 파일을 가른다.
+
+    1차 시험에서 미결 9건이 「10건 이하 → 목록으로 갈음」에 걸려 **아무것도 묻지
+    않고** 지나갔다. 적어서 물을 수 있는 것이지 적어서 안 물어도 되는 것이 아니다.
+    경계를 5와 6 사이로 내리고, 5건 이하는 그 자리에서 대화로 묻게 바꿨다.
+    """
+
+    def test_정본이_세_구간을_가른다(self):
+        절 = (
+            PLUGIN_ROOT / "templates" / "confirmation-request.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(r"^## 언제 만드나$(.*?)(?=^## )", 절, re.M | re.S)
+        self.assertIsNotNone(구간, "§언제 만드나 절이 없습니다")
+        본문 = 구간.group(1)
+        for 표기, 뜻 in (("0건", "물을 것이 없"), ("1~5건", "대화"), ("6건 이상", "중단")):
+            with self.subTest(구간=표기):
+                # 앞뒤 산문에도 같은 낱말이 나온다. **구간 표의 그 행**만 본다 —
+                # 표 행은 `|` 로 시작하고 첫 칸이 그 표기다.
+                행 = re.search(
+                    rf"^\|[^\n|]*{re.escape(표기)}[^\n|]*\|[^\n]*$", 본문, re.M
+                )
+                self.assertIsNotNone(행, f"구간 표에 {표기} 행이 없습니다")
+                self.assertIn(
+                    뜻, 행.group(0),
+                    f"{표기} 행이 「{뜻}」 를 말하지 않습니다",
+                )
+
+    def test_갈음하지_않는다는_근거가_있다(self):
+        본문 = (
+            PLUGIN_ROOT / "templates" / "confirmation-request.md"
+        ).read_text(encoding="utf-8")
+        self.assertRegex(
+            본문, r"[^\n]*적어서 물을 수 있는 것이지[^\n]*",
+            "적으면 안 물어도 된다는 오해를 막는 문장이 없습니다",
+        )
+
+    def test_질문_정책에_하한이_있다(self):
+        본문 = (
+            PLUGIN_ROOT / "templates" / "pipeline-protocol.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(r"^## 질문 정책$(.*?)(?=^## )", 본문, re.M | re.S)
+        self.assertIsNotNone(구간)
+        절 = 구간.group(1)
+        self.assertRegex(
+            절, r"[^\n]*1~5건[^\n]*대화로 묻는다[^\n]*",
+            "네 번째 층의 하한(1~5건은 대화)이 질문 정책에 없습니다",
+        )
+
+
+class UnitTestInputTest(unittest.TestCase):
+    """시험은 이 문서 하나로 끝나야 한다.
+
+    1차 시험에서 DE-13 이 ID 만 나와 무엇을 시험하는지 알 수 없었고,  이
+    추상적이라 테스터가 값을 지어내야 했다. 요구사항명을 열로 세우고, 입력은
+    항목명과 값을 짝지어 적게 하고, 파일이 입력이면 실제로 만들게 한다.
+    """
+
+    def setUp(self):
+        self.정본 = (
+            PLUGIN_ROOT / "templates" / "DE-13-unit-test-plan.md"
+        ).read_text(encoding="utf-8")
+
+    def test_요구사항명이_열로_있다(self):
+        행 = re.search(r"^\|\s*4\s*\|\s*요구사항명\s*\|([^\n|]*)\|", self.정본, re.M)
+        self.assertIsNotNone(행, "DE-13 정본 4번 열이 요구사항명이 아닙니다")
+        self.assertIn(
+            "AN-02", 행.group(1),
+            "요구사항명을 어디서 가져오는지가 값 규칙에 없습니다",
+        )
+
+    def test_입력이_그대로_넣을_수_있어야_한다(self):
+        구간 = re.search(
+            r"^## 입력은 그대로 넣을 수 있어야 한다$(.*?)(?=^## )",
+            self.정본, re.M | re.S,
+        )
+        self.assertIsNotNone(구간, "§입력은 그대로 넣을 수 있어야 한다 절이 없습니다")
+        절 = 구간.group(1)
+        self.assertRegex(
+            절, r"[^\n]*항목명과 값을 짝지어[^\n]*",
+            "항목명과 값을 짝지으라는 규칙이 없습니다",
+        )
+        self.assertIn(
+            "testdata/", 절,
+            "파일 입력을 어디에 만드는지가 없습니다",
+        )
+        self.assertRegex(
+            절, r"[^\n]*{테스트ID}[^\n]*",
+            "테스트 데이터 파일명 규칙이 없습니다",
+        )
+
+    def test_스킬이_파일을_실제로_만든다(self):
+        본문 = (
+            PLUGIN_ROOT / "skills" / "generate-unit-test-plan" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(
+            r"^### Step 4-2: 파일이 입력이면 실제로 만든다$(.*?)(?=^### )",
+            본문, re.M | re.S,
+        )
+        self.assertIsNotNone(구간, "파일 생성 Step 이 없습니다")
+        절 = 구간.group(1)
+        self.assertIn("testdata/", 절, "만들 자리가 없습니다")
+        self.assertRegex(
+            절, r"[^\n]*한 곳만 망가뜨려[^\n]*",
+            "정상 파일을 한 곳만 바꿔 만들라는 규칙이 없습니다",
+        )
+        self.assertRegex(
+            절, r"[^\n]*\[미확정\][^\n]*만들지 않는다",
+            "컬럼 구성이 미확정이면 만들지 않는다는 규칙이 없습니다",
+        )
+
+    def test_testdata_폴더가_규약에_있다(self):
+        본문 = (
+            PLUGIN_ROOT / "templates" / "project-profile-schema.md"
+        ).read_text(encoding="utf-8")
+        self.assertRegex(
+            본문, r"[^\n]*testdata/[^\n]*DE-13[^\n]*",
+            "testdata/ 가 프로젝트 폴더 구조에 없습니다",
         )
 
 

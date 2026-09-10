@@ -15,8 +15,14 @@
         ├── ddl.sql             ← DDL 원본 (선택)
         ├── {시스템코드}-*.md   ← 산출물들
         ├── backup/             ← 이전 버전 백업
+        ├── testdata/           ← DE-13 입력 파일 (업로드·불러오기 케이스)
         └── xlsx/               ← 엑셀 추출물
 ```
+
+**`testdata/` 는 단위테스트계획서가 쓴다.** 파일이 입력인 케이스는 파일 없이
+시험할 수 없어서, `skills/generate-unit-test-plan` 이 실제 파일을 만들어 두고
+DE-13 의 `입력` 칸이 그 경로를 가리킨다. 규칙의 정본은
+`templates/DE-13-unit-test-plan.md` §입력은 그대로 넣을 수 있어야 한다 다.
 
 ---
 

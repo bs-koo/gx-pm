@@ -251,7 +251,7 @@ DDL이 입력되면 프로젝트 폴더에 `ddl.sql`로 저장한다.
 1. 프로젝트명으로 폴더 생성 (없으면)
 2. `profile.json` 저장
 3. DDL이 있으면 `ddl.sql` 저장
-4. `backup/`, `xlsx/` 폴더 생성
+4. `backup/`, `xlsx/`, `testdata/` 폴더 생성
 
 ---
 

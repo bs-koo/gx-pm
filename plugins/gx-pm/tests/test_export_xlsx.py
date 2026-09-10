@@ -490,12 +490,13 @@ class De13ColumnSsotTest(unittest.TestCase):
         self.정본 = parse_column_ssot("DE-13-unit-test-plan.md", "본문 컬럼 (정본)")
 
     def test_정본이_열한_개다(self):
-        self.assertEqual(len(self.정본), 11, f"DE-13 정본이 11개가 아닙니다: {self.정본}")
+        self.assertEqual(len(self.정본), 12, f"DE-13 정본이 12개가 아닙니다: {self.정본}")
 
     def test_정본_순서가_설계와_같다(self):
         self.assertEqual(self.정본, [
-            "테스트ID", "연계기능ID", "연계요구사항ID", "사전조건", "입력",
-            "기대결과", "사후조건", "의존성", "테스트담당자", "수행일", "결과",
+            "테스트ID", "연계기능ID", "연계요구사항ID", "요구사항명",
+            "사전조건", "입력", "기대결과", "사후조건", "의존성",
+            "테스트담당자", "수행일", "결과",
         ])
 
     def test_프로필이_한_시트다(self):
