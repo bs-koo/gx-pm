@@ -3058,20 +3058,47 @@ class SkillOutputShapeTest(unittest.TestCase):
     이 레포의 단골 결함이다.
     """
 
+    # 어느 스킬이 어느 산출물의 출력 블록을 갖는가.
+    # DE-08 은 헤더를 복제하지 않고 정본을 경로로 가리킨다 — 그 쪽이 안전하다.
+    # 복제한 넷은 정본과 글자 단위로 같아야 한다.
+    출력_블록 = (
+        ("extract-requirements", "AN-02-requirements-definition.md"),
+        ("generate-function-spec", "AN-03-function-spec.md"),
+        ("convert-ddl-to-tablespec", "DE-08-table-definition.md"),
+        ("generate-unit-test-plan", "DE-13-unit-test-plan.md"),
+        ("trace-requirements", "AN-05-traceability-matrix.md"),
+    )
+
     def test_생성_스킬의_출력_블록이_컬럼_정본과_같다(self):
         from helpers import parse_column_ssot
-        정본 = parse_column_ssot("DE-13-unit-test-plan.md", "본문 컬럼 (정본)")
-        본문 = (
-            PLUGIN_ROOT / "skills" / "generate-unit-test-plan" / "SKILL.md"
-        ).read_text(encoding="utf-8")
-        헤더 = re.search(r"^\| 테스트ID \|[^\n]*\|$", 본문, re.M)
-        self.assertIsNotNone(헤더, "생성 스킬에 DE-13 출력 헤더가 없습니다")
-        열 = [c.strip() for c in 헤더.group(0).strip("|").split("|")]
-        self.assertEqual(
-            열, 정본,
-            "생성 스킬의 출력 헤더가 컬럼 정본과 다릅니다 — 빠진 열은 "
-            "xlsx 에서 조용히 사라집니다",
-        )
+        for 스킬, 템플릿 in self.출력_블록:
+            with self.subTest(스킬=스킬):
+                정본 = parse_column_ssot(템플릿, "본문 컬럼 (정본)")
+                본문 = (
+                    PLUGIN_ROOT / "skills" / 스킬 / "SKILL.md"
+                ).read_text(encoding="utf-8")
+                # 정본 첫 컬럼으로 시작하는 표만 본다. 그중에서도 열 수가
+                # 정본에 가까운 것만 — 같은 이름으로 시작하는 작은 부속 표
+                # (`| 기능ID | 종류 | 열 | 사유 |` 같은 목록)를 걸러낸다.
+                후보 = []
+                for m in re.finditer(
+                    rf"^\| {re.escape(정본[0])} \|[^\n]*\|$", 본문, re.M
+                ):
+                    열 = [c.strip() for c in m.group(0).strip("|").split("|")]
+                    if len(열) >= len(정본) - 2:
+                        후보.append(열)
+                for 열 in 후보:
+                    self.assertEqual(
+                        열, 정본,
+                        f"{스킬} 의 출력 헤더가 {템플릿} 컬럼 정본과 다릅니다 — "
+                        "빠진 열은 xlsx 에서 조용히 사라집니다",
+                    )
+                if not 후보:
+                    # 복제하지 않는 스킬은 정본을 경로로 가리켜야 한다.
+                    self.assertIn(
+                        f"templates/{템플릿}", 본문,
+                        f"{스킬} 이 출력 헤더도 없고 정본 경로도 안 가리킵니다",
+                    )
 
     def test_비기능_예시도_같은_열을_쓴다(self):
         """비기능 행은 `연계기능ID` 가 공란이라 `요구사항명` 이 가장 필요하다."""
@@ -3153,6 +3180,81 @@ class ConversationAnswerTraceTest(unittest.TestCase):
             len(남김), 3,
             f"대화 경로의 답을 시트 3 에 남기라는 지시가 {len(남김)}곳뿐입니다 — "
             "게이트 2 · 게이트 3 · Step 10 세 자리에 다 있어야 합니다",
+        )
+
+
+
+class ScreenTextSingleSourceTest(unittest.TestCase):
+    """같은 화면을 두 곳에서 관리하면 한쪽만 고쳐진다.
+
+    실제로 그랬다. `generate-unit-test-plan` 의 확인 항목은 여섯인데
+    `/gx-단위테스트계획서` 화면에는 넷뿐이라, 단독 실행에서는 `기능 미도출`
+    후보와 `[미확정]` 제약 기능이 승인 화면에 안 떴다. DDL 복사 안내도
+    `convert-ddl-to-tablespec` 에만 ERDCloud 가 있고 `/gx-프로젝트설정` 에는
+    없었다.
+
+    화면 전체를 복제하는 대신 **정본 한 곳을 두고 나머지는 자리표시자로
+    가리킨다.**
+    """
+
+    # (복제하던 쪽, 자리표시자, 정본 경로)
+    가리킴 = (
+        ("commands/gx-단위테스트계획서.md", "{주요 확인 목록}",
+         "skills/generate-unit-test-plan/SKILL.md"),
+        ("commands/gx-프로젝트설정.md", "{복사 방법 목록}",
+         "skills/convert-ddl-to-tablespec/SKILL.md"),
+    )
+
+    def test_자리표시자가_정본을_가리킨다(self):
+        for 파일, 자리, 정본 in self.가리킴:
+            with self.subTest(파일=파일):
+                본문 = (PLUGIN_ROOT / 파일).read_text(encoding="utf-8")
+                # 자리표시자는 **화면(코드블록) 안**에 있어야 한다. 설명
+                # 문단에도 같은 글자가 나오므로, 문서 전체를 보면 화면 쪽만
+                # 지워도 통과한다 — 이 레포가 일곱 번 겪은 그 형태다.
+                화면 = "\n".join(
+                    m.group(1)
+                    for m in re.finditer(r"^```\n(.*?)^```", 본문, re.M | re.S)
+                )
+                self.assertIn(
+                    자리, 화면,
+                    f"{파일} 의 화면에 자리표시자 {자리} 가 없습니다",
+                )
+                # 정본 경로가 문서 아무 데나 있으면 안 된다. **자리표시자를
+                # 설명하는 그 문단**이 가리켜야 한다 — 아니면 자리표시자만
+                # 남고 어디서 가져올지 모른 채 실행이 지어낸다.
+                문단 = re.search(
+                    rf"^[^\n]*{re.escape(자리)}[^\n]*은[\s\S]{{0,400}}?(?=\n\n)",
+                    본문, re.M,
+                )
+                self.assertIsNotNone(
+                    문단, f"{자리} 를 설명하는 문단이 없습니다",
+                )
+                self.assertIn(
+                    정본, 문단.group(0),
+                    f"{자리} 를 설명하는 문단이 정본 경로({정본})를 "
+                    "가리키지 않습니다",
+                )
+
+    def test_정본이_자기가_정본임을_밝힌다(self):
+        for _, _, 정본 in self.가리킴:
+            with self.subTest(정본=정본):
+                본문 = (PLUGIN_ROOT / 정본).read_text(encoding="utf-8")
+                self.assertRegex(
+                    본문, r"정본이다\.\*\*",
+                    f"{정본} 이 자기가 정본임을 밝히지 않습니다 — "
+                    "밝혀 두지 않으면 다음 사람이 여기에도 복제한다",
+                )
+
+    def test_확인_항목이_한_곳에만_있다(self):
+        """커맨드가 확인 항목을 다시 나열하면 그게 곧 드리프트의 시작이다."""
+        본문 = (
+            PLUGIN_ROOT / "commands" / "gx-단위테스트계획서.md"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn(
+            "비기능 요구사항 {N}건이 연계기능ID 공란 행으로", 본문,
+            "커맨드가 확인 항목을 다시 나열합니다 — 정본은 "
+            "skills/generate-unit-test-plan/SKILL.md 입니다",
         )
 
 
