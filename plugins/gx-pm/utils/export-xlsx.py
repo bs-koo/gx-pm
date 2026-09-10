@@ -118,11 +118,12 @@ DOCUMENT_PROFILES = {
         "sheet_name": "단위테스트계획",
         # 컬럼 정본은 templates/DE-13-unit-test-plan.md 의 「본문 컬럼 (정본)」 절이다.
         "columns": [[
-            "테스트ID", "연계기능ID", "연계요구사항ID", "사전조건", "입력",
-            "기대결과", "사후조건", "의존성", "테스트담당자", "수행일", "결과",
+            "테스트ID", "연계기능ID", "연계요구사항ID", "요구사항명",
+            "사전조건", "입력", "기대결과", "사후조건", "의존성",
+            "테스트담당자", "수행일", "결과",
         ]],
         "merge_columns": [],
-        "left_align": ["사전조건", "입력", "기대결과", "사후조건"],
+        "left_align": ["요구사항명", "사전조건", "입력", "기대결과", "사후조건"],
         # 계획서는 `결과` 가 공란이 정상이므로 allow_blank 로 건다.
         "dropdowns": [{"결과": ["Pass", "Fail"]}],
     },
@@ -241,12 +242,31 @@ def parse_markdown_tables(text: str) -> list[tuple[str, list[str]]]:
     return tables
 
 
+def strip_markdown(text: str) -> str:
+    """셀 안의 마크다운 강조 표기를 걷어낸다.
+
+    엑셀은 마크다운을 모른다. `**PM 이 답합니다.**` 를 그대로 쓰면 별표가
+    글자로 보인다 — 사람이 읽는 안내 시트에서 특히 나쁘다. 굵게·기울임·
+    코드 표기를 걷어내고 알맹이만 남긴다. `[가정]` 같은 대괄호 표식은
+    산출물의 뜻이므로 건드리지 않는다.
+    """
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+    text = re.sub(r"__(.+?)__", r"\1", text)
+    # 굵게를 먼저 걷어낸 뒤라 남은 홑표는 기울임이다. 앞뒤로 같은 기호가
+    # 붙지 않은 것만 잡아 `a*b*c` 같은 수식 표기를 건드리지 않는다.
+    text = re.sub(r"(?<!\*)\*([^*\n]+?)\*(?!\*)", r"\1", text)
+    # 밑줄 기울임은 낱말 안(`TB_USER_ID`)에서 쓰이므로 낱말 경계를 요구한다.
+    text = re.sub(r"(?<![\w_])_([^_\n]+?)_(?![\w_])", r"\1", text)
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    return text
+
+
 def table_lines_to_rows(table_lines: list[str]) -> list[list[str]]:
     """마크다운 표 라인 → 2D 배열 (구분선 제거)"""
     rows = []
     for line in table_lines:
         # 구분선 ( |---|---| ) 건너뛰기
-        cells = [c.strip() for c in line.split("|")[1:-1]]
+        cells = [strip_markdown(c.strip()) for c in line.split("|")[1:-1]]
         if cells and not all(re.match(r"^[\s\-:]+$", c) for c in cells):
             rows.append(cells)
     return rows

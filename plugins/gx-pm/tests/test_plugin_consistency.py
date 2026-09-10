@@ -988,7 +988,7 @@ class PipelineCommandTest(unittest.TestCase):
         양식 = (
             PLUGIN_ROOT / "templates" / "confirmation-request.md"
         ).read_text(encoding="utf-8")
-        self.assertIn("10건", 양식, "확인요청서 생성 임계치가 없습니다")
+        self.assertIn("6건 이상", 양식, "확인요청서 생성 임계치가 없습니다")
         self.assertIn(
             "개정이력", 양식,
             "개정이력을 붙이는지 안 붙이는지가 정해져 있지 않습니다 "
@@ -1271,50 +1271,6 @@ class EvidenceRuleTest(unittest.TestCase):
         self.assertIn("4/4 미만", 구간.group(1))
         self.assertIn("0건", 구간.group(1))
 
-    def test_임시확정이_3차_미응답의_결과다(self):
-        """`[가정]` 으로 바꾸면 누가 정할 값이었는지가 지워진다.
-
-        `[가정]` 의 정의는 "RFP 가 규정하지 않았다" 인데, 3차 미응답 항목은
-        RFP 가 규정했고 값만 안 준 것이다. 같은 태그를 쓰면 pm-test 함정 6건이
-        전부 무너진다 — SFR-016 표본 기준값을 `[가정] 30건` 으로 적으면
-        "임의 수치를 지어내면 실패(원본과 우연히 같아도 실패)" 에 걸린다.
-
-        태그만 있으면 통과하지 않도록 전환 조건(3차 미응답)까지 본다.
-        """
-        구간 = re.search(
-            r"^## \[임시확정\] 은 3차 미응답의 결과다$(.*?)(?=^## |\Z)",
-            self.text, re.M | re.S,
-        )
-        self.assertIsNotNone(
-            구간, "§[임시확정] 은 3차 미응답의 결과다 절을 찾지 못했습니다"
-        )
-        절 = 구간.group(1)
-        self.assertIn("3차", 절, "전환 조건(3차 미응답)이 없습니다")
-        self.assertIn(
-            "2단 판정의 결과가 아니다", 절,
-            "`[임시확정]` 이 판정 결과가 아니라 미응답의 결과라는 구분이 없습니다 "
-            "— 판정 축에 넣으면 `[가정]` 과 뒤섞입니다",
-        )
-        self.assertRegex(
-            절, r"요청 이력",
-            "근거에 3차 요청 이력을 붙이라는 규칙이 없습니다 "
-            "— 그것이 없으면 지어낸 값과 구별되지 않습니다",
-        )
-        self.assertIn(
-            "RFP 가 규정하지 않았다", 절,
-            "`[가정]` 의 정의가 적혀 있지 않습니다 "
-            "— 두 표기의 구별이 사라지면 함정 6건이 무너집니다",
-        )
-        self.assertIn(
-            "정의가 다르다", 절,
-            "`[가정]` 과 `[임시확정]` 의 정의가 다르다는 못박음이 없습니다",
-        )
-        self.assertRegex(
-            절, r"⚠|위험",
-            "산출물에 위험 표시를 남기라는 규칙이 없습니다 "
-            "— 개발자가 [임시확정] 값을 확정값으로 오독합니다",
-        )
-
     def test_미확정_제약만_자동보강에서_빠진다(self):
         """자동 보강을 두 갈래로 가르지 않으면 배선이 반쪽이 된다.
 
@@ -1343,11 +1299,10 @@ class EvidenceRuleTest(unittest.TestCase):
             절, r"\[미확정\][^\n]*\|[^\n]*하지 않는다",
             "`[미확정]` 제약을 보강하지 않는다는 갈래가 없습니다",
         )
-        self.assertRegex(
-            절, r"\[임시확정\][^\n]*\|[^\n]*한다",
-            "`[임시확정]` 갈래가 없습니다 — 3차 미응답 전환은 값을 새로 만들어 "
-            "그 값에서 경계 케이스가 나옵니다. 갈래가 없으면 구현이 「값이 있다」와 "
-            "「`[미확정]`」 중 하나로 갈리는데, 어느 쪽이든 나쁩니다",
+        self.assertNotIn(
+            "임시확정", 절,
+            "값을 대신 정하는 갈래가 남아 있습니다 — v4.0.0 은 3차 미응답을 "
+            "관행값으로 채우지 않고 `[미확정]` 으로 남긴 뒤 최종본을 보류합니다",
         )
 
     def test_옛_확인필요_표기가_남아_있지_않다(self):
@@ -1890,7 +1845,7 @@ class FiveDocumentContractTest(unittest.TestCase):
             ("AN-02-requirements-definition.md", 10),
             ("AN-03-function-spec.md", 10),
             ("DE-08-table-definition.md", 15),
-            ("DE-13-unit-test-plan.md", 11),
+            ("DE-13-unit-test-plan.md", 12),
             ("AN-05-traceability-matrix.md", 9),
         ]:
             with self.subTest(템플릿=템플릿):
@@ -2008,9 +1963,9 @@ class DesignConstraintReflectionTest(unittest.TestCase):
             유형행.append(칸[0])
         return 유형행
 
-    def test_누락_판정이_9유형이고_설계_제약_미반영이_있다(self):
+    def test_누락_판정이_8유형이고_설계_제약_미반영이_있다(self):
         유형행 = self._누락판정_유형행()
-        self.assertEqual(len(유형행), 9, f"누락 판정 유형이 9개가 아닙니다: {유형행}")
+        self.assertEqual(len(유형행), 8, f"누락 판정 유형이 8개가 아닙니다: {유형행}")
         self.assertIn("설계 제약 미반영", 유형행)
 
     def test_AN_05_컬럼_정본은_9개_그대로다(self):
@@ -2052,8 +2007,8 @@ class DesignConstraintReflectionTest(unittest.TestCase):
         절 = 구간.group(1)
         번호 = re.findall(r"^\d+\. ", 절, re.M)
         self.assertEqual(
-            len(번호), 9,
-            f"판정 순서가 9단계가 아닙니다: {len(번호)}단계 "
+            len(번호), 8,
+            f"판정 순서가 8단계가 아닙니다: {len(번호)}단계 "
             "— 정본의 누락 유형 수와 어긋나면 안 나오는 유형이 생깁니다",
         )
         self.assertIn(
@@ -2091,7 +2046,7 @@ class DesignConstraintReflectionTest(unittest.TestCase):
         절 = self._step5절()
         미수행 = 절.find("`미수행`")
         self.assertNotEqual(미수행, -1, "Step 5 에 `미수행` 판정이 없습니다")
-        for 앞 in ("실패 {N}건", "예외 케이스 없음", "설계 제약 미반영", "임시확정"):
+        for 앞 in ("실패 {N}건", "예외 케이스 없음", "설계 제약 미반영"):
             위치 = 절.find(앞)
             self.assertNotEqual(위치, -1, f"Step 5 에 `{앞}` 이 없습니다")
             self.assertLess(
@@ -2108,11 +2063,11 @@ class DesignConstraintReflectionTest(unittest.TestCase):
         판정 사다리 맨 앞의 `미수행` 선점과 함께, 이것이 그 유형이 한 번도
         발화하지 못한 두 번째 원인이었다.
 
-        범위 표기(`3~8번`)만 검사하면 괄호가 옛말로 남아도 통과하므로 괄호도 본다.
+        범위 표기(`3~7번`)만 검사하면 괄호가 옛말로 남아도 통과하므로 괄호도 본다.
         """
         절 = self._step5절()
         self.assertIn(
-            "3~8번", 절,
+            "3~7번", 절,
             "비기능 경로가 데이터 축 판정(`설계 제약 미반영`)까지 적용하지 않습니다",
         )
         self.assertNotIn(
@@ -2155,41 +2110,12 @@ class DesignConstraintReflectionTest(unittest.TestCase):
             "— 판정 순서가 바뀌면 거짓이 됩니다. `누락` 열을 가리키기만 하세요",
         )
 
-    def test_임시확정이_아홉번째_유형이다(self):
-        """정본에 유형을 더하고 판정 순서를 안 고치면 그 유형이 영영 안 나온다.
-
-        v3.2.0 의 `설계 제약 미반영` 이 그랬다 — 정본은 8유형인데 Step 5 는
-        7개뿐이라 매트릭스를 만들어도 한 번도 찍히지 않았다.
-
-        `임시확정` 은 값이 채워져 있어 다른 판정에 안 걸리므로, 사다리에
-        자리를 주지 않으면 빈칸으로 남는다.
-        """
-        정본 = (
-            PLUGIN_ROOT / "templates" / "AN-05-traceability-matrix.md"
-        ).read_text(encoding="utf-8")
-        구간 = re.search(r"^## 누락 판정$(.*?)(?=^## |\Z)", 정본, re.M | re.S)
-        self.assertIsNotNone(구간, "AN-05 의 §누락 판정 절을 찾지 못했습니다")
-        유형 = re.findall(r"^\| (\S[^|]*?) \|", 구간.group(1), re.M)
-        유형 = [t for t in 유형 if t not in ("유형",) and "---" not in t]
-        self.assertEqual(
-            len(유형), 9,
-            f"누락 유형이 9개가 아닙니다: {len(유형)}개 — {유형}",
-        )
-        self.assertIn("임시확정", 구간.group(1))
-
-        절 = self._step5절()
-        self.assertIn(
-            "임시확정", 절,
-            "Step 5 판정 순서에 `임시확정` 이 없습니다 — 정본에만 넣으면 "
-            "매트릭스에 한 번도 안 찍힙니다",
-        )
-
     def test_적용_순서의_정본이_사다리다(self):
         """정의표의 행 순서를 적용 순서로 읽으면 사다리 뒤쪽이 죽는다.
 
         정본 표는 유형 **정의**의 정본(「유형 · 조건 · 표기」 3열)이고, 적용
         순서의 정본은 Step 5 사다리다. 정의표에서 `미수행` 은 5행이고
-        `설계 제약 미반영`·`임시확정` 은 그 뒤라, 커맨드가 정의표를 「순서대로
+        `설계 제약 미반영` 은 그 뒤라, 커맨드가 정의표를 「순서대로
         적용한다」고 지시하면 그 둘이 한 번도 발화하지 못한다 — v3.2.0 에서
         `설계 제약 미반영` 이 죽은 코드였던 것과 같은 형태다.
         """
@@ -2236,41 +2162,19 @@ class DesignConstraintReflectionTest(unittest.TestCase):
         정의되면 다음 수정에서 어긋난다."""
         self.assertIn("skills/convert-ddl-to-tablespec/SKILL.md", self.an05)
 
-    def test_누락_리포트_출력_템플릿에_임시확정_섹션이_있다(self):
-        """표기 일치 테스트(`test_누락_유형_수_표기가_문서마다_같다`)는 `\\d+(유형|가지 유형)`
-        형태의 숫자 표기만 본다. 이 출력 템플릿은 유형 이름을 숫자 없이 그냥 나열만
-        하므로, 유형이 9개로 늘어도 이 블록만 8개에 머물러 있어도 그 테스트에 안 걸린다.
-
-        `## 출력` 의 `### 누락 리포트` 코드블록 안을 직접 확인한다 — 이 블록 안에도
-        `### 요약` 처럼 문서 헤딩과 같은 표기(`##`/`###`)가 리터럴로 들어 있어서,
-        "다음 `## ` 헤딩까지" 로 자르는 방식은 이 코드블록의 첫 줄에서 잘못 멈춘다.
-        그래서 코드펜스(```) 로 직접 범위를 잡는다.
-        """
-        스킬 = (
-            PLUGIN_ROOT / "skills" / "trace-requirements" / "SKILL.md"
-        ).read_text(encoding="utf-8")
-        구간 = re.search(r"^### 누락 리포트\n\n```\n(.*?)\n```", 스킬, re.M | re.S)
-        self.assertIsNotNone(구간, "trace-requirements 의 §누락 리포트 코드블록을 찾지 못했습니다")
-        절 = 구간.group(1)
-        self.assertIn(
-            "### 임시확정", 절,
-            "누락 리포트 출력 템플릿에 `### 임시확정` 섹션이 없습니다 "
-            "— 정본은 9유형인데 리포트 서식은 8개뿐입니다",
-        )
-        self.assertNotEqual(절.find("### 요약"), -1, "누락 리포트 템플릿에 `### 요약` 이 없습니다")
-        self.assertLess(
-            절.find("### 임시확정"), 절.find("### 요약"),
-            "`### 임시확정` 섹션이 `### 요약` 뒤에 있습니다 "
-            "— 요약 앞에서 유형별 세부를 나열하는 자리입니다",
-        )
-
-
 class ConfirmationSheetTest(unittest.TestCase):
-    """확인요청서는 시트를 「답할 사람」으로 나눈다.
+    """확인요청서는 시트를 「값이 있나 없나」로 나눈다.
 
-    시트 1 은 PM 이, 시트 2 는 발주기관이 답한다. 시트 2 만 떼어 메일에 붙일 수
-    있어야 하므로 한 시트에 섞으면 안 된다. 시트 수만 세면 역할이 뒤바뀌어도
-    통과하므로 「누가 채우나」 문자열까지 본다.
+    시트 1 은 AI 가 정한 값을 반증하고, 시트 2 는 값이 아예 없는 것을 채운다.
+    시트 2 만 떼어 낼 수 있어야 하므로 한 시트에 섞으면 안 된다.
+
+    **누구에게 물으라고 지시하지 않는다.** 값을 어디서 구할지는 파일을 받은
+    사람이 안다 — 양식이 특정 상대를 지목하면 그 상대가 아닌 경로로 값을 구할
+    때 문구가 거짓이 된다.
+
+    시트 수만 세면 역할이 뒤바뀌어도 통과한다. 그래서 분류표에서 **그 시트의
+    행 한 줄**을 잘라 「누가 채우나」 칸을 본다 — 문서 전체를 보면 다른 시트의
+    역할 낱말에 걸려 조용히 통과한다.
     """
 
     def setUp(self):
@@ -2279,18 +2183,44 @@ class ConfirmationSheetTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
     def test_시트가_네_장이고_각각_역할이_있다(self):
-        for 시트, 역할 in (
-            ("시트 0 · 안내", "읽기만"),
-            ("시트 1 · 가정 확인", "PM"),
-            ("시트 2 · 미확정 확인", "발주기관"),
-            ("시트 3 · 요청 이력", "읽기만"),
+        for 번호, 시트명, 역할 in (
+            (0, "안내", "읽기만"),
+            (1, "가정 확인", "채운다"),
+            (2, "미확정 확인", "채운다"),
+            (3, "요청 이력", "읽기만"),
         ):
-            with self.subTest(시트=시트):
-                self.assertIn(시트, self.text, f"{시트} 절이 없습니다")
+            with self.subTest(시트=f"시트 {번호} · {시트명}"):
                 self.assertIn(
-                    역할, self.text,
-                    f"{시트} 의 「누가 채우나」({역할})가 없습니다",
+                    f"시트 {번호} · {시트명}", self.text,
+                    f"시트 {번호} · {시트명} 절이 없습니다",
                 )
+                행 = re.search(
+                    rf"^\|\s*{번호}\s*\|\s*{시트명}\s*\|([^\n|]*)\|",
+                    self.text, re.M,
+                )
+                self.assertIsNotNone(
+                    행, f"시트 분류표에 시트 {번호}({시트명}) 행이 없습니다",
+                )
+                self.assertIn(
+                    역할, 행.group(1),
+                    f"시트 {번호}({시트명}) 의 「누가 채우나」가 {역할} 이 아닙니다",
+                )
+
+    def test_답할_상대를_지목하지_않는다(self):
+        """양식이 「발주기관에 물어라」로 상대를 지목하면 거짓이 될 수 있다.
+
+        값을 어디서 구할지는 이 파일을 받은 사람이 안다. 착수 협의로 정하기도
+        하고 설계자가 판단하기도 한다. 양식이 할 일은 무엇이 비었는지와 어디에
+        쓰는지를 알려주는 것까지다.
+        """
+        self.assertNotIn(
+            "발주기관", self.text,
+            "확인요청서 양식이 답할 상대를 지목합니다",
+        )
+        self.assertIn(
+            "누구에게 물으라고 지시하지 않는다", self.text,
+            "상대를 지목하지 않는다는 규칙이 없습니다",
+        )
 
     def test_네_시트가_모두_컬럼_정본_절을_갖는다(self):
         """정본 절이 없으면 parse_column_ssot 가 빈 목록을 내고
@@ -2357,14 +2287,14 @@ class ConfirmationRoundTest(unittest.TestCase):
             "가정값으로 만들어지고 뒤에 파급 처리로 다시 씁니다",
         )
         self.assertRegex(
-            절, r"\[가정\][^\n]*\[미확정\][^\n]*합계[^\n]*10건[^\n]*넘으면[^\n]*중단",
+            절, r"\[가정\][^\n]*\[미확정\][^\n]*합계[^\n]*6건 이상[^\n]*중단",
             "게이트 2 의 발행 기준이 「`[가정]` + `[미확정]` 합계」가 아닙니다 "
             "— 기준어를 보지 않으면 다른 기준으로 바뀌어도 "
-            "「10건…넘으면…중단」 만으로 조용히 통과합니다",
+            "「6건 이상…중단」 만으로 조용히 통과합니다",
         )
         self.assertRegex(
-            절, r"10건 이하[^\n]*(갈음|목록)",
-            "게이트 2 에 「10건 이하 → 갈음」 분기가 없습니다 "
+            절, r"1~5건[^\n]*대화로 묻",
+            "게이트 2 에 「1~5건 → 대화로 묻는다」 분기가 없습니다 "
             "— 이 문단이 사라지면 2건 때문에도 무조건 발행·중단합니다",
         )
 
@@ -2499,25 +2429,25 @@ class ConfirmationRoundTest(unittest.TestCase):
             "서술하는데 위치가 반대라, 실행이 3분기를 먼저 묻게 됩니다",
         )
 
-    def test_게이트3도_10건_이하면_멈추지_않는다(self):
+    def test_게이트3도_5건_이하면_멈추지_않는다(self):
         """소수를 위해 왕복을 만들지 않는다는 규칙은 게이트 2·3 이 같아야 한다.
 
-        confirmation-request.md §언제 만드나 는 10건 임계를 라운드 구분 없는
+        confirmation-request.md §언제 만드나 는 6건 임계를 라운드 구분 없는
         일반 규칙으로 정한다. 게이트 3 만 "남아 있으면 무조건 중단" 이면
         1차 후 2~3건만 남아도 파일 재작성과 중단이 강제된다 — 이 기능이
         막으려는 왕복을 정확히 그 지점에서 만든다.
         """
         절 = self._절("Step 9: 게이트 3")
         self.assertRegex(
-            절, r"\[가정\][^\n]*\[미확정\][^\n]*합계[^\n]*10건[^\n]*넘으면[^\n]*중단",
+            절, r"\[가정\][^\n]*\[미확정\][^\n]*합계[^\n]*6건 이상[^\n]*중단",
             "게이트 3 의 발행 기준이 「`[가정]` + `[미확정]` 합계」가 아닙니다 "
             "— 정본(confirmation-request.md §언제 만드나)과 게이트 2 가 합계로 "
             "재는데 여기만 「남은 미확정」이면, 미확정 8건에 후속 확인 30건이 "
             "남은 상황에서 정본은 발행·게이트 3 은 미발행으로 갈립니다",
         )
         self.assertRegex(
-            절, r"10건 이하[^\n]*(갈음|목록)",
-            "게이트 3 에 「10건 이하 → 갈음」 분기가 없습니다 "
+            절, r"1~5건[^\n]*대화로 묻",
+            "게이트 3 에 「1~5건 → 대화로 묻는다」 분기가 없습니다 "
             "— 이 문단이 사라지면 1차 후 2~3건만 남아도 무조건 중단합니다",
         )
 
@@ -2573,19 +2503,24 @@ class ApplyConfirmationsRoundTest(unittest.TestCase):
             "Step 4 에 옛 되묻기 카운터 표기([반영 N/5])가 남아 있습니다",
         )
 
-    def test_3차_상한과_임시확정_전환이_있다(self):
+    def test_값을_대신_정하지_않는다(self):
+        """3차까지 답이 없어도 관행값으로 채우면 「전부 해소」 규칙이 무의미해진다.
+
+        채운 값은 해소된 것처럼 보이지만 실은 우리가 정한 값이라, 개발자가
+        확정값으로 읽고 착수한다. v4.0.0 이 `[임시확정]` 을 없앤 이유다.
+        """
         self.assertIn("3차", self.text)
-        self.assertIn("[임시확정]", self.text)
-        절 = self._절("Step 4-2:")
-        self.assertIn(
-            "templates/evidence-rules.md", 절,
-            "Step 4-2 절이 전환 규칙의 정본을 가리키지 않습니다 — 이 경로 "
-            "문자열은 Step 3 에도 이미 있어 전체 텍스트 검사로는 이 절이 "
-            "정본을 안 가리켜도 통과합니다",
+        self.assertNotIn(
+            "임시확정", self.text,
+            "값을 대신 정하는 표기가 남아 있습니다",
+        )
+        self.assertRegex(
+            self.text, r"[^\n]*값을 대신 정하지 않는다[^\n]*",
+            "값을 대신 정하지 않는다는 규칙이 없습니다",
         )
 
     def test_요청_이력을_남긴다(self):
-        """3차까지 요청했다는 증거가 없으면 [임시확정] 이 지어낸 값과 같아진다.
+        """3차까지 요청했다는 증거가 없으면 「우리가 물었다」를 증명할 수 없다.
 
         `## 출력` 의 예시 문구에만 두 낱말이 있고 Step 4-1 의 기록 규칙 자체가
         없으면, 실제로는 이번 차수의 요청·미응답이 시트 3 에 쌓이지 않는다 —
@@ -2617,6 +2552,709 @@ class ApplyConfirmationsRoundTest(unittest.TestCase):
             "templates/confirmation-request.md", self.text,
             "확인요청서 양식 정본을 가리키지 않습니다 "
             "— 시트 구조가 바뀌어도 이 스킬이 모르게 됩니다",
+        )
+
+
+
+class ConfirmationCloseoutTest(unittest.TestCase):
+    """발행을 건너뛰면 왕복이 끝나는데 파일은 남는다.
+
+    1차 시험에서 실제로 어긋났다. 반영 뒤 남은 것이 1건이라 게이트 3 이 발행을
+    건너뛰었는데, 시트 0 은 「게이트 3 이후 2차 발행 예정」인 채로 끝났다.
+    **오지 않을 차수를 파일이 약속한다.**
+
+    원인이 둘이라 양쪽을 다 지킨다 — 반영 스킬이 앞으로 낼 차수를 예고했고,
+    게이트는 건너뛸 때 안내를 닫지 않았다.
+    """
+
+    def _절(self, 파일: str, 제목: str) -> str:
+        본문 = (PLUGIN_ROOT / 파일).read_text(encoding="utf-8")
+        구간 = re.search(
+            rf"^#+ {re.escape(제목)}$(.*?)(?=^#{{1,3}} |\Z)", 본문, re.M | re.S
+        )
+        self.assertIsNotNone(구간, f"{파일} 에 §{제목} 절이 없습니다")
+        return 구간.group(1)
+
+    def test_반영_스킬이_다음_차수를_예고하지_않는다(self):
+        절 = self._절(
+            "skills/apply-confirmations/SKILL.md", "다음 차수를 예고하지 않는다"
+        )
+        self.assertRegex(
+            절, r"[^\n]*발행 여부는[^\n]*게이트[^\n]*정한다",
+            "발행을 게이트가 정한다는 근거가 없습니다",
+        )
+        self.assertRegex(
+            절, r"[^\n]*지금 상태만[^\n]*",
+            "시트 0 에 지금 상태만 쓰라는 지시가 없습니다",
+        )
+
+    def test_게이트가_건너뛸_때_안내를_닫는다(self):
+        본문 = (
+            PLUGIN_ROOT / "commands" / "gx-명세일괄.md"
+        ).read_text(encoding="utf-8")
+        닫기 = re.search(r"^[^\n]*시트 0[^\n]*닫는[^\n]*$", 본문, re.M)
+        self.assertIsNotNone(
+            닫기,
+            "발행을 건너뛸 때 시트 0 을 닫으라는 지시가 없습니다",
+        )
+        self.assertIn(
+            "다시 쓴다", 닫기.group(0),
+            "닫는다고만 하고 다시 쓰라는 말이 없습니다",
+        )
+
+
+
+class QuestionThresholdTest(unittest.TestCase):
+    """미결 건수가 대화와 파일을 가른다.
+
+    1차 시험에서 미결 9건이 「10건 이하 → 목록으로 갈음」에 걸려 **아무것도 묻지
+    않고** 지나갔다. 적어서 물을 수 있는 것이지 적어서 안 물어도 되는 것이 아니다.
+    경계를 5와 6 사이로 내리고, 5건 이하는 그 자리에서 대화로 묻게 바꿨다.
+    """
+
+    def test_정본이_세_구간을_가른다(self):
+        절 = (
+            PLUGIN_ROOT / "templates" / "confirmation-request.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(r"^## 언제 만드나$(.*?)(?=^## )", 절, re.M | re.S)
+        self.assertIsNotNone(구간, "§언제 만드나 절이 없습니다")
+        본문 = 구간.group(1)
+        for 표기, 뜻 in (("0건", "물을 것이 없"), ("1~5건", "대화"), ("6건 이상", "중단")):
+            with self.subTest(구간=표기):
+                # 앞뒤 산문에도 같은 낱말이 나온다. **구간 표의 그 행**만 본다 —
+                # 표 행은 `|` 로 시작하고 첫 칸이 그 표기다.
+                행 = re.search(
+                    rf"^\|[^\n|]*{re.escape(표기)}[^\n|]*\|[^\n]*$", 본문, re.M
+                )
+                self.assertIsNotNone(행, f"구간 표에 {표기} 행이 없습니다")
+                self.assertIn(
+                    뜻, 행.group(0),
+                    f"{표기} 행이 「{뜻}」 를 말하지 않습니다",
+                )
+
+    def test_갈음하지_않는다는_근거가_있다(self):
+        본문 = (
+            PLUGIN_ROOT / "templates" / "confirmation-request.md"
+        ).read_text(encoding="utf-8")
+        self.assertRegex(
+            본문, r"[^\n]*적어서 물을 수 있는 것이지[^\n]*",
+            "적으면 안 물어도 된다는 오해를 막는 문장이 없습니다",
+        )
+
+    def test_질문_정책에_하한이_있다(self):
+        본문 = (
+            PLUGIN_ROOT / "templates" / "pipeline-protocol.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(r"^## 질문 정책$(.*?)(?=^## )", 본문, re.M | re.S)
+        self.assertIsNotNone(구간)
+        절 = 구간.group(1)
+        self.assertRegex(
+            절, r"[^\n]*1~5건[^\n]*대화로 묻는다[^\n]*",
+            "네 번째 층의 하한(1~5건은 대화)이 질문 정책에 없습니다",
+        )
+
+
+class UnitTestInputTest(unittest.TestCase):
+    """시험은 이 문서 하나로 끝나야 한다.
+
+    1차 시험에서 DE-13 이 ID 만 나와 무엇을 시험하는지 알 수 없었고,  이
+    추상적이라 테스터가 값을 지어내야 했다. 요구사항명을 열로 세우고, 입력은
+    항목명과 값을 짝지어 적게 하고, 파일이 입력이면 실제로 만들게 한다.
+    """
+
+    def setUp(self):
+        self.정본 = (
+            PLUGIN_ROOT / "templates" / "DE-13-unit-test-plan.md"
+        ).read_text(encoding="utf-8")
+
+    def test_요구사항명이_열로_있다(self):
+        행 = re.search(r"^\|\s*4\s*\|\s*요구사항명\s*\|([^\n|]*)\|", self.정본, re.M)
+        self.assertIsNotNone(행, "DE-13 정본 4번 열이 요구사항명이 아닙니다")
+        self.assertIn(
+            "AN-02", 행.group(1),
+            "요구사항명을 어디서 가져오는지가 값 규칙에 없습니다",
+        )
+
+    def test_입력이_그대로_넣을_수_있어야_한다(self):
+        구간 = re.search(
+            r"^## 입력은 그대로 넣을 수 있어야 한다$(.*?)(?=^## )",
+            self.정본, re.M | re.S,
+        )
+        self.assertIsNotNone(구간, "§입력은 그대로 넣을 수 있어야 한다 절이 없습니다")
+        절 = 구간.group(1)
+        self.assertRegex(
+            절, r"[^\n]*항목명과 값을 짝지어[^\n]*",
+            "항목명과 값을 짝지으라는 규칙이 없습니다",
+        )
+        self.assertIn(
+            "testdata/", 절,
+            "파일 입력을 어디에 만드는지가 없습니다",
+        )
+        self.assertRegex(
+            절, r"[^\n]*{테스트ID}[^\n]*",
+            "테스트 데이터 파일명 규칙이 없습니다",
+        )
+
+    def test_스킬이_파일을_실제로_만든다(self):
+        본문 = (
+            PLUGIN_ROOT / "skills" / "generate-unit-test-plan" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(
+            r"^### Step 4-2: 파일이 입력이면 실제로 만든다$(.*?)(?=^### )",
+            본문, re.M | re.S,
+        )
+        self.assertIsNotNone(구간, "파일 생성 Step 이 없습니다")
+        절 = 구간.group(1)
+        self.assertIn("testdata/", 절, "만들 자리가 없습니다")
+        self.assertRegex(
+            절, r"[^\n]*한 곳만 망가뜨려[^\n]*",
+            "정상 파일을 한 곳만 바꿔 만들라는 규칙이 없습니다",
+        )
+        self.assertRegex(
+            절, r"[^\n]*\[미확정\][^\n]*만들지 않는다",
+            "컬럼 구성이 미확정이면 만들지 않는다는 규칙이 없습니다",
+        )
+
+    def test_testdata_폴더가_규약에_있다(self):
+        본문 = (
+            PLUGIN_ROOT / "templates" / "project-profile-schema.md"
+        ).read_text(encoding="utf-8")
+        self.assertRegex(
+            본문, r"[^\n]*testdata/[^\n]*DE-13[^\n]*",
+            "testdata/ 가 프로젝트 폴더 구조에 없습니다",
+        )
+
+
+
+class FinalOutputGateTest(unittest.TestCase):
+    """미확정이 남으면 최종본(xlsx)을 내지 않는다.
+
+    v3.x 는 미확정이 남아도 xlsx 를 냈다. 3차까지 답이 없으면 관행값을 채우고
+    `[임시확정]` 으로 표시했다. 그러면 개발자가 그 값을 확정값으로 읽고 착수한다.
+
+    v4.0.0 은 값을 대신 정하지 않는다. 대신 **최종본에만 도장을 안 찍는다** —
+    마크다운 5종은 게이트마다 저장되므로 작업은 막히지 않는다.
+    """
+
+    def test_정본이_최종본_보류를_정한다(self):
+        본문 = (
+            PLUGIN_ROOT / "templates" / "confirmation-request.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(
+            r"^## 미확정이 0이어야 최종본을 낸다$(.*?)(?=^## )", 본문, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "§미확정이 0이어야 최종본을 낸다 절이 없습니다")
+        절 = 구간.group(1)
+        self.assertRegex(
+            절, r"[^\n]*1건이라도 남아 있으면[^\n]*xlsx 를 뽑지 않는다",
+            "보류 조건이 없습니다",
+        )
+        # 이 문장은 줄바꿈을 넘어간다. 줄이 아니라 **한 문장** 으로 좁힌다 —
+        # 마침표를 넘지 않게 해서 절 안 다른 문장의 낱말에 걸리지 않게 한다.
+        self.assertRegex(
+            절, r"마크다운[^.]*막히지 않는다",
+            "마크다운은 막지 않는다는 단서가 없습니다 — 없으면 작업 자체가 "
+            "멈추는 것으로 읽힌다",
+        )
+
+    def test_Step10_이_보류를_실행한다(self):
+        본문 = (
+            PLUGIN_ROOT / "commands" / "gx-명세일괄.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(
+            r"^#### 미확정이 0인지 먼저 본다$(.*?)(?=^#### |^### )", 본문, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "Step 10 에 미확정 검사 절이 없습니다")
+        절 = 구간.group(1)
+        self.assertIn(
+            "templates/confirmation-request.md", 절,
+            "보류 규칙의 정본을 가리키지 않습니다",
+        )
+        self.assertRegex(
+            절, r"[^\n]*1~5건[^\n]*묻는다",
+            "1~5건이면 그 자리에서 묻는다는 분기가 없습니다",
+        )
+
+    def test_임시확정_표기가_레포에_없다(self):
+        """표기를 없앴으면 규칙문 어디에도 남으면 안 된다.
+
+        한 곳이라도 남으면 실행이 그것을 근거로 값을 대신 정한다 —
+        이 레포는 정본과 실행부가 갈린 결함을 여섯 번 겪었다.
+        """
+        남은 = []
+        for path in list((PLUGIN_ROOT / "templates").glob("*.md")) +                     list((PLUGIN_ROOT / "commands").glob("*.md")) +                     list((PLUGIN_ROOT / "skills").glob("*/SKILL.md")):
+            if "임시확정" in path.read_text(encoding="utf-8"):
+                남은.append(path.name)
+        self.assertEqual(
+            남은, [],
+            f"임시확정 표기가 남아 있습니다: {남은}",
+        )
+
+
+
+class RequestHistoryTest(unittest.TestCase):
+    """요청 이력이 값·답변·결론을 전부 남겨야 한다.
+
+    시트 1·2 는 「지금 답해야 할 것」만 보여주므로 차수가 올라가면 지난 값이
+    거기서 사라진다. 시트 3 이 그 값이 남는 **유일한 자리**다. 세 가지가
+    지켜지지 않으면 이력이 반쪽이 된다 — 차수마다 새 행 · 시트 1 항목도 포함 ·
+    마지막 행이 최종 결론.
+    """
+
+    def setUp(self):
+        self.정본 = (
+            PLUGIN_ROOT / "templates" / "confirmation-request.md"
+        ).read_text(encoding="utf-8")
+        self.스킬 = (
+            PLUGIN_ROOT / "skills" / "apply-confirmations" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+
+    def test_처리값이_네_갈래다(self):
+        """`반영`/`이월` 둘만으로는 「끝났나 진행 중인가」를 알 수 없다."""
+        행 = re.search(r"^\|\s*6\s*\|\s*처리\s*\|([^\n|]*)\|", self.정본, re.M)
+        self.assertIsNotNone(행, "시트 3 정본에 `처리` 열이 없습니다")
+        for 값 in ("반영", "이월", "미해소", "철회"):
+            with self.subTest(값=값):
+                self.assertIn(값, 행.group(1), f"`처리` 값에 {값} 이 없습니다")
+
+    def test_시트1도_이력에_남는다(self):
+        구간 = re.search(
+            r"^### 시트 1 과 시트 2 를 \*\*둘 다\*\* 받는다$(.*?)(?=^### )",
+            self.정본, re.M | re.S,
+        )
+        self.assertIsNotNone(구간, "시트 1 도 이력에 남긴다는 절이 없습니다")
+        self.assertRegex(
+            구간.group(1), r"가정 확인[^.]*요청이다",
+            "가정 확인도 요청이라는 근거가 없습니다",
+        )
+
+    def test_행을_덮어쓰지_않는다(self):
+        구간 = re.search(
+            r"^### 행을 덮어쓰지 않고 쌓는다$(.*?)(?=^### )", self.정본, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "행을 쌓는다는 절이 없습니다")
+        self.assertRegex(
+            구간.group(1), r"차수마다[^\n]*새 행",
+            "차수마다 새 행이라는 규칙이 없습니다",
+        )
+
+    def test_이월로_끝나는_항목이_없다(self):
+        """마지막 행이 `이월` 이면 그 항목이 끝났는지 진행 중인지 알 수 없다."""
+        self.assertRegex(
+            self.정본, r"`이월` 로 끝나는 항목은 없다",
+            "이월로 끝나지 않는다는 규칙이 정본에 없습니다",
+        )
+        self.assertRegex(
+            self.스킬, r"3차인데 답이 없는 것[^\n]*미해소",
+            "3차 미응답을 `미해소` 로 닫는 지시가 스킬에 없습니다",
+        )
+
+    def test_스킬이_이력_규칙을_정본으로_넘긴다(self):
+        구간 = re.search(
+            r"^### 시트 3 은 지우지 않고 쌓는다$(.*?)(?=^### )", self.스킬, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "스킬에 시트 3 누적 규칙 절이 없습니다")
+        self.assertIn(
+            "templates/confirmation-request.md", 구간.group(1),
+            "이력 규칙의 정본을 가리키지 않습니다",
+        )
+
+
+
+class CounterQuestionTest(unittest.TestCase):
+    """값 대신 질문이 오면 파일로 답한다.
+
+    1차 시험에서 `[미확정]` 두 건에 값이 아니라 자유 텍스트 요청이 달려 왔다 —
+    「설명을 다시해줘」·「너가 직접 정해줘」. 분기표에 그 경우가 없어서 답변이
+    **대화로만 나가고 파일에는 안 남았다.** 다음에 파일을 여는 사람은 질문만
+    보고 답은 못 본다. 이 양식이 대화를 대신하려던 이유가 무너진다.
+    """
+
+    def setUp(self):
+        self.스킬 = (
+            PLUGIN_ROOT / "skills" / "apply-confirmations" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.정본 = (
+            PLUGIN_ROOT / "templates" / "confirmation-request.md"
+        ).read_text(encoding="utf-8")
+
+    def test_분기표가_되질문을_다룬다(self):
+        구간 = re.search(
+            r"^### Step 2: 분기$(.*?)(?=^### )", self.스킬, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "Step 2 분기 절이 없습니다")
+        절 = 구간.group(1)
+        행 = re.search(r"^\|[^\n|]*값 대신 질문[^\n|]*\|[^\n]*$", 절, re.M)
+        self.assertIsNotNone(행, "분기표에 「값 대신 질문」 행이 없습니다")
+        self.assertIn(
+            "파일로 답한다", 행.group(0),
+            "되질문에 대화로 답하지 않는다는 것이 분기표에 없습니다",
+        )
+
+    def test_되질문_절이_세_성격을_가른다(self):
+        구간 = re.search(
+            r"^### 되질문에 답한다$(.*?)(?=^### )", self.스킬, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "§되질문에 답한다 절이 없습니다")
+        절 = 구간.group(1)
+        self.assertRegex(
+            절, r"대화로 답하지 않는다",
+            "대화로 답하지 않는다는 규칙이 없습니다",
+        )
+        for 성격, 처리 in (("설명해달라", "답을 먼저 적고"), ("네가 정해라", "가정"),
+                          ("선택지", "근거")):
+            with self.subTest(성격=성격):
+                행 = re.search(rf"^\|[^\n|]*{re.escape(성격)}[^\n|]*\|[^\n]*$", 절, re.M)
+                self.assertIsNotNone(행, f"「{성격}」 갈래가 없습니다")
+                self.assertIn(
+                    처리, 행.group(0),
+                    f"「{성격}」 갈래의 처리가 「{처리}」 를 말하지 않습니다",
+                )
+
+    def test_정본_처리값에_되질문이_있다(self):
+        행 = re.search(r"^\|\s*6\s*\|\s*처리\s*\|([^\n|]*)\|", self.정본, re.M)
+        self.assertIsNotNone(행, "시트 3 정본에 `처리` 열이 없습니다")
+        self.assertIn(
+            "되질문", 행.group(1),
+            "`처리` 값에 되질문이 없어 주고받은 것이 이력에 안 남습니다",
+        )
+
+
+
+class StalenessTest(unittest.TestCase):
+    """낱개로 고치면 나머지가 낡는다. 그걸 잡는 장치가 있어야 한다.
+
+    산출물은 커맨드 하나로도 만들 수 있어서, 요구사항정의서만 고치면 나머지 넷이
+    옛 값으로 남는다. **ID 는 그대로라 추적매트릭스가 초록이다** — 끊긴 것이
+    아니라 낡은 것이라 누락 판정에 안 걸린다.
+
+    그래서 머리말에 근거 버전을 적고, 어느 커맨드로 들어와도 그걸 대조한다.
+    """
+
+    def setUp(self):
+        self.정본 = (
+            PLUGIN_ROOT / "templates" / "revision-history.md"
+        ).read_text(encoding="utf-8")
+        self.감지 = (
+            PLUGIN_ROOT / "skills" / "detect-existing-artifact" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.기록 = (
+            PLUGIN_ROOT / "skills" / "manage-revision-history" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+
+    def _절(self, 본문: str, 제목: str) -> str:
+        """절 하나를 잘라낸다. **코드 펜스를 먼저 걷어낸다.**
+
+        규칙문의 예시 블록에는 `# AN-03 기능명세서` 처럼 줄 시작이 `#` 인 줄이
+        들어 있다. 걷어내지 않으면 그것이 다음 절의 시작으로 잡혀, 절이
+        코드 블록 앞에서 끊긴다 — 뒤에 오는 표가 통째로 빠진다.
+        """
+        벗김 = re.sub(r"^```.*?^```", "", 본문, flags=re.M | re.S)
+        구간 = re.search(
+            rf"^#+ {re.escape(제목)}$(.*?)(?=^#{{1,4}} |\Z)", 벗김, re.M | re.S
+        )
+        self.assertIsNotNone(구간, f"§{제목} 절이 없습니다")
+        return 구간.group(1)
+
+    def test_근거_표기가_산출물마다_정해져_있다(self):
+        절 = self._절(self.정본, "근거 표기 — 무엇의 몇 버전으로 만들었나")
+        for 코드, 근거 in (("AN-02", "없음"), ("AN-03", "AN-02"),
+                          ("DE-08", "AN-03"), ("DE-13", "DE-08"),
+                          ("AN-05", "넷 전부")):
+            with self.subTest(산출물=코드):
+                행 = re.search(rf"^\|[^\n|]*{코드}[^\n|]*\|([^\n|]*)\|", 절, re.M)
+                self.assertIsNotNone(행, f"{코드} 의 근거 대상 행이 없습니다")
+                self.assertIn(
+                    근거, 행.group(1),
+                    f"{코드} 의 근거가 「{근거}」 를 말하지 않습니다",
+                )
+
+    def test_대조_불가를_낡음으로_처리하지_않는다(self):
+        """처음 만든 것과 옛 파일이 전부 빨강이면 경고가 소음이 된다."""
+        절 = self._절(self.정본, "대조가 안 되는 경우")
+        self.assertRegex(
+            절, r"근거 파일이 없다[^\n|]*\|[^\n]*대조 불가",
+            "근거 파일이 없을 때의 판정이 「대조 불가」 가 아닙니다",
+        )
+        self.assertRegex(
+            self.정본, r"대조 불가를 낡음으로 처리하지 않는다",
+            "대조 불가를 낡음으로 보지 않는다는 근거가 없습니다",
+        )
+
+    def test_근거_버전이_더_높으면_이상_상태다(self):
+        절 = self._절(self.정본, "대조가 안 되는 경우")
+        self.assertRegex(
+            절, r"근거 버전 > 상위 현재 버전[^\n|]*\|[^\n]*이상",
+            "근거 버전이 상위보다 높을 때의 판정이 없습니다 — "
+            "상위가 백업에서 되돌려진 경우가 여기 걸린다",
+        )
+
+    def test_기록_스킬이_근거_줄을_갱신한다(self):
+        절 = self._절(self.기록, "Step 5: 근거 표기를 함께 갱신한다")
+        self.assertIn(
+            "templates/revision-history.md", 절,
+            "근거 표기 규칙의 정본을 가리키지 않습니다",
+        )
+        self.assertRegex(
+            절, r"버전을 아는 유일한 자리",
+            "왜 이 스킬이 쓰는지가 없습니다 — 생성 단계는 상위 문서의 "
+            "개정이력을 세지 않는다",
+        )
+
+    def test_감지_스킬이_낡음을_대조한다(self):
+        절 = self._절(self.감지, "Step 1-1: 낡음 대조")
+        self.assertIn(
+            "templates/revision-history.md", 절,
+            "판정표의 정본을 가리키지 않습니다",
+        )
+        self.assertRegex(
+            절, r"5종 전부[^.]*읽어",
+            "부른 커맨드의 산출물만 보면 전체 상태를 알 수 없습니다",
+        )
+        self.assertRegex(
+            절, r"영향 범위는 세어서",
+            "영향 건수를 세라는 규칙이 없습니다 — 건수를 모르면 "
+            "최신화와 두기 중에 판단이 안 선다",
+        )
+
+    def test_연쇄_안내가_세_경로에_다_있다(self):
+        절 = self._절(self.감지, "고친 뒤 하위 산출물 연쇄 안내")
+        for 경로 in ("이어쓰기", "새로쓰기", "열기"):
+            with self.subTest(경로=경로):
+                행 = re.search(rf"^\|\s*{경로}\s*\|[^\n]*\|([^\n|]*)\|", 절, re.M)
+                self.assertIsNotNone(행, f"연쇄 안내 표에 {경로} 행이 없습니다")
+                self.assertIn(
+                    "예", 행.group(1),
+                    f"{경로} 경로에서 연쇄 안내를 하지 않습니다",
+                )
+        self.assertRegex(
+            절, r"열기[^.]*가장 중요하다",
+            "열기가 실제로 값을 고치는 경로라는 근거가 없습니다",
+        )
+
+    def test_파급_규칙이_낱개_경로에도_적용된다(self):
+        본문 = (
+            PLUGIN_ROOT / "templates" / "pipeline-protocol.md"
+        ).read_text(encoding="utf-8")
+        # 이 문장은 줄바꿈을 넘어간다. 한 문장(마침표 전)으로 좁힌다.
+        self.assertRegex(
+            본문, r"어느 길로 들어와도[^.]*파급이 같아야 한다",
+            "파이프라인과 낱개가 같은 파급 규칙을 쓴다는 것이 없습니다",
+        )
+        self.assertRegex(
+            본문, r"낡음은 「끊김」이 아니라",
+            "낡음과 끊김을 가르는 문장이 없습니다 — 추적매트릭스가 "
+            "낡음을 못 잡는 이유가 여기 있다",
+        )
+
+
+
+class SkillOutputShapeTest(unittest.TestCase):
+    """스킬의 출력 형식이 컬럼 정본과 어긋나면 그 열이 조용히 사라진다.
+
+    v3.5.0 이 DE-13 에 `요구사항명` 을 더했는데 **생성 스킬의 출력 블록은 11열로
+    남았다.** `utils/export-xlsx.py` 의 `_best_column_set` 은 11/12 도 매칭으로
+    보고 **있는 열만** 낸다 — 오류가 안 뜬다. 정본만 늘리고 실행부가 안 따라온
+    이 레포의 단골 결함이다.
+    """
+
+    # 어느 스킬이 어느 산출물의 출력 블록을 갖는가.
+    # DE-08 은 헤더를 복제하지 않고 정본을 경로로 가리킨다 — 그 쪽이 안전하다.
+    # 복제한 넷은 정본과 글자 단위로 같아야 한다.
+    출력_블록 = (
+        ("extract-requirements", "AN-02-requirements-definition.md"),
+        ("generate-function-spec", "AN-03-function-spec.md"),
+        ("convert-ddl-to-tablespec", "DE-08-table-definition.md"),
+        ("generate-unit-test-plan", "DE-13-unit-test-plan.md"),
+        ("trace-requirements", "AN-05-traceability-matrix.md"),
+    )
+
+    def test_생성_스킬의_출력_블록이_컬럼_정본과_같다(self):
+        from helpers import parse_column_ssot
+        for 스킬, 템플릿 in self.출력_블록:
+            with self.subTest(스킬=스킬):
+                정본 = parse_column_ssot(템플릿, "본문 컬럼 (정본)")
+                본문 = (
+                    PLUGIN_ROOT / "skills" / 스킬 / "SKILL.md"
+                ).read_text(encoding="utf-8")
+                # 정본 첫 컬럼으로 시작하는 표만 본다. 그중에서도 열 수가
+                # 정본에 가까운 것만 — 같은 이름으로 시작하는 작은 부속 표
+                # (`| 기능ID | 종류 | 열 | 사유 |` 같은 목록)를 걸러낸다.
+                후보 = []
+                for m in re.finditer(
+                    rf"^\| {re.escape(정본[0])} \|[^\n]*\|$", 본문, re.M
+                ):
+                    열 = [c.strip() for c in m.group(0).strip("|").split("|")]
+                    if len(열) >= len(정본) - 2:
+                        후보.append(열)
+                for 열 in 후보:
+                    self.assertEqual(
+                        열, 정본,
+                        f"{스킬} 의 출력 헤더가 {템플릿} 컬럼 정본과 다릅니다 — "
+                        "빠진 열은 xlsx 에서 조용히 사라집니다",
+                    )
+                if not 후보:
+                    # 복제하지 않는 스킬은 정본을 경로로 가리켜야 한다.
+                    self.assertIn(
+                        f"templates/{템플릿}", 본문,
+                        f"{스킬} 이 출력 헤더도 없고 정본 경로도 안 가리킵니다",
+                    )
+
+    def test_비기능_예시도_같은_열을_쓴다(self):
+        """비기능 행은 `연계기능ID` 가 공란이라 `요구사항명` 이 가장 필요하다."""
+        본문 = (
+            PLUGIN_ROOT / "templates" / "DE-13-unit-test-plan.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(
+            r"^## 비기능 요구사항의 처리$(.*?)(?=^## )", 본문, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "§비기능 요구사항의 처리 절이 없습니다")
+        헤더 = re.search(r"^\| 테스트ID \|[^\n]*\|$", 구간.group(1), re.M)
+        self.assertIsNotNone(헤더, "비기능 예시 표가 없습니다")
+        self.assertIn(
+            "요구사항명", 헤더.group(0),
+            "비기능 예시 표에 `요구사항명` 이 없습니다 — 이 예시를 따라 만들면 "
+            "비기능 행만 열이 어긋납니다",
+        )
+
+
+class BasisStampTest(unittest.TestCase):
+    """근거 줄을 무조건 지금 버전으로 스탬프하면 낡음이 영구히 숨는다.
+
+    AN-02 를 고쳐 v3.0 이 되고 AN-03 이 안 따라오면 낡음으로 잡힌다. 그런데
+    나중에 AN-03 에서 **무관한 오타 하나**를 고치면 개정이력이 갱신되며 근거가
+    `AN-02 v3.0` 으로 다시 써진다 — 요구사항 변경은 여전히 미반영인데
+    **경고만 사라진다.**
+    """
+
+    def setUp(self):
+        self.기록 = (
+            PLUGIN_ROOT / "skills" / "manage-revision-history" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.정본 = (
+            PLUGIN_ROOT / "templates" / "revision-history.md"
+        ).read_text(encoding="utf-8")
+
+    def test_무관한_개정은_근거를_갱신하지_않는다(self):
+        self.assertRegex(
+            self.기록, r"무조건 지금 버전으로 스탬프하지 않는다",
+            "무조건 갱신하지 않는다는 규칙이 없습니다",
+        )
+        행 = re.search(
+            r"^\|[^\n|]*상위 변경과 무관하다[^\n|]*\|([^\n|]*)\|", self.기록, re.M
+        )
+        self.assertIsNotNone(행, "무관한 개정의 갈래가 없습니다")
+        self.assertIn(
+            "그대로", 행.group(1),
+            "무관한 개정에서 근거 줄을 그대로 두라는 지시가 없습니다",
+        )
+
+    def test_DE13_근거에_AN02_가_언제나_있다(self):
+        """`요구사항명` 열이 AN-02 의 이름을 싣는다. 조건부로 두면 대조가 샌다."""
+        행 = re.search(
+            r"^\|[^\n|]*DE-13[^\n|]*\|([^\n|]*)\|", self.정본, re.M
+        )
+        self.assertIsNotNone(행, "DE-13 근거 대상 행이 없습니다")
+        self.assertIn("AN-02", 행.group(1), "DE-13 근거에 AN-02 가 없습니다")
+        self.assertNotIn(
+            "비기능 케이스가 있으면", 행.group(1),
+            "AN-02 가 조건부로 남아 있습니다 — 기능만 있는 프로젝트에서 "
+            "요구사항명 낡음을 못 잡습니다",
+        )
+
+
+class ConversationAnswerTraceTest(unittest.TestCase):
+    """1~5건을 대화로 물어 받은 답도 요청 이력에 남아야 한다.
+
+    안 남기면 그 항목의 마지막 행이 `이월` 로 끝나, 「`이월` 로 끝나는 항목은
+    없다」와 「마지막 행의 `처리` 가 최종 결론이다」가 **그 경로에서만** 깨진다.
+    어디로 답이 들어왔든 이력은 한 곳이어야 한다.
+    """
+
+    def test_세_자리_모두_시트3에_남기라고_한다(self):
+        본문 = (
+            PLUGIN_ROOT / "commands" / "gx-명세일괄.md"
+        ).read_text(encoding="utf-8")
+        남김 = re.findall(r"시트 3 「요청 이력」에도 남긴다", 본문)
+        self.assertGreaterEqual(
+            len(남김), 3,
+            f"대화 경로의 답을 시트 3 에 남기라는 지시가 {len(남김)}곳뿐입니다 — "
+            "게이트 2 · 게이트 3 · Step 10 세 자리에 다 있어야 합니다",
+        )
+
+
+
+class ScreenTextSingleSourceTest(unittest.TestCase):
+    """같은 화면을 두 곳에서 관리하면 한쪽만 고쳐진다.
+
+    실제로 그랬다. `generate-unit-test-plan` 의 확인 항목은 여섯인데
+    `/gx-단위테스트계획서` 화면에는 넷뿐이라, 단독 실행에서는 `기능 미도출`
+    후보와 `[미확정]` 제약 기능이 승인 화면에 안 떴다. DDL 복사 안내도
+    `convert-ddl-to-tablespec` 에만 ERDCloud 가 있고 `/gx-프로젝트설정` 에는
+    없었다.
+
+    화면 전체를 복제하는 대신 **정본 한 곳을 두고 나머지는 자리표시자로
+    가리킨다.**
+    """
+
+    # (복제하던 쪽, 자리표시자, 정본 경로)
+    가리킴 = (
+        ("commands/gx-단위테스트계획서.md", "{주요 확인 목록}",
+         "skills/generate-unit-test-plan/SKILL.md"),
+        ("commands/gx-프로젝트설정.md", "{복사 방법 목록}",
+         "skills/convert-ddl-to-tablespec/SKILL.md"),
+    )
+
+    def test_자리표시자가_정본을_가리킨다(self):
+        for 파일, 자리, 정본 in self.가리킴:
+            with self.subTest(파일=파일):
+                본문 = (PLUGIN_ROOT / 파일).read_text(encoding="utf-8")
+                # 자리표시자는 **화면(코드블록) 안**에 있어야 한다. 설명
+                # 문단에도 같은 글자가 나오므로, 문서 전체를 보면 화면 쪽만
+                # 지워도 통과한다 — 이 레포가 일곱 번 겪은 그 형태다.
+                화면 = "\n".join(
+                    m.group(1)
+                    for m in re.finditer(r"^```\n(.*?)^```", 본문, re.M | re.S)
+                )
+                self.assertIn(
+                    자리, 화면,
+                    f"{파일} 의 화면에 자리표시자 {자리} 가 없습니다",
+                )
+                # 정본 경로가 문서 아무 데나 있으면 안 된다. **자리표시자를
+                # 설명하는 그 문단**이 가리켜야 한다 — 아니면 자리표시자만
+                # 남고 어디서 가져올지 모른 채 실행이 지어낸다.
+                문단 = re.search(
+                    rf"^[^\n]*{re.escape(자리)}[^\n]*은[\s\S]{{0,400}}?(?=\n\n)",
+                    본문, re.M,
+                )
+                self.assertIsNotNone(
+                    문단, f"{자리} 를 설명하는 문단이 없습니다",
+                )
+                self.assertIn(
+                    정본, 문단.group(0),
+                    f"{자리} 를 설명하는 문단이 정본 경로({정본})를 "
+                    "가리키지 않습니다",
+                )
+
+    def test_정본이_자기가_정본임을_밝힌다(self):
+        for _, _, 정본 in self.가리킴:
+            with self.subTest(정본=정본):
+                본문 = (PLUGIN_ROOT / 정본).read_text(encoding="utf-8")
+                self.assertRegex(
+                    본문, r"정본이다\.\*\*",
+                    f"{정본} 이 자기가 정본임을 밝히지 않습니다 — "
+                    "밝혀 두지 않으면 다음 사람이 여기에도 복제한다",
+                )
+
+    def test_확인_항목이_한_곳에만_있다(self):
+        """커맨드가 확인 항목을 다시 나열하면 그게 곧 드리프트의 시작이다."""
+        본문 = (
+            PLUGIN_ROOT / "commands" / "gx-단위테스트계획서.md"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn(
+            "비기능 요구사항 {N}건이 연계기능ID 공란 행으로", 본문,
+            "커맨드가 확인 항목을 다시 나열합니다 — 정본은 "
+            "skills/generate-unit-test-plan/SKILL.md 입니다",
         )
 
 

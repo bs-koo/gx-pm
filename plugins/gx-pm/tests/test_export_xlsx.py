@@ -490,12 +490,13 @@ class De13ColumnSsotTest(unittest.TestCase):
         self.정본 = parse_column_ssot("DE-13-unit-test-plan.md", "본문 컬럼 (정본)")
 
     def test_정본이_열한_개다(self):
-        self.assertEqual(len(self.정본), 11, f"DE-13 정본이 11개가 아닙니다: {self.정본}")
+        self.assertEqual(len(self.정본), 12, f"DE-13 정본이 12개가 아닙니다: {self.정본}")
 
     def test_정본_순서가_설계와_같다(self):
         self.assertEqual(self.정본, [
-            "테스트ID", "연계기능ID", "연계요구사항ID", "사전조건", "입력",
-            "기대결과", "사후조건", "의존성", "테스트담당자", "수행일", "결과",
+            "테스트ID", "연계기능ID", "연계요구사항ID", "요구사항명",
+            "사전조건", "입력", "기대결과", "사후조건", "의존성",
+            "테스트담당자", "수행일", "결과",
         ])
 
     def test_프로필이_한_시트다(self):
@@ -961,6 +962,59 @@ class SeparateOutputDirTest(unittest.TestCase):
                 md.with_suffix(".xlsx").exists(),
                 "--output 없는 --separate 가 .md 옆에 쓰지 않았습니다",
             )
+
+
+
+class MarkdownStripTest(unittest.TestCase):
+    """셀 안의 마크다운 강조는 엑셀에서 글자로 보인다.
+
+    실제로 그랬다 — 1차 확인요청서의 「안내」 시트가 `**PM 이 답합니다.**` 를
+    별표까지 그대로 보여줬다. 사람이 맨 처음 읽는 시트다. 표 파싱 단계에서
+    걷어내지 않으면 다섯 산출물 전부가 같은 문제를 갖는다.
+    """
+
+    def test_굵게와_백틱이_셀에서_사라진다(self):
+        rows = load_export_module().table_lines_to_rows([
+            "| 구분 | 안내 |",
+            "|------|------|",
+            "| 현재 | **1차 요청** · `/gx-명세일괄` 을 부르세요 |",
+        ])
+        셀 = rows[-1][1]
+        self.assertNotIn("**", 셀, "굵게 표기가 셀에 남아 있습니다")
+        self.assertNotIn("`", 셀, "백틱이 셀에 남아 있습니다")
+        self.assertIn("1차 요청", 셀, "알맹이가 사라졌습니다")
+        self.assertIn("/gx-명세일괄", 셀, "알맹이가 사라졌습니다")
+
+    def test_기울임도_걷어낸다(self):
+        """docstring 이 「굵게·기울임·코드」를 약속하는데 기울임이 빠져 있었다."""
+        rows = load_export_module().table_lines_to_rows([
+            "| 값 | 근거 |",
+            "|---|---|",
+            "| *권장* | _표준_ 값 |",
+        ])
+        self.assertNotIn("*", rows[-1][0], "홑별표 기울임이 남아 있습니다")
+        self.assertIn("권장", rows[-1][0])
+        self.assertNotIn("_표준_", rows[-1][1], "밑줄 기울임이 남아 있습니다")
+
+    def test_컬럼명_밑줄은_건드리지_않는다(self):
+        """`TB_USER.EML` 같은 식별자가 기울임으로 오인되면 이름이 망가진다."""
+        rows = load_export_module().table_lines_to_rows([
+            "| 컬럼 | 테이블 |",
+            "|---|---|",
+            "| TB_AUTH_TOKEN.INVLD_YN | TB_USER_HIST |",
+        ])
+        self.assertEqual(rows[-1][0], "TB_AUTH_TOKEN.INVLD_YN")
+        self.assertEqual(rows[-1][1], "TB_USER_HIST")
+
+    def test_대괄호_표식은_건드리지_않는다(self):
+        """`[가정]`·`[미확정]` 은 산출물의 뜻이라 남아야 한다."""
+        rows = load_export_module().table_lines_to_rows([
+            "| 값 | 근거 |",
+            "|---|---|",
+            "| 100자 | [가정] RFP 미규정 · [미확정] 표본 기준값 |",
+        ])
+        self.assertIn("[가정]", rows[-1][1])
+        self.assertIn("[미확정]", rows[-1][1])
 
 
 if __name__ == "__main__":

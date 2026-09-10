@@ -167,20 +167,14 @@ A(신규 구축) 유형이면 이 단계를 건너뛴다.
 DB 스키마의 전체 DDL을 복사해서 붙여넣어 주세요.
 (테이블 구조를 파악하여 테이블정의서 등을 자동 생성할 수 있습니다)
 
-  [DataGrip에서 복사하기]
-    1. 좌측 Database 패널에서 스키마(Schema) 우클릭
-    2. SQL Scripts → Generate DDL to Clipboard
-    3. 여기에 Ctrl+V로 붙여넣기
-
-  [DBeaver에서 복사하기]
-    1. 좌측 Database Navigator에서 스키마(Schema) 우클릭
-    2. Generate SQL → DDL 선택
-    3. 팝업 창에서 Ctrl+A(전체선택) → Ctrl+C(복사)
-    4. 여기에 Ctrl+V로 붙여넣기
-    ※ 또는: 스키마 우클릭 → Tools → Generate DDL
+  {복사 방법 목록}
 
   (DB DDL이 없으면 "없음" 입력)
 ```
+
+**`{복사 방법 목록}` 은 `skills/convert-ddl-to-tablespec/SKILL.md` 의 DDL 입력
+안내를 그대로 옮긴다.** 그 목록이 정본이다 — 여기에 복제해 두면 도구를 하나 더
+지원할 때 한쪽만 고쳐져 사람마다 다른 안내를 받는다.
 
 DDL이 입력되면 프로젝트 폴더에 `ddl.sql`로 저장한다.
 
@@ -251,7 +245,7 @@ DDL이 입력되면 프로젝트 폴더에 `ddl.sql`로 저장한다.
 1. 프로젝트명으로 폴더 생성 (없으면)
 2. `profile.json` 저장
 3. DDL이 있으면 `ddl.sql` 저장
-4. `backup/`, `xlsx/` 폴더 생성
+4. `backup/`, `xlsx/`, `testdata/` 폴더 생성
 
 ---
 
