@@ -2791,5 +2791,74 @@ class FinalOutputGateTest(unittest.TestCase):
         )
 
 
+
+class RequestHistoryTest(unittest.TestCase):
+    """요청 이력이 값·답변·결론을 전부 남겨야 한다.
+
+    시트 1·2 는 「지금 답해야 할 것」만 보여주므로 차수가 올라가면 지난 값이
+    거기서 사라진다. 시트 3 이 그 값이 남는 **유일한 자리**다. 세 가지가
+    지켜지지 않으면 이력이 반쪽이 된다 — 차수마다 새 행 · 시트 1 항목도 포함 ·
+    마지막 행이 최종 결론.
+    """
+
+    def setUp(self):
+        self.정본 = (
+            PLUGIN_ROOT / "templates" / "confirmation-request.md"
+        ).read_text(encoding="utf-8")
+        self.스킬 = (
+            PLUGIN_ROOT / "skills" / "apply-confirmations" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+
+    def test_처리값이_네_갈래다(self):
+        """`반영`/`이월` 둘만으로는 「끝났나 진행 중인가」를 알 수 없다."""
+        행 = re.search(r"^\|\s*6\s*\|\s*처리\s*\|([^\n|]*)\|", self.정본, re.M)
+        self.assertIsNotNone(행, "시트 3 정본에 `처리` 열이 없습니다")
+        for 값 in ("반영", "이월", "미해소", "철회"):
+            with self.subTest(값=값):
+                self.assertIn(값, 행.group(1), f"`처리` 값에 {값} 이 없습니다")
+
+    def test_시트1도_이력에_남는다(self):
+        구간 = re.search(
+            r"^### 시트 1 과 시트 2 를 \*\*둘 다\*\* 받는다$(.*?)(?=^### )",
+            self.정본, re.M | re.S,
+        )
+        self.assertIsNotNone(구간, "시트 1 도 이력에 남긴다는 절이 없습니다")
+        self.assertRegex(
+            구간.group(1), r"가정 확인[^.]*요청이다",
+            "가정 확인도 요청이라는 근거가 없습니다",
+        )
+
+    def test_행을_덮어쓰지_않는다(self):
+        구간 = re.search(
+            r"^### 행을 덮어쓰지 않고 쌓는다$(.*?)(?=^### )", self.정본, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "행을 쌓는다는 절이 없습니다")
+        self.assertRegex(
+            구간.group(1), r"차수마다[^\n]*새 행",
+            "차수마다 새 행이라는 규칙이 없습니다",
+        )
+
+    def test_이월로_끝나는_항목이_없다(self):
+        """마지막 행이 `이월` 이면 그 항목이 끝났는지 진행 중인지 알 수 없다."""
+        self.assertRegex(
+            self.정본, r"`이월` 로 끝나는 항목은 없다",
+            "이월로 끝나지 않는다는 규칙이 정본에 없습니다",
+        )
+        self.assertRegex(
+            self.스킬, r"3차인데 답이 없는 것[^\n]*미해소",
+            "3차 미응답을 `미해소` 로 닫는 지시가 스킬에 없습니다",
+        )
+
+    def test_스킬이_이력_규칙을_정본으로_넘긴다(self):
+        구간 = re.search(
+            r"^### 시트 3 은 지우지 않고 쌓는다$(.*?)(?=^### )", self.스킬, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "스킬에 시트 3 누적 규칙 절이 없습니다")
+        self.assertIn(
+            "templates/confirmation-request.md", 구간.group(1),
+            "이력 규칙의 정본을 가리키지 않습니다",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
