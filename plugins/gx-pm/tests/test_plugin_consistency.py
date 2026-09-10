@@ -2920,5 +2920,133 @@ class CounterQuestionTest(unittest.TestCase):
         )
 
 
+
+class StalenessTest(unittest.TestCase):
+    """낱개로 고치면 나머지가 낡는다. 그걸 잡는 장치가 있어야 한다.
+
+    산출물은 커맨드 하나로도 만들 수 있어서, 요구사항정의서만 고치면 나머지 넷이
+    옛 값으로 남는다. **ID 는 그대로라 추적매트릭스가 초록이다** — 끊긴 것이
+    아니라 낡은 것이라 누락 판정에 안 걸린다.
+
+    그래서 머리말에 근거 버전을 적고, 어느 커맨드로 들어와도 그걸 대조한다.
+    """
+
+    def setUp(self):
+        self.정본 = (
+            PLUGIN_ROOT / "templates" / "revision-history.md"
+        ).read_text(encoding="utf-8")
+        self.감지 = (
+            PLUGIN_ROOT / "skills" / "detect-existing-artifact" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.기록 = (
+            PLUGIN_ROOT / "skills" / "manage-revision-history" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+
+    def _절(self, 본문: str, 제목: str) -> str:
+        """절 하나를 잘라낸다. **코드 펜스를 먼저 걷어낸다.**
+
+        규칙문의 예시 블록에는 `# AN-03 기능명세서` 처럼 줄 시작이 `#` 인 줄이
+        들어 있다. 걷어내지 않으면 그것이 다음 절의 시작으로 잡혀, 절이
+        코드 블록 앞에서 끊긴다 — 뒤에 오는 표가 통째로 빠진다.
+        """
+        벗김 = re.sub(r"^```.*?^```", "", 본문, flags=re.M | re.S)
+        구간 = re.search(
+            rf"^#+ {re.escape(제목)}$(.*?)(?=^#{{1,4}} |\Z)", 벗김, re.M | re.S
+        )
+        self.assertIsNotNone(구간, f"§{제목} 절이 없습니다")
+        return 구간.group(1)
+
+    def test_근거_표기가_산출물마다_정해져_있다(self):
+        절 = self._절(self.정본, "근거 표기 — 무엇의 몇 버전으로 만들었나")
+        for 코드, 근거 in (("AN-02", "없음"), ("AN-03", "AN-02"),
+                          ("DE-08", "AN-03"), ("DE-13", "DE-08"),
+                          ("AN-05", "넷 전부")):
+            with self.subTest(산출물=코드):
+                행 = re.search(rf"^\|[^\n|]*{코드}[^\n|]*\|([^\n|]*)\|", 절, re.M)
+                self.assertIsNotNone(행, f"{코드} 의 근거 대상 행이 없습니다")
+                self.assertIn(
+                    근거, 행.group(1),
+                    f"{코드} 의 근거가 「{근거}」 를 말하지 않습니다",
+                )
+
+    def test_대조_불가를_낡음으로_처리하지_않는다(self):
+        """처음 만든 것과 옛 파일이 전부 빨강이면 경고가 소음이 된다."""
+        절 = self._절(self.정본, "대조가 안 되는 경우")
+        self.assertRegex(
+            절, r"근거 파일이 없다[^\n|]*\|[^\n]*대조 불가",
+            "근거 파일이 없을 때의 판정이 「대조 불가」 가 아닙니다",
+        )
+        self.assertRegex(
+            self.정본, r"대조 불가를 낡음으로 처리하지 않는다",
+            "대조 불가를 낡음으로 보지 않는다는 근거가 없습니다",
+        )
+
+    def test_근거_버전이_더_높으면_이상_상태다(self):
+        절 = self._절(self.정본, "대조가 안 되는 경우")
+        self.assertRegex(
+            절, r"근거 버전 > 상위 현재 버전[^\n|]*\|[^\n]*이상",
+            "근거 버전이 상위보다 높을 때의 판정이 없습니다 — "
+            "상위가 백업에서 되돌려진 경우가 여기 걸린다",
+        )
+
+    def test_기록_스킬이_근거_줄을_갱신한다(self):
+        절 = self._절(self.기록, "Step 5: 근거 표기를 함께 갱신한다")
+        self.assertIn(
+            "templates/revision-history.md", 절,
+            "근거 표기 규칙의 정본을 가리키지 않습니다",
+        )
+        self.assertRegex(
+            절, r"버전을 아는 유일한 자리",
+            "왜 이 스킬이 쓰는지가 없습니다 — 생성 단계는 상위 문서의 "
+            "개정이력을 세지 않는다",
+        )
+
+    def test_감지_스킬이_낡음을_대조한다(self):
+        절 = self._절(self.감지, "Step 1-1: 낡음 대조")
+        self.assertIn(
+            "templates/revision-history.md", 절,
+            "판정표의 정본을 가리키지 않습니다",
+        )
+        self.assertRegex(
+            절, r"5종 전부[^.]*읽어",
+            "부른 커맨드의 산출물만 보면 전체 상태를 알 수 없습니다",
+        )
+        self.assertRegex(
+            절, r"영향 범위는 세어서",
+            "영향 건수를 세라는 규칙이 없습니다 — 건수를 모르면 "
+            "최신화와 두기 중에 판단이 안 선다",
+        )
+
+    def test_연쇄_안내가_세_경로에_다_있다(self):
+        절 = self._절(self.감지, "고친 뒤 하위 산출물 연쇄 안내")
+        for 경로 in ("이어쓰기", "새로쓰기", "열기"):
+            with self.subTest(경로=경로):
+                행 = re.search(rf"^\|\s*{경로}\s*\|[^\n]*\|([^\n|]*)\|", 절, re.M)
+                self.assertIsNotNone(행, f"연쇄 안내 표에 {경로} 행이 없습니다")
+                self.assertIn(
+                    "예", 행.group(1),
+                    f"{경로} 경로에서 연쇄 안내를 하지 않습니다",
+                )
+        self.assertRegex(
+            절, r"열기[^.]*가장 중요하다",
+            "열기가 실제로 값을 고치는 경로라는 근거가 없습니다",
+        )
+
+    def test_파급_규칙이_낱개_경로에도_적용된다(self):
+        본문 = (
+            PLUGIN_ROOT / "templates" / "pipeline-protocol.md"
+        ).read_text(encoding="utf-8")
+        # 이 문장은 줄바꿈을 넘어간다. 한 문장(마침표 전)으로 좁힌다.
+        self.assertRegex(
+            본문, r"어느 길로 들어와도[^.]*파급이 같아야 한다",
+            "파이프라인과 낱개가 같은 파급 규칙을 쓴다는 것이 없습니다",
+        )
+        self.assertRegex(
+            본문, r"낡음은 「끊김」이 아니라",
+            "낡음과 끊김을 가르는 문장이 없습니다 — 추적매트릭스가 "
+            "낡음을 못 잡는 이유가 여기 있다",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
