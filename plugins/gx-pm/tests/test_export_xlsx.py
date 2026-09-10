@@ -986,14 +986,14 @@ class MarkdownStripTest(unittest.TestCase):
         self.assertIn("/gx-명세일괄", 셀, "알맹이가 사라졌습니다")
 
     def test_대괄호_표식은_건드리지_않는다(self):
-        """`[가정]`·`[임시확정]` 은 산출물의 뜻이라 남아야 한다."""
+        """`[가정]`·`[미확정]` 은 산출물의 뜻이라 남아야 한다."""
         rows = load_export_module().table_lines_to_rows([
             "| 값 | 근거 |",
             "|---|---|",
-            "| 100자 | [가정] RFP 미규정 · [임시확정] 30 |",
+            "| 100자 | [가정] RFP 미규정 · [미확정] 표본 기준값 |",
         ])
         self.assertIn("[가정]", rows[-1][1])
-        self.assertIn("[임시확정]", rows[-1][1])
+        self.assertIn("[미확정]", rows[-1][1])
 
 
 if __name__ == "__main__":

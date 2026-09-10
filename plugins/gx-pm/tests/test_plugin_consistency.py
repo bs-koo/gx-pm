@@ -1271,50 +1271,6 @@ class EvidenceRuleTest(unittest.TestCase):
         self.assertIn("4/4 미만", 구간.group(1))
         self.assertIn("0건", 구간.group(1))
 
-    def test_임시확정이_3차_미응답의_결과다(self):
-        """`[가정]` 으로 바꾸면 누가 정할 값이었는지가 지워진다.
-
-        `[가정]` 의 정의는 "RFP 가 규정하지 않았다" 인데, 3차 미응답 항목은
-        RFP 가 규정했고 값만 안 준 것이다. 같은 태그를 쓰면 pm-test 함정 6건이
-        전부 무너진다 — SFR-016 표본 기준값을 `[가정] 30건` 으로 적으면
-        "임의 수치를 지어내면 실패(원본과 우연히 같아도 실패)" 에 걸린다.
-
-        태그만 있으면 통과하지 않도록 전환 조건(3차 미응답)까지 본다.
-        """
-        구간 = re.search(
-            r"^## \[임시확정\] 은 3차 미응답의 결과다$(.*?)(?=^## |\Z)",
-            self.text, re.M | re.S,
-        )
-        self.assertIsNotNone(
-            구간, "§[임시확정] 은 3차 미응답의 결과다 절을 찾지 못했습니다"
-        )
-        절 = 구간.group(1)
-        self.assertIn("3차", 절, "전환 조건(3차 미응답)이 없습니다")
-        self.assertIn(
-            "2단 판정의 결과가 아니다", 절,
-            "`[임시확정]` 이 판정 결과가 아니라 미응답의 결과라는 구분이 없습니다 "
-            "— 판정 축에 넣으면 `[가정]` 과 뒤섞입니다",
-        )
-        self.assertRegex(
-            절, r"요청 이력",
-            "근거에 3차 요청 이력을 붙이라는 규칙이 없습니다 "
-            "— 그것이 없으면 지어낸 값과 구별되지 않습니다",
-        )
-        self.assertIn(
-            "RFP 가 규정하지 않았다", 절,
-            "`[가정]` 의 정의가 적혀 있지 않습니다 "
-            "— 두 표기의 구별이 사라지면 함정 6건이 무너집니다",
-        )
-        self.assertIn(
-            "정의가 다르다", 절,
-            "`[가정]` 과 `[임시확정]` 의 정의가 다르다는 못박음이 없습니다",
-        )
-        self.assertRegex(
-            절, r"⚠|위험",
-            "산출물에 위험 표시를 남기라는 규칙이 없습니다 "
-            "— 개발자가 [임시확정] 값을 확정값으로 오독합니다",
-        )
-
     def test_미확정_제약만_자동보강에서_빠진다(self):
         """자동 보강을 두 갈래로 가르지 않으면 배선이 반쪽이 된다.
 
@@ -1343,11 +1299,10 @@ class EvidenceRuleTest(unittest.TestCase):
             절, r"\[미확정\][^\n]*\|[^\n]*하지 않는다",
             "`[미확정]` 제약을 보강하지 않는다는 갈래가 없습니다",
         )
-        self.assertRegex(
-            절, r"\[임시확정\][^\n]*\|[^\n]*한다",
-            "`[임시확정]` 갈래가 없습니다 — 3차 미응답 전환은 값을 새로 만들어 "
-            "그 값에서 경계 케이스가 나옵니다. 갈래가 없으면 구현이 「값이 있다」와 "
-            "「`[미확정]`」 중 하나로 갈리는데, 어느 쪽이든 나쁩니다",
+        self.assertNotIn(
+            "임시확정", 절,
+            "값을 대신 정하는 갈래가 남아 있습니다 — v4.0.0 은 3차 미응답을 "
+            "관행값으로 채우지 않고 `[미확정]` 으로 남긴 뒤 최종본을 보류합니다",
         )
 
     def test_옛_확인필요_표기가_남아_있지_않다(self):
@@ -2008,9 +1963,9 @@ class DesignConstraintReflectionTest(unittest.TestCase):
             유형행.append(칸[0])
         return 유형행
 
-    def test_누락_판정이_9유형이고_설계_제약_미반영이_있다(self):
+    def test_누락_판정이_8유형이고_설계_제약_미반영이_있다(self):
         유형행 = self._누락판정_유형행()
-        self.assertEqual(len(유형행), 9, f"누락 판정 유형이 9개가 아닙니다: {유형행}")
+        self.assertEqual(len(유형행), 8, f"누락 판정 유형이 8개가 아닙니다: {유형행}")
         self.assertIn("설계 제약 미반영", 유형행)
 
     def test_AN_05_컬럼_정본은_9개_그대로다(self):
@@ -2052,8 +2007,8 @@ class DesignConstraintReflectionTest(unittest.TestCase):
         절 = 구간.group(1)
         번호 = re.findall(r"^\d+\. ", 절, re.M)
         self.assertEqual(
-            len(번호), 9,
-            f"판정 순서가 9단계가 아닙니다: {len(번호)}단계 "
+            len(번호), 8,
+            f"판정 순서가 8단계가 아닙니다: {len(번호)}단계 "
             "— 정본의 누락 유형 수와 어긋나면 안 나오는 유형이 생깁니다",
         )
         self.assertIn(
@@ -2091,7 +2046,7 @@ class DesignConstraintReflectionTest(unittest.TestCase):
         절 = self._step5절()
         미수행 = 절.find("`미수행`")
         self.assertNotEqual(미수행, -1, "Step 5 에 `미수행` 판정이 없습니다")
-        for 앞 in ("실패 {N}건", "예외 케이스 없음", "설계 제약 미반영", "임시확정"):
+        for 앞 in ("실패 {N}건", "예외 케이스 없음", "설계 제약 미반영"):
             위치 = 절.find(앞)
             self.assertNotEqual(위치, -1, f"Step 5 에 `{앞}` 이 없습니다")
             self.assertLess(
@@ -2108,11 +2063,11 @@ class DesignConstraintReflectionTest(unittest.TestCase):
         판정 사다리 맨 앞의 `미수행` 선점과 함께, 이것이 그 유형이 한 번도
         발화하지 못한 두 번째 원인이었다.
 
-        범위 표기(`3~8번`)만 검사하면 괄호가 옛말로 남아도 통과하므로 괄호도 본다.
+        범위 표기(`3~7번`)만 검사하면 괄호가 옛말로 남아도 통과하므로 괄호도 본다.
         """
         절 = self._step5절()
         self.assertIn(
-            "3~8번", 절,
+            "3~7번", 절,
             "비기능 경로가 데이터 축 판정(`설계 제약 미반영`)까지 적용하지 않습니다",
         )
         self.assertNotIn(
@@ -2155,41 +2110,12 @@ class DesignConstraintReflectionTest(unittest.TestCase):
             "— 판정 순서가 바뀌면 거짓이 됩니다. `누락` 열을 가리키기만 하세요",
         )
 
-    def test_임시확정이_아홉번째_유형이다(self):
-        """정본에 유형을 더하고 판정 순서를 안 고치면 그 유형이 영영 안 나온다.
-
-        v3.2.0 의 `설계 제약 미반영` 이 그랬다 — 정본은 8유형인데 Step 5 는
-        7개뿐이라 매트릭스를 만들어도 한 번도 찍히지 않았다.
-
-        `임시확정` 은 값이 채워져 있어 다른 판정에 안 걸리므로, 사다리에
-        자리를 주지 않으면 빈칸으로 남는다.
-        """
-        정본 = (
-            PLUGIN_ROOT / "templates" / "AN-05-traceability-matrix.md"
-        ).read_text(encoding="utf-8")
-        구간 = re.search(r"^## 누락 판정$(.*?)(?=^## |\Z)", 정본, re.M | re.S)
-        self.assertIsNotNone(구간, "AN-05 의 §누락 판정 절을 찾지 못했습니다")
-        유형 = re.findall(r"^\| (\S[^|]*?) \|", 구간.group(1), re.M)
-        유형 = [t for t in 유형 if t not in ("유형",) and "---" not in t]
-        self.assertEqual(
-            len(유형), 9,
-            f"누락 유형이 9개가 아닙니다: {len(유형)}개 — {유형}",
-        )
-        self.assertIn("임시확정", 구간.group(1))
-
-        절 = self._step5절()
-        self.assertIn(
-            "임시확정", 절,
-            "Step 5 판정 순서에 `임시확정` 이 없습니다 — 정본에만 넣으면 "
-            "매트릭스에 한 번도 안 찍힙니다",
-        )
-
     def test_적용_순서의_정본이_사다리다(self):
         """정의표의 행 순서를 적용 순서로 읽으면 사다리 뒤쪽이 죽는다.
 
         정본 표는 유형 **정의**의 정본(「유형 · 조건 · 표기」 3열)이고, 적용
         순서의 정본은 Step 5 사다리다. 정의표에서 `미수행` 은 5행이고
-        `설계 제약 미반영`·`임시확정` 은 그 뒤라, 커맨드가 정의표를 「순서대로
+        `설계 제약 미반영` 은 그 뒤라, 커맨드가 정의표를 「순서대로
         적용한다」고 지시하면 그 둘이 한 번도 발화하지 못한다 — v3.2.0 에서
         `설계 제약 미반영` 이 죽은 코드였던 것과 같은 형태다.
         """
@@ -2235,35 +2161,6 @@ class DesignConstraintReflectionTest(unittest.TestCase):
         """정본을 옮겨 적지 않고 경로로 가리키는지 — 같은 개념이 두 곳에서 따로
         정의되면 다음 수정에서 어긋난다."""
         self.assertIn("skills/convert-ddl-to-tablespec/SKILL.md", self.an05)
-
-    def test_누락_리포트_출력_템플릿에_임시확정_섹션이_있다(self):
-        """표기 일치 테스트(`test_누락_유형_수_표기가_문서마다_같다`)는 `\\d+(유형|가지 유형)`
-        형태의 숫자 표기만 본다. 이 출력 템플릿은 유형 이름을 숫자 없이 그냥 나열만
-        하므로, 유형이 9개로 늘어도 이 블록만 8개에 머물러 있어도 그 테스트에 안 걸린다.
-
-        `## 출력` 의 `### 누락 리포트` 코드블록 안을 직접 확인한다 — 이 블록 안에도
-        `### 요약` 처럼 문서 헤딩과 같은 표기(`##`/`###`)가 리터럴로 들어 있어서,
-        "다음 `## ` 헤딩까지" 로 자르는 방식은 이 코드블록의 첫 줄에서 잘못 멈춘다.
-        그래서 코드펜스(```) 로 직접 범위를 잡는다.
-        """
-        스킬 = (
-            PLUGIN_ROOT / "skills" / "trace-requirements" / "SKILL.md"
-        ).read_text(encoding="utf-8")
-        구간 = re.search(r"^### 누락 리포트\n\n```\n(.*?)\n```", 스킬, re.M | re.S)
-        self.assertIsNotNone(구간, "trace-requirements 의 §누락 리포트 코드블록을 찾지 못했습니다")
-        절 = 구간.group(1)
-        self.assertIn(
-            "### 임시확정", 절,
-            "누락 리포트 출력 템플릿에 `### 임시확정` 섹션이 없습니다 "
-            "— 정본은 9유형인데 리포트 서식은 8개뿐입니다",
-        )
-        self.assertNotEqual(절.find("### 요약"), -1, "누락 리포트 템플릿에 `### 요약` 이 없습니다")
-        self.assertLess(
-            절.find("### 임시확정"), 절.find("### 요약"),
-            "`### 임시확정` 섹션이 `### 요약` 뒤에 있습니다 "
-            "— 요약 앞에서 유형별 세부를 나열하는 자리입니다",
-        )
-
 
 class ConfirmationSheetTest(unittest.TestCase):
     """확인요청서는 시트를 「값이 있나 없나」로 나눈다.
@@ -2606,19 +2503,24 @@ class ApplyConfirmationsRoundTest(unittest.TestCase):
             "Step 4 에 옛 되묻기 카운터 표기([반영 N/5])가 남아 있습니다",
         )
 
-    def test_3차_상한과_임시확정_전환이_있다(self):
+    def test_값을_대신_정하지_않는다(self):
+        """3차까지 답이 없어도 관행값으로 채우면 「전부 해소」 규칙이 무의미해진다.
+
+        채운 값은 해소된 것처럼 보이지만 실은 우리가 정한 값이라, 개발자가
+        확정값으로 읽고 착수한다. v4.0.0 이 `[임시확정]` 을 없앤 이유다.
+        """
         self.assertIn("3차", self.text)
-        self.assertIn("[임시확정]", self.text)
-        절 = self._절("Step 4-2:")
-        self.assertIn(
-            "templates/evidence-rules.md", 절,
-            "Step 4-2 절이 전환 규칙의 정본을 가리키지 않습니다 — 이 경로 "
-            "문자열은 Step 3 에도 이미 있어 전체 텍스트 검사로는 이 절이 "
-            "정본을 안 가리켜도 통과합니다",
+        self.assertNotIn(
+            "임시확정", self.text,
+            "값을 대신 정하는 표기가 남아 있습니다",
+        )
+        self.assertRegex(
+            self.text, r"[^\n]*값을 대신 정하지 않는다[^\n]*",
+            "값을 대신 정하지 않는다는 규칙이 없습니다",
         )
 
     def test_요청_이력을_남긴다(self):
-        """3차까지 요청했다는 증거가 없으면 [임시확정] 이 지어낸 값과 같아진다.
+        """3차까지 요청했다는 증거가 없으면 「우리가 물었다」를 증명할 수 없다.
 
         `## 출력` 의 예시 문구에만 두 낱말이 있고 Step 4-1 의 기록 규칙 자체가
         없으면, 실제로는 이번 차수의 요청·미응답이 시트 3 에 쌓이지 않는다 —
@@ -2820,6 +2722,72 @@ class UnitTestInputTest(unittest.TestCase):
         self.assertRegex(
             본문, r"[^\n]*testdata/[^\n]*DE-13[^\n]*",
             "testdata/ 가 프로젝트 폴더 구조에 없습니다",
+        )
+
+
+
+class FinalOutputGateTest(unittest.TestCase):
+    """미확정이 남으면 최종본(xlsx)을 내지 않는다.
+
+    v3.x 는 미확정이 남아도 xlsx 를 냈다. 3차까지 답이 없으면 관행값을 채우고
+    `[임시확정]` 으로 표시했다. 그러면 개발자가 그 값을 확정값으로 읽고 착수한다.
+
+    v4.0.0 은 값을 대신 정하지 않는다. 대신 **최종본에만 도장을 안 찍는다** —
+    마크다운 5종은 게이트마다 저장되므로 작업은 막히지 않는다.
+    """
+
+    def test_정본이_최종본_보류를_정한다(self):
+        본문 = (
+            PLUGIN_ROOT / "templates" / "confirmation-request.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(
+            r"^## 미확정이 0이어야 최종본을 낸다$(.*?)(?=^## )", 본문, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "§미확정이 0이어야 최종본을 낸다 절이 없습니다")
+        절 = 구간.group(1)
+        self.assertRegex(
+            절, r"[^\n]*1건이라도 남아 있으면[^\n]*xlsx 를 뽑지 않는다",
+            "보류 조건이 없습니다",
+        )
+        # 이 문장은 줄바꿈을 넘어간다. 줄이 아니라 **한 문장** 으로 좁힌다 —
+        # 마침표를 넘지 않게 해서 절 안 다른 문장의 낱말에 걸리지 않게 한다.
+        self.assertRegex(
+            절, r"마크다운[^.]*막히지 않는다",
+            "마크다운은 막지 않는다는 단서가 없습니다 — 없으면 작업 자체가 "
+            "멈추는 것으로 읽힌다",
+        )
+
+    def test_Step10_이_보류를_실행한다(self):
+        본문 = (
+            PLUGIN_ROOT / "commands" / "gx-명세일괄.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(
+            r"^#### 미확정이 0인지 먼저 본다$(.*?)(?=^#### |^### )", 본문, re.M | re.S
+        )
+        self.assertIsNotNone(구간, "Step 10 에 미확정 검사 절이 없습니다")
+        절 = 구간.group(1)
+        self.assertIn(
+            "templates/confirmation-request.md", 절,
+            "보류 규칙의 정본을 가리키지 않습니다",
+        )
+        self.assertRegex(
+            절, r"[^\n]*1~5건[^\n]*묻는다",
+            "1~5건이면 그 자리에서 묻는다는 분기가 없습니다",
+        )
+
+    def test_임시확정_표기가_레포에_없다(self):
+        """표기를 없앴으면 규칙문 어디에도 남으면 안 된다.
+
+        한 곳이라도 남으면 실행이 그것을 근거로 값을 대신 정한다 —
+        이 레포는 정본과 실행부가 갈린 결함을 여섯 번 겪었다.
+        """
+        남은 = []
+        for path in list((PLUGIN_ROOT / "templates").glob("*.md")) +                     list((PLUGIN_ROOT / "commands").glob("*.md")) +                     list((PLUGIN_ROOT / "skills").glob("*/SKILL.md")):
+            if "임시확정" in path.read_text(encoding="utf-8"):
+                남은.append(path.name)
+        self.assertEqual(
+            남은, [],
+            f"임시확정 표기가 남아 있습니다: {남은}",
         )
 
 
