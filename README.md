@@ -538,6 +538,11 @@ DB 접속정보는 받지 않습니다. DataGrip에서는 스키마 우클릭 �
 
 ---
 
+## 플러그인 유지보수
+
+스킬·커맨드·템플릿을 수정할 때는 [Claude·Codex 공동 유지보수 지침](docs/development/dual-harness-maintenance.md)을
+따릅니다. 두 환경의 진입점과 승인 흐름을 함께 확인하는 체크리스트가 있습니다.
+
 ## License
 
 MIT
