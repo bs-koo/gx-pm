@@ -39,14 +39,23 @@ class CodexCompatibilityTest(unittest.TestCase):
 
     def test_어댑터가_모든_현재_커맨드와_중단점을_연결한다(self):
         adapter = (PLUGIN_ROOT / "skills/gx-pm-workflow/SKILL.md").read_text(encoding="utf-8")
-        for command in command_names():
-            with self.subTest(command=command):
-                self.assertIn(f"commands/{command}.md", adapter)
+        mapped = set(re.findall(r"commands/(gx-[^`\s|]+)\.md", adapter))
+        self.assertEqual(mapped, command_names(), "Codex 진입표와 실제 커맨드가 다릅니다")
         self.assertIn("AskUserQuestion", adapter)
         self.assertIn("request_user_input_async", adapter)
         self.assertIn("실제 응답", adapter)
         self.assertIn("templates/", adapter)
         self.assertIn("sqi-comn-term", adapter)
+
+    def test_두_하네스의_유지보수_지침이_같은_정본을_가리킨다(self):
+        guide = "docs/development/dual-harness-maintenance.md"
+        for path in (REPO_ROOT / "AGENTS.md", REPO_ROOT / "CLAUDE.md"):
+            with self.subTest(path=path):
+                self.assertIn(guide, path.read_text(encoding="utf-8"))
+        maintenance = (REPO_ROOT / guide).read_text(encoding="utf-8")
+        for required in ("gx-pm-workflow", "AskUserQuestion", "request_user_input_async", "sqi-comn-term", "python -m unittest"):
+            self.assertIn(required, maintenance)
+        self.assertIn(guide, (REPO_ROOT / "README.md").read_text(encoding="utf-8"))
 
     def test_codex_mcp_recovery_uses_the_documented_server(self):
         guide = (PLUGIN_ROOT / "docs" / "표준용어-mcp-연계.md").read_text(encoding="utf-8")
