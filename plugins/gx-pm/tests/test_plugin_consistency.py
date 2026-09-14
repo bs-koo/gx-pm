@@ -143,8 +143,10 @@ class CrossReferenceTest(unittest.TestCase):
             for match in re.finditer(r"\*\*([a-z][a-z0-9-]{4,})\*\*", text):
                 if match.group(1) in self.skills:
                     used.add(match.group(1))
+        # Codex 전용 진입 스킬은 Claude 커맨드가 호출하는 내부 스킬이 아니다.
+        codex_entrypoints = {"gx-pm-workflow"}
         self.assertEqual(
-            self.skills - used, set(),
+            self.skills - used - codex_entrypoints, set(),
             "커맨드에서 호출되지 않는 스킬이 있습니다 — 배선 누락입니다",
         )
 

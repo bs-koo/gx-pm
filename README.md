@@ -6,8 +6,8 @@
 
 요구사항 분석부터 기능명세, 테이블 설계, 단위테스트, ID 추적까지
 
-[![Version](https://img.shields.io/badge/version-4.1.0-blue.svg)]()
-[![Skills](https://img.shields.io/badge/skills-17-green.svg)]()
+[![Version](https://img.shields.io/badge/version-4.2.0-blue.svg)]()
+[![Skills](https://img.shields.io/badge/skills-18-green.svg)]()
 [![Commands](https://img.shields.io/badge/commands-7-orange.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -17,7 +17,7 @@
 
 ## 이게 뭔가요?
 
-`gx-pm`은 **공공/SI 프로젝트의 PM**을 위한 Claude Code 플러그인입니다.
+`gx-pm`은 **공공/SI 프로젝트의 PM**을 위한 Claude Code·Codex 플러그인입니다.
 
 RFP를 넣으면 요구사항을 뽑아주고, 요구사항에서 기능(입력항목·처리내용·출력결과)을 도출하고, DDL에서 테이블정의서를 역생성하고, 기능 1건당 단위테스트 케이스를 기계적으로 만들고, 산출물 간 ID가 끊기지 않았는지 추적합니다.
 
@@ -58,6 +58,34 @@ ID 체계에서 **파생 ID가 전부 사라져** 어떤 ID를 바꿔도 재채�
 /plugin marketplace add bs-koo/gx-pm
 /plugin install gx-pm@gx-pm
 ```
+
+### Codex CLI / 앱
+
+저장소를 로컬에 복제한 뒤 저장소 루트에서 실행합니다.
+
+```powershell
+codex.cmd plugin marketplace add .
+codex.cmd plugin add gx-pm@gx-pm
+```
+
+새 Codex 대화에서 `$gx-pm-workflow 프로젝트 설정을 시작해줘`로 프로파일을 만든 뒤,
+`$gx-pm-workflow 명세 5종을 만들어줘`로 진행합니다. 요구사항정의서·기능명세서·
+테이블정의서·단위테스트계획서·추적매트릭스도 같은 스킬에 산출물 이름을 말해 개별 실행할 수 있습니다.
+Codex에서는 Claude의 `/gx-*` 커맨드 대신 이 스킬을 사용합니다.
+
+테이블정의서와 명세일괄에는 외부 `sqi-comn-term` MCP 연결이 필요합니다.
+Windows PowerShell에서는 아래 명령으로 사업부 표준용어 MCP를 사용자 환경에 등록합니다.
+사업부 서버 주소가 다른 환경이면 URL을 해당 주소로 바꿉니다.
+
+```powershell
+codex.cmd mcp add sqi-comn-term --url http://52.78.238.167:8687/api/v1/mcp
+codex.cmd mcp list
+```
+
+등록 후 Codex를 다시 시작하거나 새 대화를 열어 도구가 보이는지 확인합니다.
+macOS/Linux에서는 `codex.cmd` 대신 `codex`를 사용합니다.
+상세 연결 안내는 `plugins/gx-pm/docs/표준용어-mcp-연계.md`를 참조하세요.
+사용자 선택·승인 단계에서는 Codex가 실제 응답을 기다립니다.
 
 ---
 
@@ -387,12 +415,16 @@ DDL 복사 → /gx-테이블정의서에 붙여넣기 → DE-08 자동 역생성
 ```
 gx-pm/                                      # 저장소 루트
 ├── .claude-plugin/
-│   └── marketplace.json                   # 마켓플레이스 등록
+│   └── marketplace.json                   # Claude 마켓플레이스
+├── .agents/plugins/
+│   └── marketplace.json                   # Codex 마켓플레이스
 ├── .github/workflows/
 │   └── test.yml                           # CI — 계약 테스트 실행
 ├── plugins/gx-pm/                          # 플러그인 본체
 │   ├── .claude-plugin/
-│   │   └── plugin.json                    # 플러그인 메타데이터
+│   │   └── plugin.json                    # Claude 매니페스트
+│   ├── .codex-plugin/
+│   │   └── plugin.json                    # Codex 매니페스트
 │   ├── commands/                          # 7개 커맨드
 │   │   ├── gx-명세일괄.md
 │   │   ├── gx-기능명세서.md
@@ -401,7 +433,8 @@ gx-pm/                                      # 저장소 루트
 │   │   ├── gx-추적매트릭스.md
 │   │   ├── gx-테이블정의서.md
 │   │   └── gx-프로젝트설정.md
-│   ├── skills/                            # 17개 스킬
+│   ├── skills/                            # 18개 스킬
+│   │   ├── apply-confirmations/
 │   │   ├── classify-requirements/
 │   │   ├── convert-ddl-to-tablespec/
 │   │   ├── design-test-cases/
@@ -410,6 +443,7 @@ gx-pm/                                      # 저장소 루트
 │   │   ├── extract-requirements/
 │   │   ├── generate-function-spec/
 │   │   ├── generate-unit-test-plan/
+│   │   ├── gx-pm-workflow/                # Codex 실행 진입점
 │   │   ├── id-trace/
 │   │   ├── impact-analysis/
 │   │   ├── load-project-profile/
@@ -418,13 +452,14 @@ gx-pm/                                      # 저장소 루트
 │   │   ├── reconcile-ids/
 │   │   ├── scan-source-index/
 │   │   └── trace-requirements/
-│   ├── templates/                         # 산출물 양식 + 정본 규약 12종
+│   ├── templates/                         # 산출물 양식 + 정본 규약 13종
 │   │   ├── AN-02-requirements-definition.md
 │   │   ├── AN-03-function-spec.md
 │   │   ├── AN-05-traceability-matrix.md
 │   │   ├── DE-08-table-definition.md
 │   │   ├── DE-13-unit-test-plan.md
 │   │   ├── approval-protocol.md
+│   │   ├── confirmation-request.md
 │   │   ├── evidence-rules.md
 │   │   ├── id-naming-rules.md
 │   │   ├── pipeline-protocol.md
@@ -442,6 +477,7 @@ gx-pm/                                      # 저장소 루트
 │   │   ├── fixtures/
 │   │   │   └── requirement-tables.md
 │   │   ├── helpers.py
+│   │   ├── test_codex_compat.py
 │   │   ├── test_export_xlsx.py
 │   │   ├── test_extract_rules.py
 │   │   └── test_plugin_consistency.py

@@ -1,7 +1,7 @@
 # 표준용어 MCP 연계 — DDL·컬럼 표준화 가이드
 
 > gx-pm이 생성하는 테이블정의서(DE-08)의 **DB 컬럼명을 사업부 표준용어사전(`sqi-comn-term` MCP)** 에 맞춰 표준화한다.
-> **이 연계를 위해 도구를 따로 배선할 필요가 없다.** gx-pm 스킬은 `allowed-tools` 제한이 없어, 이 규칙(및 `CLAUDE.md`의 요약 섹션)만 따르면 스킬 실행 중 Claude가 MCP를 그대로 호출해 표준 컬럼을 만든다. 스킬·커맨드·템플릿을 고치면 안 된다는 뜻이 아니다 — v3.0.0 이 DE-08 의 스킬·커맨드·템플릿을 실제로 다시 썼다.
+> **MCP 서버는 사용 환경에 등록해야 한다.** 등록 후에는 gx-pm 스킬에 별도 도구 허용 목록을 추가할 필요가 없다. Claude의 `allowed-tools` 제한이 없으며 Codex 진입 스킬도 세션의 MCP 도구를 사용한다. 이 규칙(및 `CLAUDE.md`의 요약 섹션)을 따르면 표준 컬럼을 만든다. 스킬·커맨드·템플릿을 고치면 안 된다는 뜻이 아니다 — v3.0.0 이 DE-08 의 스킬·커맨드·템플릿을 실제로 다시 썼다.
 
 ## 왜 필요한가
 
@@ -125,6 +125,22 @@ validate_column(["OBSVTR_NM","OBSRVN_YMD","LAT","LOT","USE_YN","REG_DT","MDFCN_D
 
 
 ## 설치 (MCP가 없을 때)
+
+### Codex CLI / 앱
+
+Windows PowerShell에서 사용자 환경에 등록합니다:
+
+```powershell
+codex.cmd mcp add sqi-comn-term --url http://52.78.238.167:8687/api/v1/mcp
+codex.cmd mcp list
+```
+
+사업부 서버 주소가 다르면 URL을 해당 주소로 바꿉니다. macOS/Linux에서는 `codex.cmd` 대신
+`codex`를 사용합니다. 등록 뒤 Codex를 다시 시작하거나 새 대화를 열어 `sqi-comn-term` 도구가
+보이는지 확인한 후 테이블정의서 또는 명세일괄을 다시 실행합니다. 현재 대화에서 도구가 보이지 않으면
+승인 게이트를 건너뛰거나 컬럼명을 추정하지 않습니다.
+
+### Claude Code
 
 `sqi-comn-term` 도구가 세션에 없으면 설치 후 사용한다. (사업부 "공통표준용어사전 MCP 가이드" 기준, **무인증 MVP** — 헤더/토큰 불필요)
 
