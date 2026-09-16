@@ -61,17 +61,31 @@ ID 체계에서 **파생 ID가 전부 사라져** 어떤 ID를 바꿔도 재채�
 
 ### Codex CLI / 앱
 
-저장소를 로컬에 복제한 뒤 저장소 루트에서 실행합니다.
+Codex가 설치된 터미널에서 마켓플레이스를 등록하고 플러그인을 설치합니다. Windows PowerShell은
+`codex.cmd`, macOS/Linux는 `codex`를 사용합니다.
 
 ```powershell
-codex.cmd plugin marketplace add .
+codex.cmd plugin marketplace add bs-koo/gx-pm
 codex.cmd plugin add gx-pm@gx-pm
+codex.cmd plugin list -m gx-pm
 ```
 
-새 Codex 대화에서 `$gx-pm-workflow 프로젝트 설정을 시작해줘`로 프로파일을 만든 뒤,
-`$gx-pm-workflow 명세 5종을 만들어줘`로 진행합니다. 요구사항정의서·기능명세서·
-테이블정의서·단위테스트계획서·추적매트릭스도 같은 스킬에 산출물 이름을 말해 개별 실행할 수 있습니다.
-Codex에서는 Claude의 `/gx-*` 커맨드 대신 이 스킬을 사용합니다.
+로컬 복제본으로 설치하려면 저장소 루트에서 첫 명령만
+`codex.cmd plugin marketplace add .`로 바꿉니다. 설치 후 Codex 앱 또는 CLI에서 **산출물을
+저장할 프로젝트 폴더**를 열고 새 대화를 시작합니다. Codex에서는 Claude의 `/gx-*` 슬래시
+커맨드 대신 `$gx-pm-workflow` 스킬에 작업을 요청합니다.
+
+```text
+$gx-pm-workflow 프로젝트 설정을 시작해줘. RFP와 기존 산출물은 이 폴더에 있어.
+$gx-pm-workflow 명세 5종을 만들어줘.
+```
+
+첫 요청에서 프로젝트 유형(A 신규 구축/B 추가 개발/C 산출물 정비/D 변경 관리), RFP·기존
+산출물·소스코드·DDL 위치를 알려주면 설정이 수월합니다. 두 번째 요청은 AN-02 요구사항정의서,
+AN-03 기능명세서, DE-08 테이블정의서, DE-13 단위테스트계획서, AN-05 추적매트릭스를
+순서대로 다룹니다. 한 문서만 필요하면 같은 스킬에 이름을 말하면 됩니다. 예:
+`$gx-pm-workflow DDL을 근거로 테이블정의서(DE-08)를 만들어줘`.
+각 단계의 선택·승인 요청에는 실제 답을 입력해야 다음 단계로 진행합니다.
 
 테이블정의서와 명세일괄에는 외부 `sqi-comn-term` MCP 연결이 필요합니다.
 Windows PowerShell에서는 아래 명령으로 사업부 표준용어 MCP를 사용자 환경에 등록합니다.
@@ -82,10 +96,9 @@ codex.cmd mcp add sqi-comn-term --url http://52.78.238.167:8687/api/v1/mcp
 codex.cmd mcp list
 ```
 
-등록 후 Codex를 다시 시작하거나 새 대화를 열어 도구가 보이는지 확인합니다.
-macOS/Linux에서는 `codex.cmd` 대신 `codex`를 사용합니다.
-상세 연결 안내는 `plugins/gx-pm/docs/표준용어-mcp-연계.md`를 참조하세요.
-사용자 선택·승인 단계에서는 Codex가 실제 응답을 기다립니다.
+등록 후 Codex를 다시 시작하거나 새 대화를 열어 `sqi-comn-term` 도구가 보이는지 확인한 다음
+테이블정의서 또는 명세일괄을 요청합니다. 연결이 없으면 해당 작업은 선행조건에서 멈춥니다.
+상세 연결 안내는 [표준용어 MCP 연계](plugins/gx-pm/docs/표준용어-mcp-연계.md)를 참조하세요.
 
 ---
 
