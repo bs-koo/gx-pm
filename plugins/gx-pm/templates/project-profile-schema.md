@@ -15,6 +15,7 @@
         ├── ddl.sql             ← DDL 원본 (선택)
         ├── {시스템코드}-*.md   ← 산출물들
         ├── backup/             ← 이전 버전 백업
+        ├── 증적/               ← 내부 증적 (DE-13 수행대장 — xlsx 로 추출하지 않는다)
         ├── testdata/           ← DE-13 입력 파일 (업로드·불러오기 케이스)
         └── xlsx/               ← 엑셀 추출물
 ```
@@ -73,6 +74,7 @@ DE-13 의 `입력` 칸이 그 경로를 가리킨다. 규칙의 정본은
 | 필드 | 타입 | 설명 | 예시 |
 |------|------|------|------|
 | `sourcePath` | string\|null | 소스코드 로컬 경로 | `"D:\\projects\\ehr-system"` |
+| `testSourcePaths` | string[]\|null | `/gx-단위테스트결과반영` 이 테스트를 읽을 개발 레포 경로들. 레포가 여럿이면 모두 적는다. 없으면 `sourcePath` 하나를 쓴다 | `["D:\\projects\\ehr-api", "D:\\projects\\ehr-web"]` |
 | `ddlFile` | string\|null | DDL 파일명 (프로젝트 폴더 내) | `"ddl.sql"` |
 | `existingArtifacts` | string\|null | 기존 산출물 폴더 경로 | `"D:\\docs\\ehr-artifacts"` |
 

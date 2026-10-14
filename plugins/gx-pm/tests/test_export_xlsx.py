@@ -489,15 +489,20 @@ class De13ColumnSsotTest(unittest.TestCase):
         self.mod = load_export_module()
         self.정본 = parse_column_ssot("DE-13-unit-test-plan.md", "본문 컬럼 (정본)")
 
-    def test_정본이_열한_개다(self):
-        self.assertEqual(len(self.정본), 12, f"DE-13 정본이 12개가 아닙니다: {self.정본}")
+    def test_정본이_열세_개다(self):
+        self.assertEqual(len(self.정본), 13, f"DE-13 정본이 13개가 아닙니다: {self.정본}")
 
     def test_정본_순서가_설계와_같다(self):
+        """`사유` 는 `결과` 바로 뒤다 — 상태(Pass·Fail·미구현·미검증)마다 이유를 같은 줄에서 읽는다."""
         self.assertEqual(self.정본, [
             "테스트ID", "연계기능ID", "연계요구사항ID", "요구사항명",
             "사전조건", "입력", "기대결과", "사후조건", "의존성",
-            "테스트담당자", "수행일", "결과",
+            "테스트담당자", "수행일", "결과", "사유",
         ])
+
+    def test_결과는_네_상태다(self):
+        self.assertEqual(self.mod.DOCUMENT_PROFILES["단위테스트계획서"]["dropdowns"][0]["결과"],
+                         ["Pass", "Fail", "미구현", "미검증"])
 
     def test_프로필이_한_시트다(self):
         """27개 검사기준 시트를 폐지했으므로 컬럼 세트는 하나다."""

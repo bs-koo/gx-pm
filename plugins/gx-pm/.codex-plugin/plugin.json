@@ -1,6 +1,6 @@
 {
   "name": "gx-pm",
-  "version": "4.2.0",
+  "version": "4.3.0",
   "description": "공공/SI 프로젝트 요구사항·기능·테이블·단위테스트·추적 산출물을 만드는 PM 플러그인",
   "author": {
     "name": "SQI"

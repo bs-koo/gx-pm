@@ -6,9 +6,9 @@
 
 요구사항 분석부터 기능명세, 테이블 설계, 단위테스트, ID 추적까지
 
-[![Version](https://img.shields.io/badge/version-4.2.0-blue.svg)]()
-[![Skills](https://img.shields.io/badge/skills-18-green.svg)]()
-[![Commands](https://img.shields.io/badge/commands-7-orange.svg)]()
+[![Version](https://img.shields.io/badge/version-4.3.0-blue.svg)]()
+[![Skills](https://img.shields.io/badge/skills-19-green.svg)]()
+[![Commands](https://img.shields.io/badge/commands-8-orange.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 </div>
@@ -133,6 +133,7 @@ codex.cmd mcp list
 | "기능명세 만들어줘" | `/gx-기능명세서` | AN-03 기능명세서 |
 | "DDL로 테이블정의서 만들어줘" | `/gx-테이블정의서` | DE-08 테이블정의서 |
 | "단위테스트 계획 세워줘" | `/gx-단위테스트계획서` | DE-13 단위테스트계획서 |
+| "단위테스트 결과 반영해줘" | `/gx-단위테스트결과반영` | DE-13 결과(Pass·Fail·미구현·미검증)·사유 기입 + 수행대장 (개발 레포 테스트 코드 대조) |
 | "추적매트릭스 확인해줘" | `/gx-추적매트릭스` | AN-05 추적매트릭스 |
 
 ---
@@ -357,12 +358,13 @@ RFP 가 값을 안 준 항목은 AI 가 임의로 정할 수 없습니다. 그�
 | `generate-function-spec` | 요구사항정의서(AN-02) → AN-03 기능명세서. 입력항목·처리내용·출력결과 도출 |
 | `convert-ddl-to-tablespec` | 기존 DDL → DE-08 테이블정의서 역생성. 신규 컬럼만 표준용어사전 근거로 제안 |
 
-### 테스트 (2개)
+### 테스트 (3개)
 
 | 스킬 | 설명 |
 |------|------|
 | `generate-unit-test-plan` | 기능명세서(AN-03)·테이블정의서(DE-08) → DE-13 단위테스트계획서. 기능 축 케이스 도출 |
 | `design-test-cases` | 입력항목·처리내용 → 테스트 케이스. 동등분할·경계값·결정테이블·상태전이, 정상/경계/예외 강제 |
+| `apply-test-results` | 개발 레포의 실제 테스트 코드를 색인해 DE-13 행과 대조하고, 실행 결과로 통과가 확인된 행에 수행 결과를 반영. 신규·보강 케이스는 승인 후 채택, 근거와 수행률은 수행대장에 |
 
 ### 프로젝트 관리 (6개)
 
@@ -438,16 +440,18 @@ gx-pm/                                      # 저장소 루트
 │   │   └── plugin.json                    # Claude 매니페스트
 │   ├── .codex-plugin/
 │   │   └── plugin.json                    # Codex 매니페스트
-│   ├── commands/                          # 7개 커맨드
+│   ├── commands/                          # 8개 커맨드
 │   │   ├── gx-명세일괄.md
 │   │   ├── gx-기능명세서.md
+│   │   ├── gx-단위테스트결과반영.md
 │   │   ├── gx-단위테스트계획서.md
 │   │   ├── gx-요구사항정의서.md
 │   │   ├── gx-추적매트릭스.md
 │   │   ├── gx-테이블정의서.md
 │   │   └── gx-프로젝트설정.md
-│   ├── skills/                            # 18개 스킬
+│   ├── skills/                            # 19개 스킬
 │   │   ├── apply-confirmations/
+│   │   ├── apply-test-results/
 │   │   ├── classify-requirements/
 │   │   ├── convert-ddl-to-tablespec/
 │   │   ├── design-test-cases/
@@ -465,12 +469,13 @@ gx-pm/                                      # 저장소 루트
 │   │   ├── reconcile-ids/
 │   │   ├── scan-source-index/
 │   │   └── trace-requirements/
-│   ├── templates/                         # 산출물 양식 + 정본 규약 13종
+│   ├── templates/                         # 산출물 양식 + 정본 규약 14종
 │   │   ├── AN-02-requirements-definition.md
 │   │   ├── AN-03-function-spec.md
 │   │   ├── AN-05-traceability-matrix.md
 │   │   ├── DE-08-table-definition.md
 │   │   ├── DE-13-unit-test-plan.md
+│   │   ├── DE-13-execution-ledger.md
 │   │   ├── approval-protocol.md
 │   │   ├── confirmation-request.md
 │   │   ├── evidence-rules.md
