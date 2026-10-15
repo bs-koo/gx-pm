@@ -226,13 +226,14 @@ class ArchiveIsolationTest(unittest.TestCase):
 class SurfaceTest(unittest.TestCase):
     """기능 축 전환 후 사용자에게 보이는 표면."""
 
-    def test_커맨드가_일곱_개다(self):
+    def test_커맨드가_여덟_개다(self):
         self.assertEqual(
             sorted(command_names()),
             sorted([
                 "gx-프로젝트설정", "gx-명세일괄",
                 "gx-요구사항정의서", "gx-기능명세서", "gx-테이블정의서",
                 "gx-단위테스트계획서", "gx-추적매트릭스",
+                "gx-단위테스트결과반영",
             ]),
         )
 

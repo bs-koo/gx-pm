@@ -4,11 +4,11 @@
 
 **공공/SI PM의 AI 운영 체제**
 
-요구사항 분석부터 기능명세, 테이블 설계, 단위테스트, ID 추적까지
+요구사항 분석부터 기능명세, 테이블 설계, 단위테스트 계획·결과, ID 추적까지
 
-[![Version](https://img.shields.io/badge/version-4.2.0-blue.svg)]()
-[![Skills](https://img.shields.io/badge/skills-18-green.svg)]()
-[![Commands](https://img.shields.io/badge/commands-7-orange.svg)]()
+[![Version](https://img.shields.io/badge/version-4.3.0-blue.svg)]()
+[![Skills](https://img.shields.io/badge/skills-19-green.svg)]()
+[![Commands](https://img.shields.io/badge/commands-8-orange.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 </div>
@@ -19,7 +19,9 @@
 
 `gx-pm`은 **공공/SI 프로젝트의 PM**을 위한 Claude Code·Codex 플러그인입니다.
 
-RFP를 넣으면 요구사항을 뽑아주고, 요구사항에서 기능(입력항목·처리내용·출력결과)을 도출하고, DDL에서 테이블정의서를 역생성하고, 기능 1건당 단위테스트 케이스를 기계적으로 만들고, 산출물 간 ID가 끊기지 않았는지 추적합니다.
+RFP를 넣으면 요구사항을 뽑아주고, 요구사항에서 기능(입력항목·처리내용·출력결과)을 도출하고, DDL에서 테이블정의서를 역생성하고, 기능 1건당 단위테스트 케이스를 기계적으로 만들고, 산출물 간 ID가 끊기지 않았는지 추적합니다. 시험이 끝나면 개발 레포에 실제로 있는 테스트 코드와 그 실행 결과로 단위테스트결과서를 만듭니다.
+
+**v4.3.0**: `/gx-단위테스트결과반영` 이 생겼습니다. 단위테스트계획서(DE-13)는 그대로 두고, 그 행을 옮긴 **IM-03 단위테스트결과서**에 행마다 `Pass`·`Fail`·`미구현`·`미검증` 과 사유를 적습니다. 근거는 개발 레포의 테스트 코드와 빌드 도구가 남긴 결과 파일(JUnit XML)이라 개발자가 어떤 도구로 일했는지와 상관없습니다. 다시 부를 때마다 결과서를 지금 계획서에 맞추고, 사람이 적은 값은 지키며, 「이 Pass 는 무엇으로 확인했나」의 근거는 내부 수행대장에 남깁니다.
 
 **v3.1.0**: 재생성해도 ID가 밀리지 않습니다. 제약이 비어 경계 케이스가 안 나오는 기능과, 근거가 부족한데 확인 요청이 0건인 상황을 게이트에서 알려줍니다.
 
@@ -78,6 +80,7 @@ codex.cmd plugin list -m gx-pm
 ```text
 $gx-pm-workflow 프로젝트 설정을 시작해줘. RFP와 기존 산출물은 이 폴더에 있어.
 $gx-pm-workflow 명세 5종을 만들어줘.
+$gx-pm-workflow 단위테스트 결과 반영해줘. 개발 레포는 D:\projects\reb-api 랑 D:\projects\reb-web 이야.
 ```
 
 첫 요청에서 프로젝트 유형(A 신규 구축/B 추가 개발/C 산출물 정비/D 변경 관리), RFP·기존
@@ -133,6 +136,7 @@ codex.cmd mcp list
 | "기능명세 만들어줘" | `/gx-기능명세서` | AN-03 기능명세서 |
 | "DDL로 테이블정의서 만들어줘" | `/gx-테이블정의서` | DE-08 테이블정의서 |
 | "단위테스트 계획 세워줘" | `/gx-단위테스트계획서` | DE-13 단위테스트계획서 |
+| "단위테스트 결과 반영해줘" | `/gx-단위테스트결과반영` | 단위테스트결과서 작성·갱신 — 계획서 행 + 결과(Pass·Fail·미구현·미검증)·사유, 수행대장 (개발 레포 테스트 코드 대조, 계획서는 그대로) |
 | "추적매트릭스 확인해줘" | `/gx-추적매트릭스` | AN-05 추적매트릭스 |
 
 ---
@@ -282,6 +286,26 @@ RFP 가 값을 안 준 항목은 AI 가 임의로 정할 수 없습니다. 그�
                                                        /gx-추적매트릭스 (누락 탐지)
 ```
 
+**시험이 끝나면** — 명세일괄 밖에서 따로 부릅니다. 테스트를 다시 돌렸거나 계획서를 고쳤으면 또 부르면 됩니다.
+
+```
+ 개발·시험 (어떤 도구든, 테스트 코드는 레포에 커밋)
+       ↓
+ 전체 테스트 한 번 실행   gradlew test · mvn test · vitest/jest(JUnit 리포터) — 결과 파일은 도구가 자동으로 남김
+       ↓
+ /gx-단위테스트결과반영   IM-03 단위테스트결과서 생성·갱신 (계획서는 그대로, 근거는 증적/ 수행대장)
+       ↓
+ /gx-추적매트릭스         요구사항별 Pass/Fail·미수행을 결과서로 다시 대조
+```
+
+결과반영은 테스트를 실행하지 않고, 테스트를 돌린 폴더에 빌드 도구가 남긴 결과 파일(JUnit XML)을 읽습니다.
+그 폴더에는 마지막 실행분만 남으므로 반영 직전에 전체 테스트를 한 번 돌립니다. 테스트를 읽은 뒤 레포마다
+「테스트 몇 건 중 결과 몇 건」을 보여 주고, 모자라면 레포·폴더별로 돌릴 명령을 안내합니다.
+
+PM 이 받아 둔 레포 사본에는 결과 파일이 없는 것이 정상입니다 — 빌드 도구는 테스트를 돌린 폴더에만 결과
+파일을 남기고 커밋하지 않습니다. 실행 결과까지 붙이려면 테스트를 돌린 작업 폴더(개발 리더 PC·빌드 서버)를
+경로로 주거나, 직접 확인한 행을 승인 화면에서 「통과 확인함」으로 알려 주면 됩니다.
+
 ### C. 산출물 정비 (역방향)
 
 **파이프라인 (권장)**
@@ -313,13 +337,14 @@ RFP 가 값을 안 준 항목은 AI 가 임의로 정할 수 없습니다. 그�
   └→ 기능ID  (B-FN-001)          ← 파생 아님. 독립 채번, N:M 매핑
        ├→ 테이블·컬럼 (DE-08)     ← 입력항목이 컬럼으로 매핑된다
        └→ 테스트ID (B-UT-001)    ← 파생 아님. 독립 채번, N:1 매핑
+            └→ 수행 결과 (IM-03)  ← 같은 테스트ID 로 결과서에 Pass·Fail·미구현·미검증
 ```
 
 **갈래가 둘입니다.** 기능 요구사항은 기능명세를 거쳐 테스트로, 비기능 요구사항은 기능을 거치지 않고 바로 테스트로 갑니다 (DE-13의 `연계기능ID` 공란 행).
 
 **파생 ID가 없습니다.** 어떤 ID도 다른 ID에서 만들어지지 않으므로, ID를 바꿔도 재채번 파급이 없습니다. 연결은 전부 `연계~ID` 열이 맡습니다.
 
-`/gx-추적매트릭스`로 언제든 추적 상태를 확인할 수 있습니다 (모든 유형에서 사용 가능):
+`/gx-추적매트릭스`로 언제든 추적 상태를 확인할 수 있습니다 (모든 유형에서 사용 가능). `Pass/Fail` 은 단위테스트결과서에서 읽고, Pass·Fail 이 한 건도 없으면 `미수행` 입니다:
 
 ```
 | 요구사항ID | 요구사항명 | 상태 | 기능ID | 기능명 | 테이블·컬럼 | 테스트 수 | Pass/Fail | 누락 |
@@ -357,12 +382,13 @@ RFP 가 값을 안 준 항목은 AI 가 임의로 정할 수 없습니다. 그�
 | `generate-function-spec` | 요구사항정의서(AN-02) → AN-03 기능명세서. 입력항목·처리내용·출력결과 도출 |
 | `convert-ddl-to-tablespec` | 기존 DDL → DE-08 테이블정의서 역생성. 신규 컬럼만 표준용어사전 근거로 제안 |
 
-### 테스트 (2개)
+### 테스트 (3개)
 
 | 스킬 | 설명 |
 |------|------|
 | `generate-unit-test-plan` | 기능명세서(AN-03)·테이블정의서(DE-08) → DE-13 단위테스트계획서. 기능 축 케이스 도출 |
 | `design-test-cases` | 입력항목·처리내용 → 테스트 케이스. 동등분할·경계값·결정테이블·상태전이, 정상/경계/예외 강제 |
+| `apply-test-results` | 개발 레포의 실제 테스트 코드와 실행 결과로 DE-13 행을 판정해 IM-03 단위테스트결과서를 만들고 갱신. 계획서는 읽기만 하고, 신규·보강 케이스는 후보로 알림. 근거와 수행률은 수행대장에 |
 
 ### 프로젝트 관리 (6개)
 
@@ -415,9 +441,10 @@ DDL 복사 → /gx-테이블정의서에 붙여넣기 → DE-08 자동 역생성
 | AN-03 | 기능명세서 | `/gx-기능명세서` |
 | DE-08 | 테이블정의서 | `/gx-테이블정의서` |
 | DE-13 | 단위테스트계획서 | `/gx-단위테스트계획서` |
+| IM-03 | 단위테스트결과서 (DE-13 행 + 수행 결과) | `/gx-단위테스트결과반영` |
 | AN-05 | 추적매트릭스 | `/gx-추적매트릭스` |
 
-다섯 문서 모두 **개정이력 시트**를 갖습니다 (`manage-revision-history` 스킬, 정본 `templates/revision-history.md`).
+여섯 문서 모두 **개정이력 시트**를 갖습니다 (`manage-revision-history` 스킬, 정본 `templates/revision-history.md`).
 
 내린 화면 축 산출물(DE-03·DE-05·DE-14·TE-01·ST-01/02·DF-01·IM-03·TE-02·TE-06 등)은 `plugins/gx-pm/archive/`에 보관돼 있습니다. 되살리는 방법은 `plugins/gx-pm/archive/README.md`를 참조하세요.
 
@@ -438,16 +465,18 @@ gx-pm/                                      # 저장소 루트
 │   │   └── plugin.json                    # Claude 매니페스트
 │   ├── .codex-plugin/
 │   │   └── plugin.json                    # Codex 매니페스트
-│   ├── commands/                          # 7개 커맨드
+│   ├── commands/                          # 8개 커맨드
 │   │   ├── gx-명세일괄.md
 │   │   ├── gx-기능명세서.md
+│   │   ├── gx-단위테스트결과반영.md
 │   │   ├── gx-단위테스트계획서.md
 │   │   ├── gx-요구사항정의서.md
 │   │   ├── gx-추적매트릭스.md
 │   │   ├── gx-테이블정의서.md
 │   │   └── gx-프로젝트설정.md
-│   ├── skills/                            # 18개 스킬
+│   ├── skills/                            # 19개 스킬
 │   │   ├── apply-confirmations/
+│   │   ├── apply-test-results/
 │   │   ├── classify-requirements/
 │   │   ├── convert-ddl-to-tablespec/
 │   │   ├── design-test-cases/
@@ -465,12 +494,14 @@ gx-pm/                                      # 저장소 루트
 │   │   ├── reconcile-ids/
 │   │   ├── scan-source-index/
 │   │   └── trace-requirements/
-│   ├── templates/                         # 산출물 양식 + 정본 규약 13종
+│   ├── templates/                         # 산출물 양식 + 정본 규약 15종
 │   │   ├── AN-02-requirements-definition.md
 │   │   ├── AN-03-function-spec.md
 │   │   ├── AN-05-traceability-matrix.md
 │   │   ├── DE-08-table-definition.md
 │   │   ├── DE-13-unit-test-plan.md
+│   │   ├── DE-13-execution-ledger.md
+│   │   ├── IM-03-unit-test-result.md
 │   │   ├── approval-protocol.md
 │   │   ├── confirmation-request.md
 │   │   ├── evidence-rules.md
@@ -485,7 +516,8 @@ gx-pm/                                      # 저장소 루트
 │   │   ├── templates/
 │   │   └── README.md                      # 되살리는 방법
 │   ├── utils/
-│   │   └── export-xlsx.py                 # 마크다운 → xlsx 변환
+│   │   ├── export-xlsx.py                 # 마크다운 → xlsx 변환
+│   │   └── test-evidence.py               # 테스트 색인 · 결과서·수행대장 쓰기
 │   ├── tests/                             # unittest 계약 테스트
 │   │   ├── fixtures/
 │   │   │   └── requirement-tables.md
@@ -493,7 +525,8 @@ gx-pm/                                      # 저장소 루트
 │   │   ├── test_codex_compat.py
 │   │   ├── test_export_xlsx.py
 │   │   ├── test_extract_rules.py
-│   │   └── test_plugin_consistency.py
+│   │   ├── test_plugin_consistency.py
+│   │   └── test_test_evidence.py
 │   ├── docs/
 │   │   └── 표준용어-mcp-연계.md
 │   ├── CLAUDE.md                          # 플러그인 지침 (세션마다 로드)
@@ -535,6 +568,16 @@ DB 접속정보는 받지 않습니다. DataGrip에서는 스키마 우클릭 �
 <summary>비기능 요구사항은 어떻게 검증하나요?</summary>
 
 기능을 거치지 않고 바로 테스트로 갑니다. `/gx-단위테스트계획서`가 DE-13에 `연계기능ID`가 공란인 행을 만들어 비기능 요구사항을 직접 검증합니다.
+</details>
+
+<details>
+<summary>단위테스트 수행 결과는 어디에 적나요?</summary>
+
+계획서가 아니라 **IM-03 단위테스트결과서**에 적습니다. 시험이 끝나면 전체 테스트를 한 번 돌리고, 그 폴더를 `/gx-단위테스트결과반영` 에 경로로 주세요.
+계획서의 행을 옮긴 결과서에 행마다 `Pass`·`Fail`·`미구현`·`미검증` 과 사유가 적히고, 계획서 원본은 바뀌지 않습니다.
+테스트가 있어도 실행 결과가 없으면 `미검증 — 실행 결과 없음` 이고, Pass 는 실행 결과나 PM 의 확인이 있을 때만 적습니다.
+계획서에 없는 테스트 케이스는 후보로만 알려 주니, 넣을 것은 `/gx-단위테스트계획서` 로 계획서에 추가한 뒤 다시 반영하면
+결과서에 그 행이 생깁니다. 「이 Pass 는 무엇으로 확인했나」의 근거는 프로젝트 폴더 `증적/` 의 수행대장에 남습니다.
 </details>
 
 <details>

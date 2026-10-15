@@ -30,6 +30,17 @@ def load_export_module() -> ModuleType:
     return module
 
 
+def load_util(file_name: str) -> ModuleType:
+    """utils/ 의 하이픈 이름 스크립트를 모듈로 로드한다 (예: test-evidence.py)."""
+    path = PLUGIN_ROOT / "utils" / file_name
+    spec = importlib.util.spec_from_file_location(path.stem.replace("-", "_"), path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"모듈 스펙을 만들 수 없습니다: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def read_docs() -> list[tuple[Path, str]]:
     """플러그인의 모든 마크다운 문서를 (경로, 본문) 쌍으로 반환한다.
 
@@ -168,7 +179,7 @@ def parse_enum_ssot(template_name: str, section_title: str, column: str) -> list
        다시 나온다 — 자르지 않으면 4값이 된다.
     2. 그 구간의 백틱 토큰을 순서대로 뽑고, 그래도 겹치면 첫 등장만 남긴다.
 
-    산문이 앞에 붙어도 무방하다 (DE-13 `결과` 는 "계획서는 공란. `Pass` / `Fail`").
+    산문이 앞에 붙어도 무방하다 (DE-13 `결과` 는 "계획서는 공란. `Pass` / `Fail` / `미구현` / `미검증` — …").
     """
     import re
 
