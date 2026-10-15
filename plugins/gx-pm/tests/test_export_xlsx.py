@@ -46,7 +46,7 @@ class LoaderTest(unittest.TestCase):
         self.mod = load_export_module()
 
     def test_모듈이_로드되고_산출물_프로필을_노출한다(self):
-        """5종 + 개정이력 + 확인요청서 = 7개다.
+        """5종 + 개정이력 + 확인요청서 + 단위테스트결과서 = 8개다.
 
         화면 축 산출물의 프로필을 지우지 않으면 그 컬럼명을 어떤 문서도 만들지 않게 되어
         test_모든_프로필_컬럼이_문서에_존재한다 가 잡는다. 되살리는 법은 archive/README.md.
@@ -59,7 +59,7 @@ class LoaderTest(unittest.TestCase):
             sorted([
                 "개정이력", "요구사항정의서", "기능명세서",
                 "테이블정의서", "단위테스트계획서", "추적매트릭스",
-                "확인요청서",
+                "확인요청서", "단위테스트결과서",
             ]),
         )
 
@@ -489,15 +489,15 @@ class De13ColumnSsotTest(unittest.TestCase):
         self.mod = load_export_module()
         self.정본 = parse_column_ssot("DE-13-unit-test-plan.md", "본문 컬럼 (정본)")
 
-    def test_정본이_열세_개다(self):
-        self.assertEqual(len(self.정본), 13, f"DE-13 정본이 13개가 아닙니다: {self.정본}")
+    def test_정본이_열두_개다(self):
+        """수행 결과의 `사유` 는 계획서가 아니라 단위테스트결과서에 있다 — 계획서는 원래 12열이다."""
+        self.assertEqual(len(self.정본), 12, f"DE-13 정본이 12개가 아닙니다: {self.정본}")
 
     def test_정본_순서가_설계와_같다(self):
-        """`사유` 는 `결과` 바로 뒤다 — 상태(Pass·Fail·미구현·미검증)마다 이유를 같은 줄에서 읽는다."""
         self.assertEqual(self.정본, [
             "테스트ID", "연계기능ID", "연계요구사항ID", "요구사항명",
             "사전조건", "입력", "기대결과", "사후조건", "의존성",
-            "테스트담당자", "수행일", "결과", "사유",
+            "테스트담당자", "수행일", "결과",
         ])
 
     def test_결과는_네_상태다(self):
@@ -520,6 +520,29 @@ class De13ColumnSsotTest(unittest.TestCase):
         self.assertEqual(
             self.mod.DOCUMENT_PROFILES["단위테스트계획서"]["columns"][0], self.정본
         )
+
+
+class De13ResultColumnSsotTest(unittest.TestCase):
+    """단위테스트결과서 컬럼 정본은 templates/DE-13-unit-test-result.md 다 — 계획서 열에 `사유` 가 붙는다."""
+
+    def setUp(self):
+        self.mod = load_export_module()
+        self.정본 = parse_column_ssot("DE-13-unit-test-result.md", "본문 컬럼 (정본)")
+
+    def test_계획서_열_뒤에_사유가_붙는다(self):
+        계획서 = parse_column_ssot("DE-13-unit-test-plan.md", "본문 컬럼 (정본)")
+        self.assertEqual(self.정본, 계획서 + ["사유"])
+
+    def test_프로필이_정본과_같다(self):
+        self.assertEqual(self.mod.DOCUMENT_PROFILES["단위테스트결과서"]["columns"][0], self.정본)
+
+    def test_결과_목록이_정본과_같다(self):
+        self.assertEqual(self.mod.DOCUMENT_PROFILES["단위테스트결과서"]["dropdowns"][0]["결과"],
+                         parse_enum_ssot("DE-13-unit-test-result.md", "본문 컬럼 (정본)", "결과"))
+
+    def test_파일명으로_결과서를_알아본다(self):
+        self.assertEqual(self.mod.detect_document_type("REB-단위테스트결과서.md"), "단위테스트결과서")
+        self.assertEqual(self.mod.detect_document_type("REB-단위테스트계획서.md"), "단위테스트계획서")
 
 
 class SheetTitleProfileTest(unittest.TestCase):

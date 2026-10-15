@@ -7,16 +7,16 @@ apply-test-results 스킬이 쓴다. 이 스크립트는 **판단하지 않는�
 
   index : 개발 레포의 테스트 메서드를 색인한다 — 이름·설명·본문 값·마지막 커밋, 그리고 실행 근거
           (빌드 도구가 남긴 JUnit XML, gx-tdd 를 썼으면 verify 기록). 레포 여러 개를 함께 받는다
-  plan  : DE-13 md 의 행을 읽는다 (〃 해소, 행 지문, 칸 수 검사, 다음 테스트ID)
-  apply : 승인된 변경을 DE-13 md 에 쓴다 (셀 기입, 신규 행 삽입, 반영 전 사본)
-  ledger: 수행대장을 다시 쓴다 — 판정만 받고 행 지문·건수·수행률은 계획서에서 센다
-          (plan --ledger 는 행마다 지난 판정과 견준 사실을 붙인다: 누가 썼나·케이스 변경·승계)
+  plan  : DE-13 계획서 행을 읽는다 (〃 해소, 행 지문, 칸 수 검사, 다음 테스트ID). 계획서는 읽기만 한다.
+          --result 를 주면 결과서의 지금 수행 칸을, --ledger 를 주면 지난 판정과 견준 사실(누가 썼나·
+          케이스 변경·승계)을 행마다 붙인다
+  write : 승인된 판정으로 단위테스트결과서(계획서 행 + 수행 칸)와 수행대장을 함께 쓴다.
+          행 지문·건수·수행률은 도구가 센다. --dry-run 은 쓰지 않고 바뀔 내용만 알린다
 
 예시:
   python test-evidence.py index --source D:/projects/reb-api --source D:/projects/reb-web --out tests.json
-  python test-evidence.py plan --de13 REB-단위테스트계획서.md --out plan.json
-  python test-evidence.py apply --de13 REB-단위테스트계획서.md --changes changes.json
-  python test-evidence.py ledger --de13 REB-단위테스트계획서.md --ledger 증적/REB-단위테스트수행대장.md --changes ledger.json
+  python test-evidence.py plan --de13 REB-단위테스트계획서.md --result REB-단위테스트결과서.md --ledger 증적/REB-단위테스트수행대장.md --out plan.json
+  python test-evidence.py write --de13 REB-단위테스트계획서.md --result REB-단위테스트결과서.md --ledger 증적/REB-단위테스트수행대장.md --changes changes.json [--dry-run]
 """
 from __future__ import annotations
 
@@ -717,155 +717,132 @@ def _last_version(lines: list[str]) -> str:
     return version
 
 
-def read_plan(md: Path, ledger: Path | None = None) -> dict:
-    """DE-13 행을 읽는다. 수행대장을 주면 행마다 지난 판정과 견준 사실(누가 썼나·케이스 변경·승계)을 붙인다."""
+def _load(md: Path) -> dict:
+    """표가 있는 산출물 md 를 읽는다. 줄바꿈 변환 없이 읽어야 원래 줄바꿈을 지킬 수 있다."""
+    with Path(md).open(encoding="utf-8", newline="") as fh:
+        text = fh.read()
+    lines = text.splitlines()
+    head, rows, head_line = _table(lines)
+    end = head_line + 1
+    while end < len(lines) and lines[end].lstrip().startswith("|"):
+        end += 1
+    return {"text": text, "lines": lines, "head": head, "head_line": head_line, "table_end": end,
+            "recs": _resolve(head, rows), "newline": "\r\n" if "\r\n" in text else "\n"}
+
+
+def _hash(path: Path) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()[:16]
+
+
+def _basis_version(lines: list[str]) -> str:
+    for line in lines:
+        m = re.match(r"^>\s*근거:.*?DE-13\s*v(\d+(?:\.\d+)?)", line)
+        if m:
+            return m.group(1)
+    return ""
+
+
+def _revisions(lines: list[str]) -> list[tuple[str, str]]:
+    """개정이력 표의 (버전, 개정 내용)."""
+    out = []
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith("|") and _split_row(line)[:2] == ["버전", "개정일"]:
+            head = _split_row(line)
+            for nxt in lines[i + 1:]:
+                if not nxt.lstrip().startswith("|"):
+                    break
+                cells = dict(zip(head, _split_row(nxt)))
+                if cells.get("버전") and not re.fullmatch(r":?-{3,}:?", cells["버전"]):
+                    out.append((cells["버전"], cells.get("개정 내용", "")))
+            break
+    return out
+
+
+def _mentions(tid: str, text: str) -> bool:
+    """개정 내용이 이 테스트ID 를 가리키나 — `REB-UT-001~003` 같은 범위도 센다."""
+    if tid in text:
+        return True
+    m = re.match(r"^(.*?)(\d+)$", tid)
+    if not m:
+        return False
+    prefix, num = m.group(1), int(m.group(2))
+    return any(int(a) <= num <= int(b) for a, b in re.findall(re.escape(prefix) + r"(\d+)\s*~\s*(?:" + re.escape(prefix) + r")?(\d+)", text))
+
+
+def read_plan(md: Path, result: Path | None = None, ledger: Path | None = None) -> dict:
+    """DE-13 계획서 행을 읽는다 — 읽기만 한다. 결과서를 주면 행마다 지금 결과서의 수행 칸을, 수행대장을
+    주면 지난 판정과 견준 사실(누가 썼나·케이스 변경·승계)을 붙인다."""
     md = Path(md)
     if not md.is_file():
         raise InputError(f"DE-13 파일이 없습니다: {md}")
-    text = md.read_text(encoding="utf-8")
-    lines = text.splitlines()
-    head, rows, _ = _table(lines)
-    recs = _resolve(head, rows)
+    doc = _load(md)
     out_rows = []
-    for r in recs:
-        row = {h: r[h] for h in head}
+    for r in doc["recs"]:
+        row = {h: r[h] for h in doc["head"]}
         row["fingerprint"] = fingerprint(r)
         row["malformed"] = r["_malformed"]
         out_rows.append(row)
     backup = md.parent / "backup"
     older = [p.read_text(encoding="utf-8", errors="replace") for p in sorted(backup.iterdir())
              if p.suffix == ".md" and p.name.startswith(md.stem)] if backup.is_dir() else []
-    data = {"columns": head, "rows": out_rows, "last_version": _last_version(lines),
-            "next_id": _next_id([r["테스트ID"] for r in recs], [text, *older]),
-            "malformed": [r["테스트ID"] for r in recs if r["_malformed"]]}
+    ids = [r["테스트ID"] for r in doc["recs"]]
+    data = {"columns": doc["head"], "rows": out_rows, "last_version": _last_version(doc["lines"]),
+            "next_id": _next_id(ids, [doc["text"], *older]),
+            "malformed": [r["테스트ID"] for r in doc["recs"] if r["_malformed"]],
+            "duplicates": sorted({t for t in ids if ids.count(t) > 1}), "plan_hash": _hash(md),
+            "revisions": _revisions(doc["lines"])}
+    if result is not None:
+        _attach_result(data, Path(result))
     if ledger is not None:
         _compare(data, Path(ledger))
     return data
 
 
-# ---------- apply ----------
+# ---------- 결과서·수행대장 ----------
 
-RESULTS = ("", "Pass", "Fail", "미구현", "미검증")  # DE-13 결과 칸이 받는 값 (templates/DE-13-unit-test-plan.md §결과 상태)
-
-
-def _value_errors(tid: str, cols: dict) -> list[str]:
-    errors = [f"{tid}: '{c}' 값이 문자열이 아닙니다" for c, v in cols.items() if not isinstance(v, str)]
-    if cols.get("결과", "") not in RESULTS:
-        errors.append(f"{tid}: 결과는 {'/'.join(r for r in RESULTS if r)} 또는 빈칸이어야 합니다: '{cols['결과']}'")
-    return errors
-
-
-def apply_plan(md: Path, changes: dict) -> dict:
-    """승인된 변경만 쓴다. 검증에 하나라도 걸리면 파일을 건드리지 않는다."""
-    md = Path(md)
-    if not md.is_file():
-        raise InputError(f"DE-13 파일이 없습니다: {md}")
-    with md.open(encoding="utf-8", newline="") as fh:  # 줄바꿈 변환 없이 읽어야 원래 줄바꿈을 알 수 있다
-        text = fh.read()
-    newline = "\r\n" if "\r\n" in text else "\n"
-    lines = text.splitlines()
-    head, rows, head_line = _table(lines)
-    recs = _resolve(head, rows)
-    by_id = {r["테스트ID"]: r for r in recs}
-    updates = changes.get("update", {}) or {}
-    appends = changes.get("append", []) or []
-    errors = []
-    # 옛 양식에 없는 열(사유 등)은 결과 바로 뒤에 넣는다 — 모든 행을 다시 써야 하므로 깨진 행이 있으면 하지 않는다
-    adds = [c for c in (changes.get("add_columns") or []) if c not in head]
-    if adds and any(r["_malformed"] for r in recs):
-        errors.append("칸 수가 머리글과 다른 행이 있어 열을 더할 수 없습니다 — 표를 먼저 고치세요: "
-                      + ", ".join(r["테스트ID"] for r in recs if r["_malformed"]))
-    if adds:
-        pos = head.index("결과") + 1 if "결과" in head else len(head)
-        head = head[:pos] + adds + head[pos:]
-        for r in recs:
-            r["_raw"] = {**r["_raw"], **{c: "" for c in adds}}
-            r.update({c: "" for c in adds})
-    fingerprints = changes.get("fingerprints") or {}
-    for tid, cols in updates.items():
-        if tid not in by_id:
-            errors.append(f"계획서에 없는 테스트ID: {tid}")
-        elif by_id[tid]["_malformed"]:
-            errors.append(f"{tid}: 칸 수가 머리글과 다른 행입니다 — 표를 먼저 고치세요")
-        if tid not in fingerprints:
-            errors.append(f"{tid}: 대조 때 읽은 행 지문이 없습니다 (changes.json 의 fingerprints)")
-        errors += [f"{tid}: 없는 열 '{c}'" for c in cols if c not in head]
-        errors += _value_errors(tid, cols)
-    seen = set(by_id)
-    for row in appends:
-        tid = row.get("테스트ID", "")
-        if not tid or tid in seen:
-            errors.append(f"신규 행 테스트ID 가 비었거나 이미 있습니다: '{tid}'")
-        seen.add(tid)
-        errors += [f"{tid}: 없는 열 '{c}'" for c in row if c not in head]
-        errors += _value_errors(tid, row)
-    # 승인 화면을 만든 뒤 케이스가 바뀌었으면 그 승인은 지금 케이스에 대한 것이 아니다
-    for tid, fp in fingerprints.items():
-        if tid in by_id and fingerprint(by_id[tid]) != fp:
-            errors.append(f"{tid}: 승인 뒤 케이스 내용이 바뀌었습니다 — 다시 대조하세요")
-    if errors:
-        raise InputError("; ".join(errors))
-
-    cells = {r["_line"]: [r["_raw"][h] for h in head] for r in recs}
-    order = [r["_line"] for r in recs]
-    changed: set[int] = set(order) if adds else set()
-    touched: set[str] = set()  # 값이 실제로 바뀐 행 — update 에 넣은 행 수와 다르다
-    for tid, cols in updates.items():
-        rec = by_id[tid]
-        idx = order.index(rec["_line"])
-        for col, value in cols.items():
-            c = head.index(col)
-            if cells[rec["_line"]][c] == value:
-                continue
-            # 이 셀을 〃 로 가리키던 아래 행은 원래 뜻을 명시해 둔다
-            for nxt in recs[idx + 1:]:
-                if nxt["_raw"][col] != DITTO or nxt.get("연계기능ID") != rec.get("연계기능ID"):
-                    break
-                if nxt["_malformed"]:
-                    raise InputError(f"{nxt['테스트ID']}: 칸 수가 머리글과 다른 행이 {tid} 를 〃 로 가리킵니다 — 표를 먼저 고치세요")
-                if cells[nxt["_line"]][c] == DITTO:
-                    cells[nxt["_line"]][c] = rec[col]
-                    changed.add(nxt["_line"])
-            cells[rec["_line"]][c] = value
-            rec["_raw"][col] = value
-            changed.add(rec["_line"])
-            touched.add(tid)
-    out = list(lines)
-    for line_no in changed:  # 바뀐 행만 다시 쓴다 — 나머지는 원문 그대로 두어 diff 가 번지지 않게
-        out[line_no] = _join_row(cells[line_no])
-    if adds:
-        out[head_line] = _join_row(head)
-        if head_line + 1 < len(out) and re.fullmatch(r"\|?(\s*:?-{3,}:?\s*\|)+\s*", out[head_line + 1].strip()):
-            out[head_line + 1] = "|" + "---|" * len(head)
-    inserted: dict[int, list[str]] = {}
-    for row in appends:
-        fn = row.get("연계기능ID", "")
-        same = [r["_line"] for r in recs if r.get("연계기능ID") == fn and fn]
-        anchor = max(same) if same else order[-1]
-        inserted.setdefault(anchor, []).append(_join_row([row.get(h, "") for h in head]))
-    for anchor in sorted(inserted, reverse=True):
-        out[anchor + 1:anchor + 1] = inserted[anchor]
-    body = newline.join(out) + (newline if text.endswith(("\n", "\r\n")) else "")
-    try:
-        data = body.encode("utf-8")  # 파일을 열기 전에 인코딩한다 — 열고 나서 실패하면 계획서가 빈 파일로 남는다
-    except UnicodeEncodeError as exc:
-        raise InputError(f"UTF-8 로 쓸 수 없는 값이 있습니다: {exc}") from exc
-    # 제자리에서 고치므로 반영 전 원본을 남긴다. 같은 날 사본이 있으면 그날 처음 원본이라 덮지 않는다
-    copy = md.parent / "backup" / f"{md.stem}_{datetime.now():%y%m%d}.md"
-    if not copy.exists():
-        copy.parent.mkdir(exist_ok=True)
-        copy.write_bytes(text.encode("utf-8"))
-    md.write_bytes(data)  # 바이트로 쓴다 — Windows 텍스트 모드가 \n 을 \r\n 으로 바꾸지 않게
-    return {"updated": len(touched), "appended": len(appends), "backup": f"backup/{copy.name}"}
-
-
-# ---------- ledger ----------
-
+RESULTS = ("Pass", "Fail", "미구현", "미검증")  # 결과 칸이 받는 값 (templates/DE-13-unit-test-result.md §결과 상태)
+STATES = RESULTS
+RESULT_COLS = ("테스트담당자", "수행일", "결과", "사유")  # 결과서에서 수행이 채우는 칸 — 나머지는 계획서 원문
+REVISION_HEAD = ["버전", "개정일", "개정 사유", "개정 내용", "작성자", "승인자"]
+REVISION_REASONS = ("신규", "추가", "변경", "삭제", "보완")  # templates/revision-history.md
+HUMAN_NO_REASON = "기존 기입 — 사유 미기재"
+CONTROL = re.compile(r"[\x00-\x09\x0b-\x1f\x7f]")  # 줄바꿈 말고는 표 칸에 들어갈 수 없다
 LEDGER_COLS = ["테스트ID", "상태", "사유", "근거", "수행일", "담당자", "행 지문", "비고"]
-HISTORY_COLS = ["반영일", "DE-13 버전", "Pass", "Fail", "미구현", "미검증", "수행률", "신규", "보강", "소스 기준"]
-STATES = RESULTS[1:]
+HISTORY_COLS = ["반영일", "계획서 버전", "결과서 버전", "Pass", "Fail", "미구현", "미검증", "수행률",
+                "신규 후보", "보강 후보", "소스 기준"]
 NOT_UNIT = ("비기능", "기준값 미확정", "제외")  # 수행률 분모에서 빼는 사유 첫머리 — 단위 시험으로 판정하지 않는 행
 INHERITED = ("제외", "PM 확인")  # 다음 반영에 넘겨받는 사람의 판단
+
+
+def _attach_result(data: dict, path: Path) -> None:
+    info = {"path": path.as_posix(), "exists": path.is_file(), "hash": "", "last_version": "", "basis_version": "",
+            "malformed": [], "only": [], "xlsx_newer": False}
+    current: dict[str, dict] = {}
+    if info["exists"]:
+        doc = _load(path)
+        info.update(hash=_hash(path), last_version=_last_version(doc["lines"]), basis_version=_basis_version(doc["lines"]))
+        for r in doc["recs"]:
+            if r["_malformed"]:
+                info["malformed"].append(r["테스트ID"])
+            else:
+                current[r["테스트ID"]] = r
+        plan_ids = {row["테스트ID"] for row in data["rows"]}
+        info["only"] = [t for t in current if t not in plan_ids]
+        # md 가 원본이다 — xlsx 를 직접 고친 내용은 다음 추출 때 사라진다
+        md_time = path.stat().st_mtime
+        info["xlsx_newer"] = any(x.is_file() and x.stat().st_mtime > md_time + 2
+                                 for x in (path.parent / "xlsx" / f"{path.stem}.xlsx", path.with_suffix(".xlsx")))
+    cases = [h for h in data["columns"] if h not in RESULT_COLS and h != "테스트ID"]
+    for row in data["rows"]:
+        got = current.get(row["테스트ID"])
+        row["in_result"] = got is not None
+        # 결과서의 케이스 칸은 다음 쓰기에서 계획서 원문으로 돌아간다 — 바꾸려면 계획서를 고쳐야 한다
+        row["result_case_edited"] = [h for h in cases if got is not None and h in got and got[h] != row.get(h, "")]
+        row["result_fingerprint"] = fingerprint(got) if got is not None else ""
+        source = got if got is not None else row
+        for c in RESULT_COLS:
+            row[c] = source.get(c, "")
+    data["result"] = info
 
 
 def read_ledger(path: Path) -> dict:
@@ -907,7 +884,7 @@ def read_ledger(path: Path) -> dict:
 
 def _written_by(row: dict, prev: dict | None) -> str:
     """결과·사유·수행일·담당자를 누가 썼나. 지난 수행대장과 네 칸이 같을 때만 반영이 쓴 값이다."""
-    mine = (row.get("결과", ""), row.get("사유", ""), row.get("수행일", ""), row.get("테스트담당자", ""))
+    mine = tuple(row.get(c, "") for c in ("결과", "사유", "수행일", "테스트담당자"))
     if not any(mine):
         return "empty"
     if prev and mine == (prev.get("상태", ""), prev.get("사유", ""), prev.get("수행일", ""), prev.get("담당자", "")):
@@ -926,83 +903,267 @@ def _compare(data: dict, ledger: Path) -> None:
         row["case_changed"] = bool(prev and prev.get("행 지문") and prev["행 지문"] != row["fingerprint"])
         first = re.split(r"\s[—–-]\s", (prev or {}).get("사유", ""), maxsplit=1)[0].strip()
         row["inherit"] = first if first in INHERITED and not row["case_changed"] else ""
+        # 결과서의 케이스 칸이 지난 쓰기 때와 같으면 계획서와 다른 것은 계획서가 바뀐 탓이다 — 결과서 손 수정이 아니다
+        if prev and prev.get("행 지문") and row.get("result_fingerprint") == prev["행 지문"]:
+            row["result_case_edited"] = []
     data["ledger"] = {k: led[k] for k in ("path", "exists", "project", "mapping", "history")}
     data["ledger"]["ledger_only"] = [t for t in led["rows"] if t not in ids]
+    # 결과서가 수행대장의 마지막 기록보다 앞서 있다 — 손으로 고쳤거나 지난 반영이 끝까지 가지 못했다
+    last = (led["history"][-1].get("결과서 버전", "") if led["history"] else "")
+    res = data.get("result") or {}
+    data["ledger"]["stale"] = bool(last and res.get("exists") and res.get("last_version")
+                                   and last != res["last_version"])
+    # 지난 반영 뒤 고친 케이스인데 그 뒤의 계획서 개정이력 어디에도 그 ID 가 없다 — PM 이 손으로 고쳤다
+    base = led["history"][-1].get("계획서 버전", "") if led["history"] else ""
+    newer = [text for ver, text in data.get("revisions", []) if _version(ver) > _version(base)] if base else []
+    data["ledger"]["unrecorded"] = [row["테스트ID"] for row in data["rows"]
+                                    if row["case_changed"] and not any(_mentions(row["테스트ID"], t) for t in newer)] if base else []
 
 
-def write_ledger(md: Path, path: Path, changes: dict) -> dict:
-    """수행대장을 다시 쓴다. 판정(상태·사유·근거·비고)만 받고, 행 지문·건수·수행률은 계획서에서 직접 센다."""
-    path = Path(path)
-    plan = read_plan(md)
-    led = read_ledger(path)
-    rows = changes.get("rows") or {}
-    ids = [r["테스트ID"] for r in plan["rows"]]
-    project = led["project"] or changes.get("project") or ""
-    errors = []
-    if not project:
-        errors.append("사업명이 없습니다 (changes.json 의 project)")
-    if not re.fullmatch(r"\d{4}\.\d{2}\.\d{2}", str(changes.get("date", ""))):
-        errors.append(f"반영일은 YYYY.MM.DD 여야 합니다: '{changes.get('date', '')}'")
-    missing, extra = [t for t in ids if t not in rows], [t for t in rows if t not in ids]
-    if missing:
-        more = f" 외 {len(missing) - 10}건" if len(missing) > 10 else ""
-        errors.append("수행 현황에 빠진 행: " + ", ".join(missing[:10]) + more)
-    if extra:
-        errors.append("계획서에 없는 행: " + ", ".join(extra[:10]))
-    for r in plan["rows"]:
-        tid, got = r["테스트ID"], rows.get(r["테스트ID"])
-        if got is None:
-            continue
-        if not all(isinstance(v, str) for v in got.values()):
-            errors.append(f"{tid}: 값이 문자열이 아닙니다")
-            continue
-        if got.get("상태") not in STATES:
-            errors.append(f"{tid}: 상태는 {'/'.join(STATES)} 중 하나여야 합니다: '{got.get('상태', '')}'")
-        if not got.get("사유", "").strip():
-            errors.append(f"{tid}: 사유가 비었습니다")
-        if r.get("결과", "") not in STATES:
-            errors.append(f"{tid}: 계획서 결과 칸이 네 상태가 아닙니다 — 계획서 반영을 먼저 끝내세요")
-        doc = (r.get("결과", ""), r.get("사유", ""), r.get("수행일", ""), r.get("테스트담당자", ""))
-        mine = (got.get("상태", ""), got.get("사유", ""), got.get("수행일", ""), got.get("담당자", ""))
-        # 다르면 다음 반영 때 사람 값으로 가려진다 — 일부러 둔 것(사람 값 유지)이 아니면 반영이 덜 된 것이다
-        if doc != mine and "유지" not in got.get("비고", ""):
-            errors.append(f"{tid}: 계획서 값과 다릅니다 — 사람 값을 유지한 행이면 비고에 '기존 기입 유지(…)' 를 적으세요")
-    if errors:
-        raise InputError("; ".join(errors))
+def _version(text: str) -> float:
+    try:
+        return float(text)
+    except ValueError:
+        return 0.0
 
-    states = [r["결과"] for r in plan["rows"]]
+
+def _rate(states: list[str], reasons: list[str]) -> tuple[dict, str]:
     counts = {s: states.count(s) for s in STATES}
-    denom = len(states) - sum(1 for r in plan["rows"] if r.get("사유", "").startswith(NOT_UNIT))
+    denom = len(states) - sum(1 for why in reasons if why.startswith(NOT_UNIT))
     rate = f"{int(100 * counts['Pass'] / denom + 0.5)}% ({counts['Pass']}/{denom})" if denom else "-"
+    return counts, rate
+
+
+def _doc_name(lines: list[str]) -> str:
+    title = next((l for l in lines if l.startswith("# ")), "")
+    return title.split(" — ", 1)[1].strip() if " — " in title else ""
+
+
+def _result_heading(lines: list[str], head_line: int) -> str:
+    heading = next((lines[i] for i in range(head_line - 1, -1, -1) if lines[i].startswith("## ")), "")
+    return heading.replace("단위테스트계획", "단위테스트결과") if "단위테스트계획" in heading else "## 단위테스트결과"
+
+
+def _set_basis(lines: list[str], basis: str) -> None:
+    for i, line in enumerate(lines):
+        if re.match(r"^>\s*근거:", line):
+            lines[i] = basis
+            return
+    at = next((i + 1 for i, l in enumerate(lines) if l.startswith("> 생성:")), None)
+    if at is None:
+        at = next((i + 1 for i, l in enumerate(lines) if l.startswith("# ")), 0)
+        lines[at:at] = ["", basis]
+        return
+    lines.insert(at, basis)
+
+
+def _append_revision(lines: list[str], row: str) -> None:
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith("|") and _split_row(line)[:2] == REVISION_HEAD[:2]:
+            j = i + 1
+            while j < len(lines) and lines[j].lstrip().startswith("|"):
+                j += 1
+            lines.insert(j, row)
+            return
+    at = next((i for i, l in enumerate(lines) if l.startswith("## ")), len(lines))
+    lines[at:at] = ["## 개정이력", "", _join_row(REVISION_HEAD), "|------|--------|----------|----------|--------|--------|", row, ""]
+
+
+def _ledger_text(led: dict, project: str, changes: dict, rows: list[list[str]], counts: dict, rate: str,
+                 plan_ver: str, res_ver: str) -> str:
     mapping = dict(led["mapping"])
     for author, name in (changes.get("mapping") or {}).items():
         mapping.setdefault(author, name)  # 쌓기만 한다 — 지난 매핑은 고치지 않는다
-    entry = _join_row([changes["date"], plan["last_version"], *(str(counts[s]) for s in STATES), rate,
-                       str(changes.get("new", 0)), str(changes.get("boost", 0)), changes.get("basis", "")])
+    candidates = changes.get("candidates") or {}
+    entry = _join_row([changes["date"], plan_ver, res_ver, *(str(counts[s]) for s in STATES), rate,
+                       str(candidates.get("new", 0)), str(candidates.get("boost", 0)), changes.get("basis", "")])
     history = list(led["history_lines"])
     while history and not history[-1].strip():
         history.pop()
     if not history or led["history_head"] != HISTORY_COLS:  # 열이 바뀐 옛 이력은 그대로 두고 새 표를 연다
         history += ([""] if history else []) + [_join_row(HISTORY_COLS), "|" + "---|" * len(HISTORY_COLS)]
     history.append(entry)
-    header = f"> 근거: DE-13 v{plan['last_version']} · 소스 {changes.get('sources', '')} · 반영 {changes['date']}"
+    header = f"> 근거: DE-13 v{plan_ver} · 결과서 v{res_ver} · 소스 {changes.get('sources', '')} · 반영 {changes['date']}"
     if changes.get("note"):
         header += f" · {changes['note']}"
     lines = [f"# 단위테스트 수행대장 — {project}", "", header, "", "## 담당자 매핑", "",
              _join_row(["작성자", "실명"]), "|--------|------|", *(_join_row([a, n]) for a, n in mapping.items()),
-             "", "## 수행 현황", "", _join_row(LEDGER_COLS), "|" + "---|" * len(LEDGER_COLS)]
-    for r in plan["rows"]:
-        got = rows[r["테스트ID"]]
-        lines.append(_join_row([r["테스트ID"], got["상태"], got["사유"], got.get("근거", ""), got.get("수행일", ""),
-                                got.get("담당자", ""), r["fingerprint"], got.get("비고", "")]))
-    lines += ["", "## 반영 이력", "", *history]
-    try:
-        data = ("\n".join(lines) + "\n").encode("utf-8")
+             "", "## 수행 현황", "", _join_row(LEDGER_COLS), "|" + "---|" * len(LEDGER_COLS),
+             *(_join_row(r) for r in rows), "", "## 반영 이력", "", *history]
+    return "\n".join(lines) + "\n"
+
+
+def write_result(plan_md: Path, result_md: Path, ledger_md: Path, changes: dict, dry_run: bool = False) -> dict:
+    """승인된 판정으로 단위테스트결과서와 수행대장을 함께 쓴다. 계획서는 읽기만 한다.
+
+    결과서 행은 매번 지금 계획서에 맞춘다 — 케이스 칸은 계획서 원문을 옮기고, 수행 칸만 판정으로 채운다.
+    둘을 한 번에 쓰는 까닭: 결과서만 바뀌고 수행대장이 따라오지 못하면 다음 반영 때 이 도구가 쓴 값을
+    사람 값으로 잘못 가린다. 검증에 하나라도 걸리면 아무 파일도 건드리지 않는다."""
+    plan_md, result_md, ledger_md = Path(plan_md), Path(result_md), Path(ledger_md)
+    facts = read_plan(plan_md, result=result_md, ledger=ledger_md)
+    plan_doc = _load(plan_md)
+    res = facts["result"]
+    res_doc = _load(result_md) if res["exists"] else None
+    led = read_ledger(ledger_md)
+    rows = changes.get("rows") or {}
+    ids = [r["테스트ID"] for r in facts["rows"]]
+    date = str(changes.get("date", ""))
+    # 결과서 제목과 같은 사업명 — 수행대장이 이미 있으면 그 제목을 지킨다
+    project = led["project"] or changes.get("project") or _doc_name(plan_doc["lines"])
+    errors = []
+    texts = [changes.get(k, "") for k in ("date", "project", "sources", "note", "basis")]
+    texts += [v for row in rows.values() if isinstance(row, dict) for v in row.values() if isinstance(v, str)]
+    texts += [v for kv in (changes.get("mapping") or {}).items() for v in kv]
+    texts += [v for v in (changes.get("revision") or {}).values() if isinstance(v, str)]
+    if any(isinstance(v, str) and CONTROL.search(v) for v in texts):
+        errors.append("값에 제어 문자가 있습니다 — 역슬래시 경로가 이스케이프로 풀렸는지 확인하세요 (JSON 은 \\\\ 로 적는다)")
+    if changes.get("plan_hash") != facts["plan_hash"]:
+        errors.append("승인 뒤 계획서가 바뀌었습니다 — 다시 대조하세요")
+    if (changes.get("result_hash") or "") != res["hash"]:
+        errors.append("승인 뒤 결과서가 바뀌었습니다 — 다시 대조하세요")
+    if facts["malformed"]:
+        errors.append("계획서에 칸 수가 머리글과 다른 행이 있습니다 — 계획서를 먼저 고치세요: " + ", ".join(facts["malformed"]))
+    if facts["duplicates"]:
+        errors.append("계획서에 같은 테스트ID 가 두 번 이상 있습니다 — 계획서를 먼저 고치세요: " + ", ".join(facts["duplicates"]))
+    if res["malformed"]:
+        errors.append("결과서에 칸 수가 머리글과 다른 행이 있습니다 — 결과서 md 를 먼저 고치세요: " + ", ".join(res["malformed"]))
+    if not re.fullmatch(r"\d{4}\.\d{2}\.\d{2}", date):
+        errors.append(f"반영일은 YYYY.MM.DD 여야 합니다: '{date}'")
+    if not project:
+        errors.append("사업명이 없습니다 (changes.json 의 project)")
+    missing, extra = [t for t in ids if t not in rows], [t for t in rows if t not in ids]
+    if missing:
+        more = f" 외 {len(missing) - 10}건" if len(missing) > 10 else ""
+        errors.append("판정이 빠진 행: " + ", ".join(missing[:10]) + more)
+    if extra:
+        errors.append("계획서에 없는 행: " + ", ".join(extra[:10]))
+    for tid in dict.fromkeys(ids):
+        got = rows.get(tid)
+        if not isinstance(got, dict):
+            continue
+        if not all(isinstance(v, str) for k, v in got.items() if k != "keep") or not isinstance(got.get("keep", False), bool):
+            errors.append(f"{tid}: 값의 형식이 맞지 않습니다")
+            continue
+        if got.get("상태") not in STATES:
+            errors.append(f"{tid}: 상태는 {'/'.join(STATES)} 중 하나여야 합니다: '{got.get('상태', '')}'")
+        if not got.get("사유", "").strip():
+            errors.append(f"{tid}: 사유가 비었습니다")
+    if errors:
+        raise InputError("; ".join(errors))
+
+    head = list(plan_doc["head"])
+    for col in ("테스트담당자", "수행일", "결과"):
+        if col not in head:
+            head.append(col)
+    if "사유" not in head:
+        head.insert(head.index("결과") + 1, "사유")
+    by_id = {r["테스트ID"]: r for r in facts["rows"]}
+    table, ledger_rows = [], []
+    for rec in plan_doc["recs"]:
+        tid = rec["테스트ID"]
+        got, cur = rows[tid], {c: by_id[tid].get(c, "") for c in RESULT_COLS}
+        judged = {"테스트담당자": got.get("담당자", ""), "수행일": got.get("수행일", ""), "결과": got["상태"], "사유": got["사유"]}
+        note = got.get("비고", "")
+        kept = [v for v in (cur["결과"], cur["테스트담당자"], cur["수행일"]) if v]
+        if got.get("keep") and kept:
+            if cur["결과"]:  # 사람이 적은 결과는 네 칸 그대로
+                out = {**cur, "사유": cur["사유"] or HUMAN_NO_REASON}
+            else:  # 배정 담당자처럼 결과 없이 적힌 칸만 지키고 결과·사유는 판정으로
+                out = {c: cur[c] or judged[c] for c in RESULT_COLS}
+                out["결과"], out["사유"] = judged["결과"], judged["사유"]
+            if "유지" not in note:
+                note = (f"{note} · " if note else "") + f"기존 기입 유지({', '.join(kept)})"
+            if out["결과"] not in STATES:
+                errors.append(f"{tid}: 결과서에 남길 결과 '{out['결과']}' 가 네 상태가 아닙니다 — PM 에게 바꿀 값을 물으세요")
+        else:
+            out = judged
+        table.append((tid, [out[h] if h in RESULT_COLS else rec["_raw"].get(h, "") for h in head]))
+        ledger_rows.append([tid, got["상태"], got["사유"], got.get("근거", ""), got.get("수행일", ""),
+                            got.get("담당자", ""), by_id[tid]["fingerprint"], note])
+
+    old = {r["테스트ID"]: r["_raw"] for r in res_doc["recs"]} if res_doc else {}
+    old_head = res_doc["head"] if res_doc else []
+    new_ids = [tid for tid, _ in table]
+    added = [t for t in new_ids if t not in old]
+    dropped = [t for t in old if t not in set(new_ids)]
+    changed = [tid for tid, cells in table if tid in old
+               and (old_head != head or any(old[tid].get(h, "") != c for h, c in zip(head, cells)))]
+    reordered = bool(old) and [t for t in old if t in set(new_ids)] != [t for t in new_ids if t in old]
+    plan_ver = facts["last_version"]
+    basis_changed = bool(res_doc) and res["basis_version"] != plan_ver
+    touched = res_doc is None or bool(added or dropped or changed or reordered or basis_changed)
+    rev = changes.get("revision")
+    last = res["last_version"] if res_doc else ""
+    if touched and not rev and not dry_run:  # dry-run 은 개정이력을 정하기 전에 바뀔 내용을 보려고 부른다
+        errors.append("결과서가 바뀌는데 개정이력 행(revision)이 없습니다")
+    if not touched and rev:
+        errors.append("결과서가 바뀌지 않는데 개정이력 행이 왔습니다 — revision 을 빼세요")
+    if rev:
+        if not isinstance(rev, dict) or not all(isinstance(rev.get(k, ""), str) for k in REVISION_HEAD[:5]):
+            errors.append("개정이력 행의 값이 문자열이 아닙니다")
+        else:
+            if not re.fullmatch(r"\d+\.0", rev.get("버전", "")):
+                errors.append(f"개정이력 버전은 1.0·2.0 처럼 적습니다: '{rev.get('버전', '')}'")
+            if not re.fullmatch(r"\d{4}\.\d{2}\.\d{2}", rev.get("개정일", "")):
+                errors.append(f"개정일은 YYYY.MM.DD 여야 합니다: '{rev.get('개정일', '')}'")
+            if rev.get("개정 사유") not in REVISION_REASONS:
+                errors.append(f"개정 사유는 {'/'.join(REVISION_REASONS)} 중 하나입니다: '{rev.get('개정 사유', '')}'")
+            if not rev.get("개정 내용", "").strip() or not rev.get("작성자", "").strip():
+                errors.append("개정이력 행의 개정 내용·작성자가 비었습니다")
+            if res_doc is None and (rev.get("버전") != "1.0" or rev.get("개정 사유") != "신규"):
+                errors.append("새 결과서의 첫 개정이력은 1.0 신규입니다")
+            if res_doc is not None and _version(rev.get("버전", "")) <= _version(last):
+                errors.append(f"개정이력 버전은 결과서의 마지막 버전({last or '없음'})보다 커야 합니다")
+    if errors:
+        raise InputError("; ".join(errors))
+
+    counts, rate = _rate([cells[head.index("결과")] for _, cells in table], [cells[head.index("사유")] for _, cells in table])
+    res_ver = rev["버전"] if rev else last
+    # 이어받아야 할 판단(제외·PM 확인)을 이번 판정이 버린 행 — 새 실행 결과나 PM 판정이면 맞고, 아니면 실수다
+    dropped_inherit = [r["테스트ID"] for r in facts["rows"]
+                       if r["inherit"] and not rows[r["테스트ID"]]["사유"].startswith(r["inherit"])]
+    summary = {"changed": changed, "added": added, "dropped": dropped, "reordered": reordered,
+               "basis_changed": basis_changed, "rows": len(table), "counts": counts, "rate": rate,
+               "plan_version": plan_ver, "result_version": res_ver, "needs_revision": touched,
+               "next_version": "1.0" if res_doc is None else f"{int(_version(last)) + 1}.0",
+               "inherit_dropped": dropped_inherit, "written": False, "backup": ""}
+    if dry_run:
+        return summary
+
+    nl = res_doc["newline"] if res_doc else "\n"
+    table_lines = [_join_row(head), "|" + "---|" * len(head), *(_join_row(cells) for _, cells in table)]
+    rev_line = _join_row([rev[k] for k in REVISION_HEAD[:5]] + [""]) if rev else ""
+    basis = f"> 근거: DE-13 v{plan_ver}" if plan_ver else "> 근거: DE-13"
+    if res_doc:
+        lines = list(res_doc["lines"])
+        lines[res_doc["head_line"]:res_doc["table_end"]] = table_lines
+        _set_basis(lines, basis)
+        if rev_line:
+            _append_revision(lines, rev_line)
+    else:
+        name = _doc_name(plan_doc["lines"])
+        lines = [f"# 단위테스트결과서 — {name}" if name else "# 단위테스트결과서", "",
+                 f"> 생성: /gx-단위테스트결과반영 · {datetime.now():%Y-%m-%d %H:%M}", basis, "",
+                 "## 개정이력", "", _join_row(REVISION_HEAD), "|------|--------|----------|----------|--------|--------|",
+                 rev_line, "", _result_heading(plan_doc["lines"], plan_doc["head_line"]), "", *table_lines]
+    try:  # 파일을 열기 전에 인코딩한다 — 열고 나서 실패하면 빈 파일이 남는다
+        result_bytes = (nl.join(lines) + nl).encode("utf-8")
+        ledger_bytes = _ledger_text(led, project, changes, ledger_rows, counts, rate, plan_ver, res_ver).encode("utf-8")
     except UnicodeEncodeError as exc:
         raise InputError(f"UTF-8 로 쓸 수 없는 값이 있습니다: {exc}") from exc
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(data)
-    return {"path": path.as_posix(), "rows": len(states), "counts": counts, "rate": rate}
+    if touched:
+        if res_doc:
+            # 반영 전 결과서를 남긴다. 같은 날 사본이 있으면 그날 처음 원본이라 덮지 않는다
+            copy = result_md.parent / "backup" / f"{result_md.stem}_{datetime.now():%y%m%d}.md"
+            if not copy.exists():
+                copy.parent.mkdir(exist_ok=True)
+                copy.write_bytes(res_doc["text"].encode("utf-8"))
+            summary["backup"] = f"backup/{copy.name}"
+        result_md.write_bytes(result_bytes)  # 바이트로 쓴다 — Windows 텍스트 모드가 \n 을 \r\n 으로 바꾸지 않게
+    ledger_md.parent.mkdir(parents=True, exist_ok=True)
+    ledger_md.write_bytes(ledger_bytes)
+    summary["written"] = touched
+    return summary
 
 
 # ---------- CLI ----------
@@ -1030,15 +1191,15 @@ def main(argv: list[str] | None = None) -> int:
     ix.add_argument("--out")
     pl = sub.add_parser("plan")
     pl.add_argument("--de13", required=True)
+    pl.add_argument("--result", help="단위테스트결과서 — 없는 파일이면 첫 반영")
     pl.add_argument("--ledger", help="수행대장 — 주면 행마다 지난 판정과 견준다 (없는 파일이면 첫 반영)")
     pl.add_argument("--out")
-    a = sub.add_parser("apply")
-    a.add_argument("--de13", required=True)
-    a.add_argument("--changes", required=True)
-    lg = sub.add_parser("ledger")
-    lg.add_argument("--de13", required=True)
-    lg.add_argument("--ledger", required=True)
-    lg.add_argument("--changes", required=True)
+    wr = sub.add_parser("write")
+    wr.add_argument("--de13", required=True)
+    wr.add_argument("--result", required=True)
+    wr.add_argument("--ledger", required=True)
+    wr.add_argument("--changes", required=True)
+    wr.add_argument("--dry-run", action="store_true", help="쓰지 않고 바뀔 내용만 알린다")
     args = p.parse_args(argv)
     try:
         if args.cmd == "index":
@@ -1054,24 +1215,49 @@ def main(argv: list[str] | None = None) -> int:
                 for warning in s["warnings"]:
                     print(f"경고({s['repo']}): {warning}", file=sys.stderr)
         elif args.cmd == "plan":
-            data = read_plan(Path(args.de13), Path(args.ledger) if args.ledger else None)
+            data = read_plan(Path(args.de13), Path(args.result) if args.result else None,
+                             Path(args.ledger) if args.ledger else None)
             _write_json(args.out, data)
-            print(f"테스트 {len(data['rows'])}건, 다음 ID {data['next_id']}", file=sys.stderr)
+            print(f"계획서 {len(data['rows'])}건 (v{data['last_version'] or '?'})", file=sys.stderr)
+            for label, ids in (("계획서 칸 수가 맞지 않는 행", data["malformed"]), ("계획서에 겹치는 테스트ID", data["duplicates"])):
+                if ids:
+                    print(f"경고: {label} — {', '.join(ids)}", file=sys.stderr)
+            if args.result:
+                r = data["result"]
+                state = f"v{r['last_version'] or '?'} (근거 계획서 v{r['basis_version'] or '?'})" if r["exists"] else "없음 — 새로 만든다"
+                print(f"결과서 {state}", file=sys.stderr)
+                edited = [row["테스트ID"] for row in data["rows"] if row["result_case_edited"]]
+                for label, ids in (("결과서 칸 수가 맞지 않는 행", r["malformed"]), ("계획서에서 빠진 행", r["only"]),
+                                   ("결과서에서 케이스 칸을 고친 행(계획서 원문으로 돌아감)", edited)):
+                    if ids:
+                        print(f"경고: {label} — {', '.join(ids)}", file=sys.stderr)
+                if r["xlsx_newer"]:
+                    print("경고: 결과서 xlsx 가 md 보다 나중에 바뀌었습니다 — xlsx 를 직접 고친 내용은 반영되지 않습니다", file=sys.stderr)
             if args.ledger:
-                who = [r["written_by"] for r in data["rows"]]
+                who = [row["written_by"] for row in data["rows"]]
                 print(f"지난 수행대장 {'있음' if data['ledger']['exists'] else '없음'} — 반영이 쓴 값 {who.count('tool')} · "
-                      f"사람 값 {who.count('human')} · 케이스 변경 {sum(r['case_changed'] for r in data['rows'])} · "
-                      f"승계 {sum(bool(r['inherit']) for r in data['rows'])}", file=sys.stderr)
-        elif args.cmd == "ledger":
-            changes = json.loads(Path(args.changes).read_text(encoding="utf-8"))
-            result = write_ledger(Path(args.de13), Path(args.ledger), changes)
-            c = result["counts"]
-            print(f"수행대장 {result['rows']}행 — Pass {c['Pass']} · Fail {c['Fail']} · 미구현 {c['미구현']} · "
-                  f"미검증 {c['미검증']}, 수행률 {result['rate']}")
+                      f"사람 값 {who.count('human')} · 케이스 변경 {sum(row['case_changed'] for row in data['rows'])} · "
+                      f"승계 {sum(bool(row['inherit']) for row in data['rows'])}", file=sys.stderr)
+                if data["ledger"].get("unrecorded"):
+                    print(f"경고: 계획서 개정이력 없이 고친 케이스 — {', '.join(data['ledger']['unrecorded'])}", file=sys.stderr)
+                if data["ledger"].get("stale"):
+                    print("경고: 결과서 버전이 수행대장의 마지막 반영 기록과 다릅니다 — 손으로 고쳤거나 지난 반영이 끝까지 가지 못했습니다",
+                          file=sys.stderr)
         else:
             changes = json.loads(Path(args.changes).read_text(encoding="utf-8"))
-            result = apply_plan(Path(args.de13), changes)
-            print(f"바뀐 행 {result['updated']}건, 추가 {result['appended']}건, 반영 전 사본 {result['backup']}")
+            s = write_result(Path(args.de13), Path(args.result), Path(args.ledger), changes, dry_run=args.dry_run)
+            c = s["counts"]
+            head = "시험 실행(쓰지 않음)" if args.dry_run else ("결과서 갱신" if s["written"] else "결과서 변경 없음 — 수행대장만 기록")
+            tail = f", 반영 전 사본 {s['backup']}" if s["backup"] else ""
+            print(f"{head} — 바뀐 행 {len(s['changed'])} · 추가 {len(s['added'])} · 계획서에서 빠짐 {len(s['dropped'])} | "
+                  f"Pass {c['Pass']} · Fail {c['Fail']} · 미구현 {c['미구현']} · 미검증 {c['미검증']}, 수행률 {s['rate']}{tail}")
+            for label, ids in (("바뀐 행", s["changed"]), ("추가", s["added"]), ("계획서에서 빠짐", s["dropped"])):
+                if ids:
+                    print(f"  {label}: {', '.join(ids)}")
+            if args.dry_run:
+                print(f"  개정이력: {'필요 — 다음 버전 ' + s['next_version'] if s['needs_revision'] else '필요 없음 (결과서가 바뀌지 않는다)'}")
+            if s["inherit_dropped"]:
+                print(f"  경고: 이어받을 판단(제외·PM 확인)을 이번 판정이 버린 행 — {', '.join(s['inherit_dropped'])}")
     except InputError as exc:
         print(f"test-evidence: {exc}", file=sys.stderr)
         return 2

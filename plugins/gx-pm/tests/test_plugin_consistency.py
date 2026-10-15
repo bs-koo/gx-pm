@@ -1848,7 +1848,7 @@ class FiveDocumentContractTest(unittest.TestCase):
             ("AN-02-requirements-definition.md", 10),
             ("AN-03-function-spec.md", 10),
             ("DE-08-table-definition.md", 15),
-            ("DE-13-unit-test-plan.md", 13),  # 결과 상태의 이유를 적는 `사유` 열
+            ("DE-13-unit-test-plan.md", 12),
             ("AN-05-traceability-matrix.md", 9),
         ]:
             with self.subTest(템플릿=템플릿):
