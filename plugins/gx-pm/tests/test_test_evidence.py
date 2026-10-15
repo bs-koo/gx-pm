@@ -613,15 +613,60 @@ class IndexTests(unittest.TestCase):
         self.assertEqual([s["repo"] for s in result["sources"]], ["reb-api", "reb-web"])
         self.assertEqual({t["repo"] for t in result["tests"]}, {"reb-api", "reb-web"})
 
+    def test_run_coverage_per_source_for_the_preflight_check(self):
+        """실사용 점검: 본 작업 폴더에는 마지막에 일부만 돌린 결과(625개 중 9개 클래스)만 있었다 — 레포마다 얼마나 있는지 센다."""
+        test_file = write(self.root, "src/test/java/kr/reb/source/FileSizeLimitTest.java", JAVA_TEST)
+        stale_file = write(self.root, "src/test/java/kr/reb/OrderTest.java",
+                           "class OrderTest {\n    @Test void a() { assertTrue(x); }\n}\n")
+        write(self.root, "build/test-results/test/TEST-kr.reb.source.FileSizeLimitTest.xml", junit_xml(
+            "kr.reb.source.FileSizeLimitTest", [("rejectsOverLimit()", ""), ("acceptsExactlyLimit()", "<failure/>")]))
+        write(self.root, "build/test-results/test/TEST-kr.reb.OrderTest.xml",
+              junit_xml("kr.reb.OrderTest", [("a()", "")], timestamp="2026-10-18T10:00:00"))
+        old, new = datetime(2026, 10, 17, 9, 0).timestamp(), datetime(2026, 10, 19, 9, 0).timestamp()
+        os.utime(test_file, (old, old))
+        os.utime(stale_file, (new, new))  # 마지막 실행 뒤에 고쳤다
+        runs = ev.index([self.root])["sources"][0]["runs"]
+        # 사용 안 함(slowCase)은 세지 않는다 — 근거가 될 수 없는 테스트다
+        self.assertEqual(runs, {"tests": 4, "current": 2, "missing": 1, "stale": 1, "last_report": "2026-10-20 10:00"})
+        web = Path(self.tmp.name) / "reb-web"
+        write(web, "src/upload.test.ts", TS_TEST)
+        self.assertEqual(ev.index([web])["sources"][0]["runs"],
+                         {"tests": 2, "current": 0, "missing": 2, "stale": 0, "last_report": ""})
+
+    def test_runners_tell_what_to_run_where(self):
+        """결과가 모자랄 때 레포·폴더마다 무엇을 돌리라고 안내할지 — 빌드 도구와 JS 의 JUnit 리포터 여부."""
+        write(self.root, "backend/build.gradle.kts", "plugins { java }")
+        write(self.root, "backend/api/build.gradle.kts", "")  # 같은 Gradle 빌드의 하위 모듈 — 따로 안내하지 않는다
+        write(self.root, "frontend/package.json", '{"scripts": {"test": "vitest run"}, "devDependencies": {"vitest": "^4"}}')
+        write(self.root, "frontend/node_modules/x/package.json", '{"devDependencies": {"jest": "1"}}')
+        write(self.root, "admin/package.json", '{"devDependencies": {"jest": "29", "jest-junit": "16"}}')
+        write(self.root, "batch/pom.xml", "<project/>")
+        write(self.root, "docs/package.json", '{"devDependencies": {"vuepress": "2"}}')  # 테스트 러너가 아니다
+        self.assertEqual(ev.index([self.root])["sources"][0]["runners"], [
+            {"dir": "admin", "tool": "jest", "junit": True},
+            {"dir": "backend", "tool": "gradle"},
+            {"dir": "batch", "tool": "maven"},
+            {"dir": "frontend", "tool": "vitest", "junit": False},
+        ])
+        write(self.root, "frontend/vitest.config.js", "export default { test: { reporters: ['default', 'junit'] } }")
+        self.assertIn({"dir": "frontend", "tool": "vitest", "junit": True}, ev.index([self.root])["sources"][0]["runners"])
+        root_gradle = Path(self.tmp.name) / "mono"
+        write(root_gradle, "build.gradle", "")
+        write(root_gradle, "core/build.gradle", "")
+        self.assertEqual(ev.index([root_gradle])["sources"][0]["runners"], [{"dir": ".", "tool": "gradle"}])
+
     def test_cli_index(self):
         write(self.root, "src/test/kotlin/CycleDeleteServiceTest.kt", KOTLIN_TEST)
         write(self.root, "src/test/java/kr/reb/source/FileSizeLimitTest.java", JAVA_TEST)
+        write(self.root, "build.gradle", "")
         out = Path(self.tmp.name) / "tests.json"
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
             self.assertEqual(ev.main(["index", "--source", str(self.root), "--out", str(out)]), 0)
         self.assertIn("테스트 5건", err.getvalue())
         self.assertIn("사용 안 함 1", err.getvalue())  # 요약의 건수가 합계와 맞아야 한다 (평가 v3 보고)
+        # 레포마다 실행 결과가 얼마나 있는지 한 줄 — 전체 테스트를 돌린 폴더인지 가리는 근거
+        self.assertIn("reb-api [Gradle] 테스트 4 · 지금 결과 0 · 결과 없음 4 · 낡음 0 (결과 파일 없음)", err.getvalue())
         self.assertEqual(len(json.loads(out.read_text(encoding="utf-8"))["tests"]), 5)
         self.assertEqual(ev.main(["index", "--source", str(self.root / "없음"), "--out", str(out)]), 2)
 

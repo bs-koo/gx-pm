@@ -124,6 +124,63 @@ python {플러그인 루트}/utils/test-evidence.py plan --de13 "{계획서}" --
 빠진 행)·`xlsx_newer`), `ledger`(담당자 매핑 `mapping`, 반영 이력 `history`, 계획서에 없는 행 `ledger_only`,
 결과서와 어긋남 `stale`, 계획서 개정이력 없이 고친 케이스 `unrecorded`)가 있다.
 
+### 실행 결과 점검 — 전체 테스트를 돌린 폴더인가
+
+이 스킬은 테스트를 돌리지 않는다. 빌드 도구가 테스트를 돌릴 때 **자동으로** 남기는 결과 파일만 읽는다 —
+사람이 만들거나 고치는 파일이 아니고, 그 폴더에는 **마지막 실행분만** 남는다. 고친 부분만 돌렸으면 그만큼만
+있고, Jest·Vitest 는 JUnit 리포터를 켜지 않으면 아예 남지 않는다. 그래서 대조 전에 `tests.json` 의
+`sources[].runs` 를 레포마다 한 줄로 보여준다 (색인 명령이 같은 줄을 출력한다):
+
+```
+실행 결과 점검
+  kreb-grep-2026-web [Gradle backend · Vitest frontend 리포터 꺼짐]
+    테스트 10251 · 지금 결과 449 · 결과 없음 9438 · 낡음 364 (마지막 실행 2026-10-14 16:39)
+```
+
+| `runs` 필드 | 뜻 |
+|------|----|
+| `tests` | 사용 중인 테스트 수 (`disabled` 제외) |
+| `current` | 지금 코드의 실행 결과가 있는 테스트 |
+| `missing` | 실행 결과가 없는 테스트 |
+| `stale` | 결과는 있지만 그 실행 뒤에 테스트 파일이 바뀐 테스트 |
+| `last_report` | 그 폴더 결과 파일의 가장 최근 실행 시각. 비면 결과 파일이 없다 |
+
+`sources[].runners` 는 그 레포에서 테스트를 돌리는 도구다 — `dir`(레포 기준 폴더, 루트면 `.`), `tool`
+(`gradle`·`maven`·`vitest`·`jest`), JS 면 `junit`(JUnit 리포터가 설정에 있는가).
+
+`missing` 이나 `stale` 이 있는 레포가 하나라도 있으면 **AskUserQuestion** 으로 묻는다:
+
+```
+결과가 없거나 낡은 테스트가 {missing + stale}건입니다 — 이대로 반영하면 그 테스트와 짝지은 행은 「미검증」으로 남습니다.
+  1. 전체 테스트를 돌리고 다시 부르기 (권장)
+  2. 지금 결과로 진행
+```
+
+- `전체 테스트를 돌리고 다시 부르기` — `runners` 마다 아래 표의 명령을 폴더와 함께 안내하고 **종료한다.**
+  아무 파일도 바뀌지 않았다(경로 저장·`lastUsed` 제외). 명령은 안내만 한다 — 대신 실행하지 않는다.
+- `지금 결과로 진행` — 그대로 대조로 넘어간다. 결과가 없는 행은 `미검증 — 실행 결과 없음`, 낡은 결과만 있는
+  행은 `미검증 — 실행 후 테스트 변경` 이 된다.
+
+모든 테스트에 지금 결과가 있으면 묻지 않고 점검 줄만 보여준다.
+
+| `tool` | 그 `dir` 에서 돌릴 명령 | 결과 파일 |
+|------|------|------|
+| `gradle` | `./gradlew test` (Windows `.\gradlew.bat test`, 래퍼가 없으면 `gradle test`) | `build/test-results/` |
+| `maven` | `./mvnw test` (래퍼가 없으면 `mvn test`) | `target/surefire-reports/` |
+| `vitest` | `junit` 이 거짓이면 `npx vitest run --reporter=default --reporter=junit --outputFile.junit=test-results/junit.xml`, 참이면 그 레포의 테스트 명령 그대로 | `test-results/junit.xml` |
+| `jest` | `junit` 이 거짓이면 `npx jest --reporters=default --reporters=jest-junit` (`jest-junit` 을 먼저 개발 의존성으로 설치), 참이면 그 레포의 테스트 명령 그대로 | `junit.xml` |
+
+안내에 함께 적는다:
+
+- **전체를 돌린다.** 빌드 설정이 일부 테스트를 기본 실행에서 빼면(태그·프로필 — DB 가 떠 있어야 도는 테스트
+  등) 그 옵션까지 준다. 그 `dir` 의 빌드 파일에서 그런 설정을 찾으면 옵션을 명령에 붙여 적는다. 결과 수가
+  테스트 수보다 크게 모자라면 대개 이 경우다.
+- **납품할 코드의 브랜치에서 돌린다.** 결과서는 그 코드의 결과다.
+- **다 돌렸으면 테스트 코드를 고치기 전에 바로 다시 부른다.** 실행 뒤에 고친 테스트의 결과는 낡음이 된다.
+- 결과 파일을 따로 만들거나 고치거나 커밋할 일은 없다 — 테스트를 돌린 그 폴더를 경로로 주면 된다.
+- `runners` 가 비었으면 「그 레포의 테스트 명령으로 전체를 한 번 돌리고, JUnit XML 결과 파일이 남는지 확인」으로
+  안내한다.
+
 ### 시작 전 점검 — 다시 부를 때 생기는 일
 
 이 커맨드는 여러 번 부른다. 그 사이 계획서·결과서·수행대장이 따로 바뀌었을 수 있어서, 대조 전에
@@ -472,10 +529,10 @@ python {플러그인 루트}/utils/test-evidence.py plan --de13 "{계획서}" --
     REB-FN-021 스코어 산출         9건 중 미구현 7
   기능 코드를 못 찾은 기능 43개 — 그 기능의 레포 경로가 빠졌는지 확인해 주세요   ← 있을 때만
 
-  실행 결과가 없는 레포
+  실행 결과가 없는 레포   ← 「지금 결과로 진행」을 골랐을 때
     reb-web   테스트 96건 — 테스트를 돌린 작업 폴더(개발 PC·빌드 서버)를 경로로 주고 다시 반영하면
               결과가 붙습니다. 결과 파일은 커밋되지 않아 받아 둔 사본에는 없습니다.
-              Jest·Vitest 는 JUnit 리포터(jest-junit, vitest --reporter=junit)를 켜야 결과 파일이 남습니다
+              돌릴 명령: frontend 에서 npx vitest run --reporter=default --reporter=junit --outputFile.junit=test-results/junit.xml
 
   📄 REB-단위테스트결과서.md  v2.0 (보완) — 반영 전 사본 backup/REB-단위테스트결과서_261014.md
   📄 증적/REB-단위테스트수행대장.md

@@ -531,6 +531,34 @@ def _reports(source: Path) -> list[dict]:
     return found
 
 
+def _runners(source: Path) -> list[dict]:
+    """테스트를 돌리는 빌드 도구 — 결과가 모자랄 때 어느 폴더에서 무엇을 돌리라고 안내할지 정한다.
+    레포 루트에서 두 단계 아래까지 본다. 같은 빌드의 하위 모듈은 위 폴더 하나로 안내한다."""
+    found: list[dict] = []
+    for root, dirs, files in os.walk(source):
+        rel = Path(root).relative_to(source)
+        dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and not d.startswith(".")) if len(rel.parts) < 2 else []
+        here = rel.as_posix() if rel.parts else "."
+        covered = {r["family"] for r in found if r["dir"] == "." or here.startswith(f"{r['dir']}/")}
+        if "jvm" not in covered:
+            tool = "gradle" if {"build.gradle", "build.gradle.kts"} & set(files) else "maven" if "pom.xml" in files else ""
+            if tool:
+                found.append({"dir": here, "tool": tool, "family": "jvm"})
+        if "js" not in covered and "package.json" in files:
+            text = (Path(root) / "package.json").read_text(encoding="utf-8", errors="replace")
+            try:
+                pkg = json.loads(text)
+            except ValueError:
+                continue
+            deps = {**pkg.get("dependencies", {}), **pkg.get("devDependencies", {})}
+            tool = next((t for t in ("vitest", "jest") if t in deps), "")
+            if tool:
+                configs = [Path(root) / n for n in files if re.match(r"(vitest|vite|jest)\.config\.", n)]
+                junit = "junit" in text or any("junit" in p.read_text(encoding="utf-8", errors="replace") for p in configs)
+                found.append({"dir": here, "tool": tool, "junit": junit, "family": "js"})
+    return [{k: v for k, v in r.items() if k != "family"} for r in found]
+
+
 def _report_matches(test: dict, case: dict) -> bool:
     name = case["name"]
     if test["lang"] == "js":
@@ -605,9 +633,18 @@ def index(sources: list[Path]) -> dict:
         if vcs == "git":
             branch = _run(git + ["rev-parse", "--abbrev-ref", "HEAD"], source) or ""
             head = _run(git + ["rev-parse", "--short", "HEAD"], source) or ""
+        live = [t for t in tests if not t["disabled"]]
         out["sources"].append({"path": source.as_posix(), "repo": repo, "vcs": vcs, "branch": branch, "head": head,
                                "warnings": warnings, "test_files": len({t["file"] for t in tests}),
-                               "reports": sorted({c["source"] for c in reports})})
+                               "reports": sorted({c["source"] for c in reports}),
+                               # 결과 파일은 그 폴더의 마지막 실행분만 남는다 — 전체를 돌린 폴더인지 가리는 근거
+                               "runs": {"tests": len(live),
+                                        "current": sum(t["run"]["status"] != "none" and not t["run"]["stale"] for t in live),
+                                        "missing": sum(t["run"]["status"] == "none" for t in live),
+                                        "stale": sum(t["run"]["status"] != "none" and t["run"]["stale"] for t in live),
+                                        "last_report": max(c["at"] for c in reports).strftime("%Y-%m-%d %H:%M")
+                                        if reports else ""},
+                               "runners": _runners(source)})
         out["tests"] += tests
         out["gx_tdd"] += [{**r, "repo": repo} for r in records]
     return out
@@ -1211,7 +1248,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"테스트 {len(runs)}건 — 실행 결과 통과 {runs.count('passed')} (그중 실행 뒤 테스트가 바뀐 결과 {stale}) · "
                   f"실패 {runs.count('failed')} · 건너뜀 {runs.count('skipped')} · 결과 없음 {runs.count('none')} "
                   f"(사용 안 함 {off})", file=sys.stderr)
+            names = {"gradle": "Gradle", "maven": "Maven", "vitest": "Vitest", "jest": "Jest"}
             for s in data["sources"]:
+                tools = [names[r["tool"]] + ("" if r["dir"] == "." else f" {r['dir']}")
+                         + (" 리포터 꺼짐" if r.get("junit") is False else "") for r in s["runners"]]
+                r = s["runs"]
+                print(f"{s['repo']}{' [' + ' · '.join(tools) + ']' if tools else ''} 테스트 {r['tests']} · "
+                      f"지금 결과 {r['current']} · 결과 없음 {r['missing']} · 낡음 {r['stale']} "
+                      f"({'마지막 실행 ' + r['last_report'] if r['last_report'] else '결과 파일 없음'})", file=sys.stderr)
                 for warning in s["warnings"]:
                     print(f"경고({s['repo']}): {warning}", file=sys.stderr)
         elif args.cmd == "plan":
