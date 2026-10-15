@@ -129,7 +129,7 @@ DOCUMENT_PROFILES = {
     },
     "단위테스트결과서": {
         "sheet_name": "단위테스트결과",
-        # 컬럼 정본은 templates/DE-13-unit-test-result.md 의 「본문 컬럼 (정본)」 절이다.
+        # 컬럼 정본은 templates/IM-03-unit-test-result.md 의 「본문 컬럼 (정본)」 절이다.
         # 1~9열은 계획서 원문을 옮긴 것이고, 수행 칸 넷이 붙는다.
         "columns": [[
             "테스트ID", "연계기능ID", "연계요구사항ID", "요구사항명",

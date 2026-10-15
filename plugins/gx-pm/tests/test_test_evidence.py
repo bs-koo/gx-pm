@@ -723,7 +723,7 @@ class ResultTests(unittest.TestCase):
         summary = ev.write_result(self.plan, self.result, self.ledger, self.changes())
         self.assertEqual(self.plan.read_bytes(), before)
         text = self.result.read_text(encoding="utf-8")
-        self.assertTrue(text.startswith("# 단위테스트결과서 — 테스트\n"))
+        self.assertTrue(text.startswith("# IM-03 단위테스트결과서 — 테스트\n"))  # 옛 gx-pm 의 단위테스트결과서 코드를 잇는다
         self.assertIn("> 근거: DE-13 v1.0", text)
         self.assertIn("| 1.0 | 2026.10.14 | 신규 | 최초 작성 — 수행 결과 기입 | 구본승 | |", text)
         self.assertIn("## 단위테스트결과 — 테스트", text)
@@ -996,13 +996,13 @@ class ResultTests(unittest.TestCase):
 
     def test_keeps_line_endings_and_title_of_an_existing_result(self):
         ev.write_result(self.plan, self.result, self.ledger, self.changes())
-        text = self.result.read_text(encoding="utf-8").replace("# 단위테스트결과서 — 테스트", "# 단위테스트결과서 — 테스트 (1차)")
+        text = self.result.read_text(encoding="utf-8").replace("# IM-03 단위테스트결과서 — 테스트", "# IM-03 단위테스트결과서 — 테스트 (1차)")
         self.result.write_bytes(text.replace("\n", "\r\n").encode("utf-8"))
         judged = {**JUDGED, "REB-UT-003": ("Pass", "PM 확인 — 2026.10.15", "2026.10.15", "김개발")}
         ev.write_result(self.plan, self.result, self.ledger, self.changes(judged=judged, revision={**FIRST, "버전": "2.0", "개정 사유": "보완"}))
         raw = self.result.read_bytes().decode("utf-8")
         self.assertNotIn("\n", raw.replace("\r\n", ""))
-        self.assertTrue(raw.startswith("# 단위테스트결과서 — 테스트 (1차)\r\n"))
+        self.assertTrue(raw.startswith("# IM-03 단위테스트결과서 — 테스트 (1차)\r\n"))
         self.assertIn("| 2.0 | 2026.10.14 | 보완 |", raw)
 
     def test_cli(self):

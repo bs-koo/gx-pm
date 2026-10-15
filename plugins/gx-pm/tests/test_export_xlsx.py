@@ -523,11 +523,11 @@ class De13ColumnSsotTest(unittest.TestCase):
 
 
 class De13ResultColumnSsotTest(unittest.TestCase):
-    """단위테스트결과서 컬럼 정본은 templates/DE-13-unit-test-result.md 다 — 계획서 열에 `사유` 가 붙는다."""
+    """단위테스트결과서 컬럼 정본은 templates/IM-03-unit-test-result.md 다 — 계획서 열에 `사유` 가 붙는다."""
 
     def setUp(self):
         self.mod = load_export_module()
-        self.정본 = parse_column_ssot("DE-13-unit-test-result.md", "본문 컬럼 (정본)")
+        self.정본 = parse_column_ssot("IM-03-unit-test-result.md", "본문 컬럼 (정본)")
 
     def test_계획서_열_뒤에_사유가_붙는다(self):
         계획서 = parse_column_ssot("DE-13-unit-test-plan.md", "본문 컬럼 (정본)")
@@ -538,7 +538,7 @@ class De13ResultColumnSsotTest(unittest.TestCase):
 
     def test_결과_목록이_정본과_같다(self):
         self.assertEqual(self.mod.DOCUMENT_PROFILES["단위테스트결과서"]["dropdowns"][0]["결과"],
-                         parse_enum_ssot("DE-13-unit-test-result.md", "본문 컬럼 (정본)", "결과"))
+                         parse_enum_ssot("IM-03-unit-test-result.md", "본문 컬럼 (정본)", "결과"))
 
     def test_파일명으로_결과서를_알아본다(self):
         self.assertEqual(self.mod.detect_document_type("REB-단위테스트결과서.md"), "단위테스트결과서")

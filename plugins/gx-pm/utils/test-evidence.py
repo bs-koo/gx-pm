@@ -800,7 +800,7 @@ def read_plan(md: Path, result: Path | None = None, ledger: Path | None = None) 
 
 # ---------- 결과서·수행대장 ----------
 
-RESULTS = ("Pass", "Fail", "미구현", "미검증")  # 결과 칸이 받는 값 (templates/DE-13-unit-test-result.md §결과 상태)
+RESULTS = ("Pass", "Fail", "미구현", "미검증")  # 결과 칸이 받는 값 (templates/IM-03-unit-test-result.md §결과 상태)
 STATES = RESULTS
 RESULT_COLS = ("테스트담당자", "수행일", "결과", "사유")  # 결과서에서 수행이 채우는 칸 — 나머지는 계획서 원문
 REVISION_HEAD = ["버전", "개정일", "개정 사유", "개정 내용", "작성자", "승인자"]
@@ -1142,7 +1142,7 @@ def write_result(plan_md: Path, result_md: Path, ledger_md: Path, changes: dict,
             _append_revision(lines, rev_line)
     else:
         name = _doc_name(plan_doc["lines"])
-        lines = [f"# 단위테스트결과서 — {name}" if name else "# 단위테스트결과서", "",
+        lines = [f"# IM-03 단위테스트결과서 — {name}" if name else "# IM-03 단위테스트결과서", "",
                  f"> 생성: /gx-단위테스트결과반영 · {datetime.now():%Y-%m-%d %H:%M}", basis, "",
                  "## 개정이력", "", _join_row(REVISION_HEAD), "|------|--------|----------|----------|--------|--------|",
                  rev_line, "", _result_heading(plan_doc["lines"], plan_doc["head_line"]), "", *table_lines]

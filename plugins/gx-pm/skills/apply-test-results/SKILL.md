@@ -10,7 +10,7 @@ description: 개발 레포에 실제로 있는 테스트 코드를 색인해 DE-
 `/gx-단위테스트결과반영` 이 부른다. 시험 수행 이후 결과를 기록할 때다.
 계획서를 만드는 `/gx-단위테스트계획서` 와는 따로 돈다 — 그 커맨드는 이 스킬을 부르지 않는다.
 
-**계획서를 고치지 않는다.** 계획서의 행을 옮긴 **단위테스트결과서**(`templates/DE-13-unit-test-result.md`)를
+**계획서를 고치지 않는다.** 계획서의 행을 옮긴 **IM-03 단위테스트결과서**(`templates/IM-03-unit-test-result.md`)를
 만들고, 반영할 때마다 그 결과서를 지금 계획서에 맞춰 갱신한다. 계획서는 고객사에 낸 약속이고 결과서는 그
 약속을 시험한 기록이라 따로 둔다.
 
@@ -57,7 +57,7 @@ gx-tdd, 다른 플러그인, 세션에서 바로 고친 것, 손으로 쓴 것 �
 쓰지 않는다 — 169행 표에서 `|` 하나가 밀리면 xlsx 가 통째로 어긋나고, 지난 판정과의 비교·건수·수행률도
 손으로 세면 틀린다.
 
-결과서 양식의 정본은 `templates/DE-13-unit-test-result.md`, 수행대장은 `templates/DE-13-execution-ledger.md` 다.
+결과서 양식의 정본은 `templates/IM-03-unit-test-result.md`, 수행대장은 `templates/DE-13-execution-ledger.md` 다.
 
 ## Step 1: 색인
 
@@ -193,7 +193,7 @@ python {플러그인 루트}/utils/test-evidence.py plan --de13 "{계획서}" --
 ### 상태와 사유
 
 결과서의 행마다 결과 칸에 **네 상태 중 하나**를, 옆 `사유` 칸에 그 이유 한 줄을 적는다. 정의의 정본은
-`templates/DE-13-unit-test-result.md` §결과 상태다.
+`templates/IM-03-unit-test-result.md` §결과 상태다.
 
 | 상태 | 조건 | 사유 (첫머리 고정어 — 뒤에 ` — ` 로 구체 내용) |
 |------|------|------|
