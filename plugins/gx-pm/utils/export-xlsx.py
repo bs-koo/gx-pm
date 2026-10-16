@@ -122,7 +122,13 @@ DOCUMENT_PROFILES = {
             "사전조건", "입력", "기대결과", "사후조건", "의존성",
             "테스트담당자", "수행일", "결과",
         ]],
-        "merge_columns": [],
+        # 기능 1건에서 케이스가 여러 건 나와 이 넷이 세로로 반복된다. 순서가 위계다 —
+        # 앞 열이 바뀌면 뒤 열의 병합도 끊긴다(merge_ranges). 입력·기대결과·사후조건·
+        # 의존성은 케이스마다의 값이라 우연히 같아도 묶지 않는다.
+        "merge_columns": ["연계기능ID", "연계요구사항ID", "요구사항명", "사전조건"],
+        # 계획서는 위 행과 같은 값을 `〃` 로 줄여 쓴다. 같은 연계기능ID 안에서만 푼다 —
+        # utils/test-evidence.py 의 계획서 읽기와 같은 범위다.
+        "ditto_scope": "연계기능ID",
         "left_align": ["요구사항명", "사전조건", "입력", "기대결과", "사후조건"],
         # 계획서는 `결과` 가 공란이 정상이므로 allow_blank 로 건다. 수행 결과는 단위테스트결과서에 적는다.
         "dropdowns": [{"결과": ["Pass", "Fail", "미구현", "미검증"]}],
@@ -136,7 +142,9 @@ DOCUMENT_PROFILES = {
             "사전조건", "입력", "기대결과", "사후조건", "의존성",
             "테스트담당자", "수행일", "결과", "사유",
         ]],
-        "merge_columns": [],
+        # 1~9열이 계획서 원문이라 병합·`〃` 풀이도 계획서와 같다.
+        "merge_columns": ["연계기능ID", "연계요구사항ID", "요구사항명", "사전조건"],
+        "ditto_scope": "연계기능ID",
         "left_align": ["요구사항명", "사전조건", "입력", "기대결과", "사후조건", "사유"],
         "dropdowns": [{"결과": ["Pass", "Fail", "미구현", "미검증"]}],
     },
@@ -424,6 +432,11 @@ def merge_ranges(
 
     빈 값은 묶지 않는다 — 빈칸이 이어지는 것은 "같은 값" 이 아니라 "값이 없는 것" 이다.
     떨어져 있는 같은 값도 묶지 않는다 — 정렬이 깨진 표를 이어 붙이면 없는 사실을 만든다.
+
+    **`merge_columns` 의 순서가 위계다.** 앞 열의 값이 바뀌는 행에서 뒤 열의 병합도
+    끊는다. 이웃한 두 기능이 같은 요구사항을 가질 때 요구사항 칸 하나가 기능 칸
+    둘에 걸쳐 묶이면 표가 엇갈린다. 앞 열이 빈칸끼리 이어지는 것은 바뀐 것이 아니다 —
+    비기능 테스트(`연계기능ID` 공란)의 요구사항 칸은 그대로 묶인다.
     """
     if len(rows) < 3:  # 헤더 + 데이터 2행 미만이면 묶을 것이 없다
         return []
@@ -431,6 +444,10 @@ def merge_ranges(
     header = [h.strip() for h in rows[0]]
     ranges: list[tuple[int, int, int]] = []
 
+    def cell(r: int, c: int) -> str:
+        return rows[r][c].strip() if c < len(rows[r]) else ""
+
+    parents: list[int] = []
     for col_name in merge_columns:
         if col_name not in header:
             continue
@@ -438,18 +455,54 @@ def merge_ranges(
 
         start = 1
         while start < len(rows):
-            value = rows[start][col].strip() if col < len(rows[start]) else ""
+            value = cell(start, col)
             end = start
             while end + 1 < len(rows):
-                nxt = rows[end + 1][col].strip() if col < len(rows[end + 1]) else ""
-                if nxt != value:
+                nxt = end + 1
+                if cell(nxt, col) != value:
+                    break
+                if any(cell(nxt, p) != cell(end, p) for p in parents):
                     break
                 end += 1
             if value and end > start:
                 ranges.append((col, start + 1, end + 1))
             start = end + 1
+        parents.append(col)
 
     return ranges
+
+
+DITTO = "〃"
+
+
+def resolve_ditto(rows: list[list[str]], scope_column: str | None) -> list[list[str]]:
+    """`〃`(위와 같음) 칸을 바로 위 행의 값으로 푼다.
+
+    DE-13 계획서는 같은 기능의 케이스가 이어질 때 반복 값을 `〃` 로 줄여 쓴다.
+    xlsx 에 그대로 찍으면 병합 대상이 되지 못하고, 필터로 거른 행은 무엇과
+    같은지 알 수 없다.
+
+    **`scope_column` 이 위 행과 같을 때만 푼다.** 다른 기능의 값을 끌어오면 없는
+    사실을 만든다 — 그때는 `〃` 를 그대로 둬 사람이 보게 한다. 범위는
+    `utils/test-evidence.py` 의 계획서 읽기와 같다.
+    """
+    if not scope_column or not rows or scope_column not in rows[0]:
+        return rows
+    scope = rows[0].index(scope_column)
+    resolved = [list(rows[0])]
+    for row in rows[1:]:
+        new_row = list(row)
+        prev = resolved[-1] if len(resolved) > 1 else None
+        if prev is not None:
+            same_scope = (
+                (new_row[scope] if scope < len(new_row) else "").strip()
+                == (prev[scope] if scope < len(prev) else "").strip()
+            )
+            for c, value in enumerate(new_row):
+                if value.strip() == DITTO and same_scope and c < len(prev):
+                    new_row[c] = prev[c]
+        resolved.append(new_row)
+    return resolved
 
 
 INPUT_FILL_RGB = "FFF9E3"
@@ -600,6 +653,9 @@ def create_xlsx(
             doc_type = resolve_doc_type(rows[0] if rows else [], file_doc_type)
 
             rows = _reorder_columns(rows, doc_type)
+            rows = resolve_ditto(
+                rows, DOCUMENT_PROFILES.get(doc_type, {}).get("ditto_scope") if doc_type else None
+            )
             title = merged_titles[key]
 
             # 시트 이름 결정
@@ -671,7 +727,9 @@ def create_xlsx(
                             wrap_align_left if col_name in left_align_cols else wrap_align_center
                         )
 
-            # 연속 동일값 세로 병합 (참조 양식 형태) — 가로도 중앙 정렬한다.
+            # 연속 동일값 세로 병합 (참조 양식 형태) — 세로는 가운데로 모은다.
+            # 가로는 그 열의 정렬을 따른다: 분류·ID 열은 중앙, 서술 열(left_align)은
+            # 좌측 — 병합 셀만 가운데로 튀면 같은 열이 들쭉날쭉해진다.
             if doc_type and doc_type in DOCUMENT_PROFILES:
                 for col, row_start, row_end in merge_ranges(
                     rows, DOCUMENT_PROFILES[doc_type].get("merge_columns", [])
@@ -680,8 +738,10 @@ def create_xlsx(
                     row_end += row_offset
                     letter = get_column_letter(col + 1)
                     ws.merge_cells(f"{letter}{row_start}:{letter}{row_end}")
+                    col_name = header_names[col] if col < len(header_names) else ""
                     ws[f"{letter}{row_start}"].alignment = Alignment(
-                        wrap_text=True, vertical="center", horizontal="center"
+                        wrap_text=True, vertical="center",
+                        horizontal="left" if col_name in left_align_cols else "center",
                     )
 
             # 열 너비 자동 조정 (min_widths 가 있으면 자동 계산값과 비교해 큰 쪽)
