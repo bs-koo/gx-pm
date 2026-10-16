@@ -2240,9 +2240,17 @@ class ConfirmationSheetTest(unittest.TestCase):
                 self.assertIn(f"## {절}", self.text, f"「{절}」 절이 없습니다")
 
     def test_차수_열과_상한이_있다(self):
-        """차수가 없으면 이력이 안 쌓이고, 상한이 없으면 끝나지 않는다."""
+        """차수가 없으면 이력이 안 쌓이고, 상한이 없으면 끝나지 않는다.
+
+        상한은 항목 단위다. 파일 단위 「최대 3차」는 낱개 커맨드 셋이 한 번씩
+        내면 끝나 버려, 정작 각 항목은 한 번밖에 못 묻는다.
+        """
         self.assertIn("차수", self.text)
-        self.assertIn("최대 3차", self.text, "차수 상한이 없습니다")
+        self.assertIn("같은 항목은 최대 세 번", self.text, "항목 단위 상한이 없습니다")
+        self.assertNotIn(
+            "최대 3차", self.text,
+            "파일 단위 상한(최대 3차) 문구가 남아 있습니다 — 낱개 커맨드끼리 상한을 나눠 씁니다",
+        )
 
     def test_빈칸이_정상임을_밝힌다(self):
         """사람이 한 줄도 안 써도 넘어간다는 것이 이 설계의 핵심이다.
@@ -2507,12 +2515,12 @@ class ApplyConfirmationsRoundTest(unittest.TestCase):
         )
 
     def test_값을_대신_정하지_않는다(self):
-        """3차까지 답이 없어도 관행값으로 채우면 「전부 해소」 규칙이 무의미해진다.
+        """세 번 물어도 답이 없을 때 관행값으로 채우면 「전부 해소」 규칙이 무의미해진다.
 
         채운 값은 해소된 것처럼 보이지만 실은 우리가 정한 값이라, 개발자가
         확정값으로 읽고 착수한다. v4.0.0 이 `[임시확정]` 을 없앤 이유다.
         """
-        self.assertIn("3차", self.text)
+        self.assertIn("세 번", self.text)
         self.assertNotIn(
             "임시확정", self.text,
             "값을 대신 정하는 표기가 남아 있습니다",
@@ -2655,6 +2663,206 @@ class QuestionThresholdTest(unittest.TestCase):
             절, r"[^\n]*1~5건[^\n]*대화로 묻는다[^\n]*",
             "네 번째 층의 하한(1~5건은 대화)이 질문 정책에 없습니다",
         )
+
+
+class StandaloneConfirmationTest(unittest.TestCase):
+    """낱개 커맨드로 만들어도 확인요청서가 나와야 한다.
+
+    발행 규칙이 `/gx-명세일괄` 게이트 2·3 에만 있었다. `/gx-기능명세서` 를 따로
+    부르면 `[가정]`·`[미확정]` 을 목록으로만 보여주고 끝나 — 「적어서 물을 수 있는
+    것이지 적어서 안 물어도 되는 것이 아니다」가 그 경로에서만 깨졌다. 표식을
+    만드는 AN-03·DE-08·DE-13 세 커맨드가 같은 정본을 가리켜야 한다.
+    """
+
+    대상 = ("gx-기능명세서", "gx-테이블정의서", "gx-단위테스트계획서")
+    절_제목 = "낱개 커맨드에서도 같은 규칙으로 낸다"
+
+    def setUp(self):
+        self.양식 = (
+            PLUGIN_ROOT / "templates" / "confirmation-request.md"
+        ).read_text(encoding="utf-8")
+
+    def _절(self):
+        구간 = re.search(
+            rf"^## {re.escape(self.절_제목)}$(.*?)(?=^## |\Z)", self.양식, re.M | re.S
+        )
+        self.assertIsNotNone(구간, f"§{self.절_제목} 절이 없습니다")
+        return 구간.group(1)
+
+    def _커맨드(self, 이름):
+        return (PLUGIN_ROOT / "commands" / f"{이름}.md").read_text(encoding="utf-8")
+
+    def test_정본이_세_커맨드를_이름으로_든다(self):
+        절 = self._절()
+        for 이름 in self.대상:
+            with self.subTest(커맨드=이름):
+                self.assertIn(f"/{이름}", 절)
+
+    def test_정본이_같은_기준어로_가른다(self):
+        """기준어(합계)가 빠지면 다른 기준으로 바뀌어도 조용히 통과한다."""
+        절 = self._절()
+        self.assertRegex(
+            절, r"\[가정\][^\n]*\[미확정\][^\n]*합계",
+            "낱개 경로의 발행 기준이 「`[가정]` + `[미확정]` 합계」가 아닙니다",
+        )
+        self.assertRegex(절, r"1~5건[^\n]*대화로 묻", "1~5건 → 대화 분기가 없습니다")
+        self.assertRegex(절, r"6건 이상[^\n]*(내고|발행)", "6건 이상 → 발행 분기가 없습니다")
+
+    def test_정본이_확인요청서_xlsx_를_실제로_뽑는다(self):
+        """게이트와 같은 이유 — 연노랑 입력란·드롭다운은 xlsx 에만 있다."""
+        self.assertRegex(
+            self._절(), r"export-xlsx\.py[^\n]*--separate[^\n]*--output xlsx",
+            "낱개 경로에 확인요청서 xlsx 추출 명령이 없습니다",
+        )
+
+    def test_다시_뽑기_전에_응답부터_반영한다(self):
+        """반영 없이 다시 뽑으면 사람이 xlsx 에 적은 답이 md 로 덮인다."""
+        self.assertRegex(
+            self._절(), r"[^\n]*이미 있으면[^\n]*응답부터 반영",
+            "파일이 있을 때 먼저 반영하라는 규칙이 없습니다 — 사람이 적은 답이 사라집니다",
+        )
+
+    def test_세_커맨드가_정본을_가리킨다(self):
+        for 이름 in self.대상:
+            with self.subTest(커맨드=이름):
+                self.assertIn(
+                    f"`templates/confirmation-request.md` §{self.절_제목}",
+                    self._커맨드(이름),
+                    "낱개 커맨드가 확인요청서 정본을 가리키지 않습니다 "
+                    "— 이 경로에서는 확인요청서가 나오지 않습니다",
+                )
+
+    def test_세_커맨드의_Step0_이_반영_경로를_연다(self):
+        """다시 불렀을 때 채운 답을 읽을 길이 있어야 왕복이 닫힌다."""
+        for 이름 in self.대상:
+            with self.subTest(커맨드=이름):
+                구간 = re.search(
+                    r"^#{2,3} Step 0:(.*?)(?=^#{2,3} |\Z)", self._커맨드(이름), re.M | re.S
+                )
+                self.assertIsNotNone(구간, "Step 0 절이 없습니다")
+                self.assertIn("**apply-confirmations**", 구간.group(1))
+                self.assertIn("확인요청서 반영하고 이어가기", 구간.group(1))
+
+    def test_세_커맨드가_xlsx_를_묻기_전에_판정한다(self):
+        """판정이 xlsx 질문 뒤에 오면 미확정이 남은 최종본이 먼저 나간다."""
+        for 이름 in self.대상:
+            with self.subTest(커맨드=이름):
+                본문 = self._커맨드(이름)
+                판정 = 본문.find(f"§{self.절_제목}", 본문.find("## Step 1"))
+                추출 = 본문.find("xlsx로 추출할까요")
+                if 추출 == -1:
+                    추출 = 본문.find("export-xlsx.py")
+                self.assertNotEqual(판정, -1)
+                self.assertNotEqual(추출, -1)
+                self.assertLess(판정, 추출, "확인요청서 판정이 xlsx 추출보다 뒤에 있습니다")
+
+    def test_실행_규약_표에_확인요청서_행이_있다(self):
+        """단독/파이프라인 차이 표가 정본이다 — 이 행이 없으면 「단독은 안 낸다」로 읽힌다."""
+        본문 = (PLUGIN_ROOT / "templates" / "pipeline-protocol.md").read_text(encoding="utf-8")
+        구간 = re.search(r"^## 단독 실행 vs 파이프라인 실행$(.*?)(?=^## )", 본문, re.M | re.S)
+        self.assertIsNotNone(구간)
+        self.assertRegex(
+            구간.group(1), re.compile(r"^\|[^\n]*확인요청서[^\n]*\|[^\n]*\|[^\n]*\|$", re.M),
+            "단독/파이프라인 표에 확인요청서 행이 없습니다",
+        )
+
+    def test_반영_스킬이_낱개_진입을_안다(self):
+        스킬 = (
+            PLUGIN_ROOT / "skills" / "apply-confirmations" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        구간 = re.search(r"^## 언제 도는가$(.*?)(?=^## )", 스킬, re.M | re.S)
+        self.assertIsNotNone(구간)
+        for 이름 in self.대상:
+            with self.subTest(커맨드=이름):
+                self.assertIn(f"/{이름}", 구간.group(1))
+
+
+class ConfirmationItemKeyTest(unittest.TestCase):
+    """확인요청서 하나에 여러 요청이 쌓인다 — 행마다 무엇인지 가를 수 있어야 한다.
+
+    낱개 커맨드도 확인요청서를 내면서 AN-03·DE-08·DE-13 항목과 여러 커맨드의
+    발행이 한 파일에 섞인다. 가르는 열이 `위치` 문장뿐이면 ① 산출물별로 걸러 볼
+    수 없고 ② 차수를 넘어 같은 항목을 잇는 키가 문장이며 ③ 파일 단위 3차 상한을
+    커맨드끼리 나눠 써서, 낱개 커맨드 셋이 한 번씩 내면 상한이 끝난다.
+    """
+
+    시트1 = "시트 1 · 가정 확인 — 본문 컬럼 (정본)"
+    시트2 = "시트 2 · 미확정 확인 — 본문 컬럼 (정본)"
+    시트3 = "시트 3 · 요청 이력 — 본문 컬럼 (정본)"
+
+    def setUp(self):
+        self.양식 = (
+            PLUGIN_ROOT / "templates" / "confirmation-request.md"
+        ).read_text(encoding="utf-8")
+        self.스킬 = (
+            PLUGIN_ROOT / "skills" / "apply-confirmations" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+
+    def _절(self, 제목, 깊이="##"):
+        구간 = re.search(
+            rf"^{깊이} {re.escape(제목)}$(.*?)(?=^#{{2,{len(깊이)}}} |\Z)",
+            self.양식, re.M | re.S,
+        )
+        self.assertIsNotNone(구간, f"§{제목} 절이 없습니다")
+        return 구간.group(1)
+
+    def test_입력_시트가_항목번호_산출물_물은_횟수로_시작한다(self):
+        from helpers import parse_column_ssot
+
+        for 절 in (self.시트1, self.시트2):
+            with self.subTest(절=절):
+                self.assertEqual(
+                    parse_column_ssot("confirmation-request.md", 절)[:3],
+                    ["항목번호", "산출물", "물은 횟수"],
+                )
+
+    def test_요청_이력이_발행처와_항목번호를_남긴다(self):
+        from helpers import parse_column_ssot
+
+        컬럼 = parse_column_ssot("confirmation-request.md", self.시트3)
+        for 이름 in ("차수", "발행일", "발행처", "항목번호", "산출물"):
+            with self.subTest(컬럼=이름):
+                self.assertIn(이름, 컬럼)
+
+    def test_산출물_값이_셋이다(self):
+        절 = self._절(self.시트1)
+        행 = re.search(r"^\|\s*\d+\s*\|\s*산출물\s*\|([^\n|]*)\|", 절, re.M)
+        self.assertIsNotNone(행, "시트 1 정본에 `산출물` 열이 없습니다")
+        for 값 in ("AN-03", "DE-08", "DE-13"):
+            with self.subTest(값=값):
+                self.assertIn(값, 행.group(1))
+
+    def test_항목번호_접두어가_ID_일람에_있다(self):
+        규칙 = (PLUGIN_ROOT / "templates" / "id-naming-rules.md").read_text(encoding="utf-8")
+        self.assertRegex(
+            규칙, re.compile(r"^\|\s*`CQ-`\s*\|[^\n]*확인요청", re.M),
+            "`CQ-` 접두어가 ID 접두어 일람에 없습니다 — 다른 ID 와 겹쳐도 모릅니다",
+        )
+
+    def test_세는_법이_닫힌_항목과_이어받은_표식을_뺀다(self):
+        """세는 법이 없으면 묵시적 승인으로 닫힌 `[가정]` 이 표식이 남아 있다는
+        이유로 다시 세어지고, 세 홉을 관통한 표식 하나가 세 건으로 세어진다."""
+        절 = self._절("무엇을 세나", "###")
+        self.assertRegex(절, r"닫힌 항목[^\n]*세지 않는다")
+        self.assertRegex(절, r"세 번 물은 항목[^\n]*세지 않는다")
+        self.assertRegex(절, r"이어받은 표식[^\n]*새 항목")
+
+    def test_시트0_현재_행이_발행처를_적는다(self):
+        """반영할 때 시트 3 의 발행일·발행처를 옮겨 올 자리가 있어야 한다."""
+        self.assertRegex(self.양식, r"`현재`[^\n]*발행처")
+
+    def test_반영_스킬이_항목번호로_대조한다(self):
+        self.assertRegex(self.스킬, r"항목번호로[^\n]*(대조|찾)")
+
+    def test_어느_커맨드로_불러도_파일_전체를_반영한다(self):
+        """파일이 하나라 부분만 반영하면 답이 적힌 행이 반영 안 된 채 남고,
+        다음 발행이 그 답을 덮는다."""
+        self.assertRegex(self.스킬, r"어느 커맨드[^\n]*파일 전체")
+
+    def test_옛_양식을_읽는_규칙이_있다(self):
+        절 = self._절("옛 양식 파일")
+        self.assertIn("항목번호", 절)
+        self.assertIn("처음 반영", 절)
 
 
 class UnitTestInputTest(unittest.TestCase):
@@ -2814,7 +3022,7 @@ class RequestHistoryTest(unittest.TestCase):
 
     def test_처리값이_네_갈래다(self):
         """`반영`/`이월` 둘만으로는 「끝났나 진행 중인가」를 알 수 없다."""
-        행 = re.search(r"^\|\s*6\s*\|\s*처리\s*\|([^\n|]*)\|", self.정본, re.M)
+        행 = re.search(r"^\|\s*\d+\s*\|\s*처리\s*\|([^\n|]*)\|", self.정본, re.M)
         self.assertIsNotNone(행, "시트 3 정본에 `처리` 열이 없습니다")
         for 값 in ("반영", "이월", "미해소", "철회"):
             with self.subTest(값=값):
@@ -2848,8 +3056,8 @@ class RequestHistoryTest(unittest.TestCase):
             "이월로 끝나지 않는다는 규칙이 정본에 없습니다",
         )
         self.assertRegex(
-            self.스킬, r"3차인데 답이 없는 것[^\n]*미해소",
-            "3차 미응답을 `미해소` 로 닫는 지시가 스킬에 없습니다",
+            self.스킬, r"세 번 물었는데 답이 없는 것[^\n]*미해소",
+            "세 번 물은 미응답을 `미해소` 로 닫는 지시가 스킬에 없습니다",
         )
 
     def test_스킬이_이력_규칙을_정본으로_넘긴다(self):
@@ -2915,7 +3123,7 @@ class CounterQuestionTest(unittest.TestCase):
                 )
 
     def test_정본_처리값에_되질문이_있다(self):
-        행 = re.search(r"^\|\s*6\s*\|\s*처리\s*\|([^\n|]*)\|", self.정본, re.M)
+        행 = re.search(r"^\|\s*\d+\s*\|\s*처리\s*\|([^\n|]*)\|", self.정본, re.M)
         self.assertIsNotNone(행, "시트 3 정본에 `처리` 열이 없습니다")
         self.assertIn(
             "되질문", 행.group(1),

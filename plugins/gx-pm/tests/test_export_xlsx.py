@@ -356,6 +356,73 @@ class MergeRangesTest(unittest.TestCase):
         구간 = self.mod.merge_ranges(rows, ["대분류"])
         self.assertEqual(sorted(구간), [(0, 2, 3), (0, 5, 6)])
 
+    def test_앞_병합_열이_바뀌면_뒤_병합_열도_끊는다(self):
+        """DE-13 에서 이웃한 두 기능이 같은 요구사항·사전조건을 가질 수 있다.
+
+        열마다 따로 묶으면 `연계요구사항ID` 칸 하나가 FN-001 과 FN-002 에 걸쳐
+        병합된다 — 기능 칸은 둘인데 요구사항 칸은 하나라 표가 엇갈린다.
+        병합 목록의 앞 열이 묶음의 경계다.
+        """
+        rows = [
+            ["연계기능ID", "연계요구사항ID"],
+            ["FN-001", "REQ-001"],
+            ["FN-001", "REQ-001"],
+            ["FN-002", "REQ-001"],
+            ["FN-002", "REQ-001"],
+        ]
+        구간 = self.mod.merge_ranges(rows, ["연계기능ID", "연계요구사항ID"])
+        self.assertEqual(sorted(구간), [(0, 2, 3), (0, 4, 5), (1, 2, 3), (1, 4, 5)])
+
+    def test_앞_병합_열이_빈칸끼리면_뒤_병합_열은_이어_묶는다(self):
+        """비기능 테스트는 `연계기능ID` 가 공란이다.
+
+        빈칸끼리는 「값이 바뀐 것」이 아니다 — 같은 비기능 요구사항의 케이스가
+        여럿이면 `연계요구사항ID` 는 묶여야 한다.
+        """
+        rows = [
+            ["연계기능ID", "연계요구사항ID"],
+            ["", "REQ-045"],
+            ["", "REQ-045"],
+        ]
+        구간 = self.mod.merge_ranges(rows, ["연계기능ID", "연계요구사항ID"])
+        self.assertEqual(구간, [(1, 2, 3)])
+
+
+class DittoResolveTest(unittest.TestCase):
+    """DE-13 은 위 행과 같은 값을 `〃` 로 줄여 쓴다 (`templates/DE-13-unit-test-plan.md` 예시).
+
+    xlsx 에 `〃` 를 그대로 찍으면 병합도 안 되고 필터로 거른 행은 무엇이 같은지
+    알 수 없다. 수행 결과 대조(`utils/test-evidence.py`)와 같은 범위 — 같은
+    `연계기능ID` 안 — 에서만 위 값으로 푼다.
+    """
+
+    def setUp(self):
+        self.mod = load_export_module()
+
+    def test_같은_기능_안의_줄임표를_위_값으로_푼다(self):
+        rows = [
+            ["연계기능ID", "사전조건"],
+            ["FN-001", "관리자 로그인"],
+            ["FN-001", "〃"],
+            ["FN-001", "〃"],
+        ]
+        풀림 = self.mod.resolve_ditto(rows, "연계기능ID")
+        self.assertEqual([r[1] for r in 풀림[1:]], ["관리자 로그인"] * 3)
+
+    def test_기능이_바뀌면_줄임표를_풀지_않는다(self):
+        """다른 기능의 값을 끌어오면 없는 사실을 만든다."""
+        rows = [
+            ["연계기능ID", "사전조건"],
+            ["FN-001", "관리자 로그인"],
+            ["FN-002", "〃"],
+        ]
+        풀림 = self.mod.resolve_ditto(rows, "연계기능ID")
+        self.assertEqual(풀림[2][1], "〃")
+
+    def test_범위_열이_없으면_그대로_둔다(self):
+        rows = [["사전조건"], ["A"], ["〃"]]
+        self.assertEqual(self.mod.resolve_ditto(rows, None), rows)
+
 
 class RevisionHistoryProfileTest(unittest.TestCase):
     def setUp(self):
@@ -521,6 +588,20 @@ class De13ColumnSsotTest(unittest.TestCase):
             self.mod.DOCUMENT_PROFILES["단위테스트계획서"]["columns"][0], self.정본
         )
 
+    def test_기능_묶음_열이_병합_대상이다(self):
+        """기능 1건에서 케이스가 여러 건 나오므로 같은 값이 세로로 이어진다.
+
+        `merge_columns` 가 비어 있으면 기능ID·요구사항·사전조건이 케이스 수만큼
+        반복돼 어디서 기능이 바뀌는지 안 보인다. 순서가 곧 묶음의 위계다.
+        """
+        self.assertEqual(
+            self.mod.DOCUMENT_PROFILES["단위테스트계획서"]["merge_columns"],
+            ["연계기능ID", "연계요구사항ID", "요구사항명", "사전조건"],
+        )
+        self.assertEqual(
+            self.mod.DOCUMENT_PROFILES["단위테스트계획서"].get("ditto_scope"), "연계기능ID"
+        )
+
 
 class De13ResultColumnSsotTest(unittest.TestCase):
     """단위테스트결과서 컬럼 정본은 templates/IM-03-unit-test-result.md 다 — 계획서 열에 `사유` 가 붙는다."""
@@ -543,6 +624,65 @@ class De13ResultColumnSsotTest(unittest.TestCase):
     def test_파일명으로_결과서를_알아본다(self):
         self.assertEqual(self.mod.detect_document_type("REB-단위테스트결과서.md"), "단위테스트결과서")
         self.assertEqual(self.mod.detect_document_type("REB-단위테스트계획서.md"), "단위테스트계획서")
+
+    def test_계획서와_같은_열을_병합한다(self):
+        """결과서 1~9열은 계획서 원문이다 — 두 xlsx 의 모양이 같아야 나란히 본다."""
+        계획서 = self.mod.DOCUMENT_PROFILES["단위테스트계획서"]
+        결과서 = self.mod.DOCUMENT_PROFILES["단위테스트결과서"]
+        self.assertEqual(결과서["merge_columns"], 계획서["merge_columns"])
+        self.assertEqual(결과서.get("ditto_scope"), 계획서.get("ditto_scope"))
+
+
+class UnitTestPlanRenderTest(unittest.TestCase):
+    """실제 DE-13 xlsx 를 만들어 다시 열어 병합과 `〃` 풀이를 확인한다."""
+
+    _MD = (
+        "## 단위테스트계획 — 테스트\n\n"
+        "| 테스트ID | 연계기능ID | 연계요구사항ID | 요구사항명 | 사전조건 | 입력 | 기대결과 "
+        "| 사후조건 | 의존성 | 테스트담당자 | 수행일 | 결과 |\n"
+        "|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+        "| UT-001 | FN-001 | REQ-001 | 벤치마크 원단위 산출 | 원단위 통계파일 업로드 완료 "
+        "| `세부용도=업무시설` | 테이블 생성 | TB_SCORE 1건 저장 | 없음 | | | |\n"
+        "| UT-002 | FN-001 | REQ-001 | 벤치마크 원단위 산출 | 〃 "
+        "| `testdata/UT-002_헤더순서_뒤바뀜.csv` | \"헤더 형식 오류\" 안내 | 저장 없음 | 없음 | | | |\n"
+        "| UT-003 | | REQ-052 | 목록 조회 응답시간 | 900만 건 적재 "
+        "| `조회조건=전체` | 응답 3초 이내 | 변화 없음 | 없음 | | | |\n"
+    )
+
+    def setUp(self):
+        self.mod = load_export_module()
+        tables = self.mod.parse_markdown_tables(self._MD)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = str(Path(tmp) / "out.xlsx")
+            self.mod.create_xlsx([("ACT-단위테스트계획서.md", tables)], out)
+            self.ws = openpyxl.load_workbook(out)["단위테스트계획"]
+        self.병합 = [str(r) for r in self.ws.merged_cells.ranges]
+
+    def test_같은_기능의_묶음_열이_세로_병합된다(self):
+        for 범위 in ("B2:B3", "C2:C3", "D2:D3", "E2:E3"):
+            with self.subTest(범위=범위):
+                self.assertIn(범위, self.병합)
+
+    def test_케이스마다_다른_열은_병합하지_않는다(self):
+        """`의존성` 은 두 행 다 `없음` 이지만 케이스의 속성이라 묶지 않는다."""
+        for 열 in "AFGHI":
+            with self.subTest(열=열):
+                self.assertNotIn(f"{열}2:{열}3", self.병합)
+
+    def test_줄임표가_글자로_남지_않는다(self):
+        """병합된 사전조건 칸에 첫 행의 값이 보여야 한다."""
+        self.assertEqual(self.ws["E2"].value, "원단위 통계파일 업로드 완료")
+        남은것 = [
+            c.coordinate for row in self.ws.iter_rows() for c in row if c.value == "〃"
+        ]
+        self.assertEqual(남은것, [])
+
+    def test_병합해도_서술_열은_좌측_정렬이다(self):
+        """요구사항명·사전조건은 left_align 열이다 — 병합 셀만 가운데로 튀면 열이 들쭉날쭉해진다."""
+        self.assertEqual(self.ws["D2"].alignment.horizontal, "left")
+        self.assertEqual(self.ws["E2"].alignment.horizontal, "left")
+        self.assertEqual(self.ws["D2"].alignment.vertical, "center")
+        self.assertEqual(self.ws["B2"].alignment.horizontal, "center")
 
 
 class SheetTitleProfileTest(unittest.TestCase):
@@ -806,18 +946,18 @@ class InputColumnFillTest(unittest.TestCase):
     def test_입력란은_연노랑이고_읽는_칸은_아니다(self):
         md = (
             "## 가정 확인\n\n"
-            "| # | 차수 | 위치 | AI 가 정한 값 | 근거 | 판정 | 정정값 | 비고 |\n"
-            "|---|---|---|---|---|---|---|---|\n"
-            "| 1 | 1 | SFR-027 | 100자 | RFP 미규정 | 맞음 | | |\n"
+            "| 항목번호 | 산출물 | 물은 횟수 | 위치 | AI 가 정한 값 | 근거 | 판정 | 정정값 | 비고 |\n"
+            "|---|---|---|---|---|---|---|---|---|\n"
+            "| CQ-001 | AN-03 | 1 | SFR-027 | 100자 | RFP 미규정 | 맞음 | | |\n"
         )
         ws = self._생성(md, "가정 확인")
-        # F=판정(입력) · C=위치(읽기). 헤더는 1행, 데이터는 2행.
+        # G=판정(입력) · D=위치(읽기). 헤더는 1행, 데이터는 2행.
         self.assertEqual(
-            ws["F2"].fill.start_color.rgb, "00FFF9E3",
+            ws["G2"].fill.start_color.rgb, "00FFF9E3",
             "입력란(판정)이 연노랑이 아닙니다 — 어디를 채울지 안 보입니다",
         )
         self.assertNotEqual(
-            ws["C2"].fill.start_color.rgb, "00FFF9E3",
+            ws["D2"].fill.start_color.rgb, "00FFF9E3",
             "읽는 칸(위치)까지 노란색이면 입력란 표시가 무의미합니다",
         )
 
@@ -825,13 +965,13 @@ class InputColumnFillTest(unittest.TestCase):
         """헤더는 이미 헤더 색이 있다. 덮으면 표 머리가 사라져 보인다."""
         md = (
             "## 미확정 확인\n\n"
-            "| # | 차수 | 위치 | 무엇이 없나 | 왜 못 정했나 | 상태 | 응답 | 확정일 |\n"
-            "|---|---|---|---|---|---|---|---|\n"
-            "| 1 | 1 | SFR-016 | 기준값 | 판정 불가 | 대기 | | |\n"
+            "| 항목번호 | 산출물 | 물은 횟수 | 위치 | 무엇이 없나 | 왜 못 정했나 | 상태 | 응답 | 확정일 |\n"
+            "|---|---|---|---|---|---|---|---|---|\n"
+            "| CQ-002 | AN-03 | 1 | SFR-016 | 기준값 | 판정 불가 | 대기 | | |\n"
         )
         ws = self._생성(md, "미확정 확인")
         self.assertNotEqual(
-            ws["F1"].fill.start_color.rgb, "00FFF9E3",
+            ws["G1"].fill.start_color.rgb, "00FFF9E3",
             "헤더 행까지 입력란 색으로 덮였습니다",
         )
 
