@@ -64,7 +64,7 @@ ID 가 확정되지 않은 상태로 대조하면 같은 항목이 다른 ID 를
   3. 개정 내용 직접 수정
 ```
 
-**AskUserQuestion 으로 묻는다.** `templates/approval-protocol.md` 의 인자 규칙을 따른다.
+**산출물 검토에 이 개정이력 초안을 함께 제시한다.** `templates/approval-protocol.md`를 따른다. 이미 내용과 이력까지 승인받았거나 명시적 수정 지시의 범위 안이면 같은 행을 다시 묻지 않는다. 새 판단이 필요한 경우에만 AskUserQuestion으로 확인한다.
 
 ### Step 4: 산출물 맨 위에 기입
 

@@ -604,15 +604,15 @@ class De13ColumnSsotTest(unittest.TestCase):
 
 
 class De13ResultColumnSsotTest(unittest.TestCase):
-    """단위테스트결과서 컬럼 정본은 templates/IM-03-unit-test-result.md 다 — 계획서 열에 `사유` 가 붙는다."""
+    """단위테스트결과서 정본은 계획서 열 뒤에 사유·실제결과를 붙인다."""
 
     def setUp(self):
         self.mod = load_export_module()
         self.정본 = parse_column_ssot("IM-03-unit-test-result.md", "본문 컬럼 (정본)")
 
-    def test_계획서_열_뒤에_사유가_붙는다(self):
+    def test_계획서_열_뒤에_사유와_실제결과가_붙는다(self):
         계획서 = parse_column_ssot("DE-13-unit-test-plan.md", "본문 컬럼 (정본)")
-        self.assertEqual(self.정본, 계획서 + ["사유"])
+        self.assertEqual(self.정본, 계획서 + ["사유", "실제결과"])
 
     def test_프로필이_정본과_같다(self):
         self.assertEqual(self.mod.DOCUMENT_PROFILES["단위테스트결과서"]["columns"][0], self.정본)
@@ -631,6 +631,42 @@ class De13ResultColumnSsotTest(unittest.TestCase):
         결과서 = self.mod.DOCUMENT_PROFILES["단위테스트결과서"]
         self.assertEqual(결과서["merge_columns"], 계획서["merge_columns"])
         self.assertEqual(결과서.get("ditto_scope"), 계획서.get("ditto_scope"))
+
+    def test_관측값이_엑셀에_행별로_보존되고_좌측_정렬된다(self):
+        """같은 기능의 케이스라도 실제결과는 합치거나 사유로 대체하지 않는다."""
+        md = (
+            "## 단위테스트결과\n\n"
+            "| 테스트ID | 연계기능ID | 연계요구사항ID | 요구사항명 | 사전조건 | 입력 "
+            "| 기대결과 | 사후조건 | 의존성 | 테스트담당자 | 수행일 | 결과 | 사유 | 실제결과 |\n"
+            "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+            '| UT-001 | FN-001 | REQ-001 | 업로드 | 시험 계정 | 잘못된 파일 '
+            '| 오류 안내 | 저장 없음 | 없음 | 김시험 | 2026.10.26 | Pass '
+            '| 실행 확인 — 오류 안내와 미저장 | HTTP 400; "헤더 오류"; 저장 0건 |\n'
+            '| UT-002 | FN-001 | REQ-001 | 업로드 | 〃 | 정상 파일 '
+            '| 성공 안내 | 1건 저장 | 없음 | 김시험 | 2026.10.26 | Fail '
+            '| 사후조건 불일치 | HTTP 201; 성공 안내; 저장 0건 |\n'
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            out = str(Path(tmp) / "result.xlsx")
+            self.mod.create_xlsx(
+                [("ACT-단위테스트결과서.md", self.mod.parse_markdown_tables(md))], out
+            )
+            wb = openpyxl.load_workbook(out)
+            try:
+                ws = wb["단위테스트결과"]
+                self.assertEqual(ws.max_column, 14)
+                self.assertEqual(ws["N1"].value, "실제결과")
+                self.assertEqual(ws["M2"].value, "실행 확인 — 오류 안내와 미저장")
+                self.assertEqual(ws["N2"].value, 'HTTP 400; "헤더 오류"; 저장 0건')
+                self.assertEqual(ws["N3"].value, "HTTP 201; 성공 안내; 저장 0건")
+                for row in (2, 3):
+                    self.assertEqual(ws[f"N{row}"].alignment.horizontal, "left")
+                    self.assertTrue(ws[f"N{row}"].alignment.wrap_text)
+                merged = {str(r) for r in ws.merged_cells.ranges}
+                self.assertIn("B2:B3", merged)
+                self.assertNotIn("N2:N3", merged)
+            finally:
+                wb.close()
 
 
 class UnitTestPlanRenderTest(unittest.TestCase):

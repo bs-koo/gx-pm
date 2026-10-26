@@ -124,21 +124,23 @@ validate_column(["OBSVTR_NM","OBSRVN_YMD","LAT","LOT","USE_YN","REG_DT","MDFCN_D
 또는 `CLAUDE.md`의 규칙이 로드돼 있으면 별도 지시 없이도 적용된다.
 
 
-## 설치 (MCP가 없을 때)
+## 설치·재연결 (미등록 또는 연결 실패 시)
+
+공식 연결 주소는 **`https://term.sqisoft.com/api/v1/mcp`** 다.
+HTTPS 도메인 주소를 사용하며 별도 포트 번호는 붙이지 않는다.
 
 ### Codex CLI / 앱
 
 Windows PowerShell에서 사용자 환경에 등록합니다:
 
 ```powershell
-codex.cmd mcp add sqi-comn-term --url http://52.78.238.167:8687/api/v1/mcp
+codex.cmd mcp add sqi-comn-term --url https://term.sqisoft.com/api/v1/mcp
 codex.cmd mcp list
 ```
 
-사업부 서버 주소가 다르면 URL을 해당 주소로 바꿉니다. macOS/Linux에서는 `codex.cmd` 대신
-`codex`를 사용합니다. 등록 뒤 Codex를 다시 시작하거나 새 대화를 열어 `sqi-comn-term` 도구가
-보이는지 확인한 후 테이블정의서 또는 명세일괄을 다시 실행합니다. 현재 대화에서 도구가 보이지 않으면
-승인 게이트를 건너뛰거나 컬럼명을 추정하지 않습니다.
+macOS/Linux에서는 `codex.cmd` 대신 `codex`를 사용합니다. 등록 뒤 Codex를 다시 시작하거나
+새 대화를 열고 `list_categories` 실제 호출이 성공하는지 확인한 후 테이블정의서 또는
+명세일괄을 다시 실행합니다. 도구가 표시되더라도 호출이 실패하면 아래 재연결 절차를 따릅니다.
 
 ### Claude Code
 
@@ -146,7 +148,7 @@ codex.cmd mcp list
 
 **유저 스코프 (모든 프로젝트, 권장)** — 터미널:
 ```
-claude mcp add -s user --transport http sqi-comn-term http://52.78.238.167:8687/api/v1/mcp
+claude mcp add -s user --transport http sqi-comn-term https://term.sqisoft.com/api/v1/mcp
 claude mcp list        # 등록 확인
 ```
 
@@ -154,7 +156,7 @@ claude mcp list        # 등록 확인
 ```json
 {
   "mcpServers": {
-    "sqi-comn-term": { "type": "http", "url": "http://52.78.238.167:8687/api/v1/mcp" }
+    "sqi-comn-term": { "type": "http", "url": "https://term.sqisoft.com/api/v1/mcp" }
   }
 }
 ```
@@ -162,6 +164,40 @@ claude mcp list        # 등록 확인
 
 **연결 확인**: `/mcp` 명령으로 상태 확인. 연결이 안 되면 상세에서 `Reconnect`.
 
-> **미설치 시 처리 흐름**: 테이블/DDL 생성 시 `sqi-comn-term` 도구 존재를 먼저 확인한다.
-> - **있으면** → `translate_column`/`validate_column` 수행.
-> - **없으면** → ① 위 설치 명령 실행 → ② `claude mcp list` 확인 → ③ **사용자에게 안내**: "MCP를 설치했습니다. `/mcp`에서 `Reconnect` 또는 Claude Code 재시작 후 명령을 다시 실행해 주세요." 새로 추가한 MCP는 현재 세션에 바로 로드되지 않으므로, **재실행 세션부터** 표준화가 적용된다.
+### 기존 IP 등록을 도메인으로 전환
+
+현재 등록 URL을 확인한다. 이미 공식 도메인이면 재등록을 생략하고 연결을 확인한다.
+기존 IP로 등록된 경우에는 같은 이름의 등록을 교체한다.
+
+**Codex 사용자 설정:**
+
+```powershell
+codex.cmd mcp remove sqi-comn-term
+codex.cmd mcp add sqi-comn-term --url https://term.sqisoft.com/api/v1/mcp
+codex.cmd mcp list
+```
+
+**Claude Code 사용자 설정:**
+
+```text
+claude mcp remove -s user sqi-comn-term
+claude mcp add -s user --transport http sqi-comn-term https://term.sqisoft.com/api/v1/mcp
+claude mcp list
+```
+
+프로젝트 `.mcp.json`에 등록했다면 해당 파일의 `sqi-comn-term.url`을 위 도메인 URL로
+바꾼다. 변경 후 Codex는 재시작·새 대화, Claude Code는 `/mcp`의 `Reconnect` 또는 재시작으로
+연결을 다시 로드한다.
+
+### 실제 연결 확인
+
+테이블정의서·명세일괄 시작 시 도구 존재를 확인하고 `list_categories`를 실제 호출한다.
+이미 이번 실행에서 정상 응답을 받았다면 그 결과를 재사용한다.
+
+- **정상 카테고리 응답** → `translate_column`/`validate_column` 수행.
+- **도구 없음** → 위 설치·재연결 안내 후 해당 워크플로를 중단한다.
+- **도구는 있으나 호출 실패** → 등록 URL과 실제 오류를 안내하고 도메인 전환·재연결을
+  안내한 뒤 중단한다. 도구 목록에 보이는 것만으로 연결 성공으로 판단하지 않는다.
+
+연결이 복구되면 `list_categories`를 다시 호출한다. 복구 전에는 승인 게이트를 진행하거나
+표준 컬럼명을 추정하지 않는다.
