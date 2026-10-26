@@ -102,15 +102,16 @@ AN-03 기능명세서, DE-08 테이블정의서, DE-13 단위테스트계획서,
 
 테이블정의서와 명세일괄에는 외부 `sqi-comn-term` MCP 연결이 필요합니다.
 Windows PowerShell에서는 아래 명령으로 사업부 표준용어 MCP를 사용자 환경에 등록합니다.
-사업부 서버 주소가 다른 환경이면 URL을 해당 주소로 바꿉니다.
+공식 연결 주소는 `https://term.sqisoft.com/api/v1/mcp`입니다.
 
 ```powershell
-codex.cmd mcp add sqi-comn-term --url http://52.78.238.167:8687/api/v1/mcp
+codex.cmd mcp add sqi-comn-term --url https://term.sqisoft.com/api/v1/mcp
 codex.cmd mcp list
 ```
 
-등록 후 Codex를 다시 시작하거나 새 대화를 열어 `sqi-comn-term` 도구가 보이는지 확인한 다음
-테이블정의서 또는 명세일괄을 요청합니다. 연결이 없으면 해당 작업은 선행조건에서 멈춥니다.
+기존 IP 주소로 등록돼 있다면 아래 상세 안내에 따라 연결 주소를 전환합니다.
+등록 후 Codex를 다시 시작하거나 새 대화를 열고 `list_categories` 실제 호출이 성공하는지
+확인한 다음 테이블정의서 또는 명세일괄을 요청합니다. 연결 실패도 선행조건에서 처리합니다.
 상세 연결 안내는 [표준용어 MCP 연계](plugins/gx-pm/docs/표준용어-mcp-연계.md)를 참조하세요.
 
 ---

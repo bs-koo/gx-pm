@@ -61,10 +61,20 @@ class CodexCompatibilityTest(unittest.TestCase):
         guide = (PLUGIN_ROOT / "docs" / "표준용어-mcp-연계.md").read_text(encoding="utf-8")
         claude_url = re.search(r"claude mcp add -s user --transport http sqi-comn-term (https?://\S+)", guide)
         self.assertIsNotNone(claude_url)
+        endpoint = "https://term.sqisoft.com/api/v1/mcp"
+        self.assertEqual(claude_url.group(1), endpoint)
         self.assertIn(f"codex.cmd mcp add sqi-comn-term --url {claude_url.group(1)}", guide)
+        self.assertIn(f'"url": "{endpoint}"', guide)
+        self.assertIn("codex.cmd mcp remove sqi-comn-term", guide)
+        self.assertIn("claude mcp remove -s user sqi-comn-term", guide)
         self.assertIn("codex.cmd mcp list", guide)
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertIn("codex.cmd mcp add sqi-comn-term --url", readme)
+        self.assertIn(f"codex.cmd mcp add sqi-comn-term --url {endpoint}", readme)
+        for document in (guide, readme):
+            self.assertNotIn("52.78.238.167", document)
+        prerequisites = (PLUGIN_ROOT / "templates/prerequisites.md").read_text(encoding="utf-8")
+        self.assertIn("list_categories", prerequisites)
+        self.assertIn("호출 실패도 하드 선행 미충족", prerequisites)
 
     def test_readme가_codex_설치와_제약을_안내한다(self):
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
