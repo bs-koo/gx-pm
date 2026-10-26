@@ -1,80 +1,23 @@
-"""utils/test-evidence.py — 개발 레포 테스트 색인·DE-13 읽기·기입.
-
-이 스크립트는 판단하지 않는다. 테스트와 계획서 행을 짝짓는 것은 apply-test-results
-스킬(모델)의 몫이고, 스크립트는 그 판단에 쓸 사실을 정확히 모으고(index·plan)
-승인된 결과를 표 모양을 깨지 않고 쓰는(apply) 일만 한다.
-"""
+"""로컬 실측 증적 검증과 DE-13 읽기·결과서 기록의 회귀 검사."""
 
 import contextlib
+import copy
+import hashlib
 import io
 import json
 import os
-import shutil
-import subprocess
 import tempfile
 import unittest
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 from datetime import datetime
 from pathlib import Path
-from unittest import mock
 
 from helpers import load_util
 
 ev = load_util("test-evidence.py")
-
-CORE_AC = """# 메모 관리
-
-## 배경
-건물별 메모를 등록한다.
-
-## 요구사항 (AC)
-- AC-1: 빈 메모 거부
-  Given: 건물 1건
-  When: 내용이 공백인 메모 저장
-  Then: "메모를 입력하세요" 안내, 저장 없음
-- AC-2: 2,000자 초과 거부 (제외 — 위험 수용)
-  Given: 건물 1건
-  When: 2,001자 메모 저장
-  Then: 거부
-- AC-3: 정상 저장
-  Given: 건물 1건
-  When: 10자 메모 저장
-  Then: 메모 1건 저장
-"""
-
-CORE_STATE = """phase: complete
-status: in_progress
-pipeline: gx-tdd
-verify-status: passed
-verify-fingerprint: "abc1234:0123456789ab"
-mode: core
-branch: feat/memo
-steps:
-  implement:
-    - "RGR T1 (AC-1)": { red: completed, test-file: src/test/java/MemoTest.java, test-file-hash: 3ca9, test-count: 3, report: reports/t1-impl.md, impl: completed }
-    - "RGR T2 (AC-3)":
-        red: completed
-        test-file: src/test/java/MemoSaveTest.java
-        impl: completed
-"""
-
-FULL_PRD = """## PRD: 원천 데이터 등록
-### 배경
-원천파일을 회차로 등록한다.
-### 요구사항
-#### 기능 요구사항
-- [Must] FR-1: 4종 파일 등록
-### 수용 기준
-AC-1: 정상 등록
-  Given: 회차 없음
-  When: 4종 파일(각 500MB) 등록
-  Then: 회차 생성, 상태 '등록완료'
-AC-2: 용량 초과 차단 → [FR-1]
-  Given: 회차 없음
-  When: 1,001MB 파일 등록
-  Then: "파일 용량 초과" 안내, 저장 없음
-### 제외 범위
-- 없음
-"""
 
 PLAN_MD = """# DE-13 단위테스트계획서 — 테스트
 
@@ -103,572 +46,6 @@ def write(root: Path, rel: str, text: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(text.encode("utf-8"))  # OS 줄바꿈 변환 없이 — 줄바꿈 보존 검사가 의미를 갖게
     return path
-
-
-class CollectTests(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory(prefix="evidence 한글 ")
-        self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name)
-
-    def by_slug(self, result):
-        return {r["slug"]: r for r in result["records"]}
-
-    def test_core_mode_acs_tests_and_exclusion(self):
-        write(self.root, ".dev/feat-memo/ac.md", CORE_AC)
-        write(self.root, ".dev/feat-memo/state.md", CORE_STATE)
-        write(self.root, "src/test/java/MemoTest.java", "class MemoTest {}")
-        rec = self.by_slug(ev.collect(self.root))["feat-memo"]
-        self.assertEqual((rec["pipeline"], rec["status"], rec["mode"]), ("gx-tdd", "evidence", "core"))
-        acs = {a["id"]: a for a in rec["acs"]}
-        self.assertEqual(sorted(acs), ["AC-1", "AC-2", "AC-3"])
-        self.assertEqual(acs["AC-1"]["then"], '"메모를 입력하세요" 안내, 저장 없음')
-        self.assertTrue(acs["AC-2"]["excluded"])
-        self.assertFalse(acs["AC-1"]["excluded"])
-        self.assertEqual(acs["AC-1"]["tests"], [{"file": "src/test/java/MemoTest.java", "exists": True,
-                                                  "red_report": "reports/t1-red.md"}])
-        self.assertEqual(acs["AC-3"]["tests"][0]["file"], "src/test/java/MemoSaveTest.java")
-        self.assertFalse(acs["AC-3"]["tests"][0]["exists"])
-        self.assertIn("건물별 메모", rec["context"])
-
-    def test_full_mode_reads_acceptance_criteria_section(self):
-        write(self.root, ".dev/feat-source/prd.md", FULL_PRD)
-        write(self.root, ".dev/feat-source/state.md", CORE_STATE.replace("mode: core", "mode: all"))
-        rec = self.by_slug(ev.collect(self.root))["feat-source"]
-        acs = {a["id"]: a for a in rec["acs"]}
-        self.assertEqual(sorted(acs), ["AC-1", "AC-2"])
-        self.assertEqual(acs["AC-2"]["title"], "용량 초과 차단 → [FR-1]")
-        self.assertEqual(acs["AC-2"]["when"], "1,001MB 파일 등록")
-        self.assertIn("원천파일을 회차로", rec["context"])
-
-    def test_unverified_gx_dev_and_ralph_records_are_classified(self):
-        write(self.root, ".dev/feat-wip/ac.md", CORE_AC)
-        write(self.root, ".dev/feat-wip/state.md", CORE_STATE.replace("verify-status: passed", "verify-status: pending"))
-        write(self.root, ".dev/feat-dev/ac.md", CORE_AC)
-        write(self.root, ".dev/feat-dev/state.md", "phase: complete\nstatus: completed\nmode: core\n")
-        write(self.root, ".dev/feat-loop/prd.md", FULL_PRD)
-        write(self.root, ".dev/feat-loop/state.md", "pipeline: gx-ralph\norigin: gx-tdd\nverify-status: pending\n")
-        write(self.root, ".dev/feat-loop/ac-status.json", json.dumps({"version": 1, "acs": [
-            {"id": "AC-1", "title": "정상 등록", "passes": True}, {"id": "AC-2", "title": "용량", "passes": False}]}))
-        records = self.by_slug(ev.collect(self.root))
-        self.assertEqual(records["feat-wip"]["status"], "incomplete")
-        self.assertEqual(records["feat-dev"]["status"], "insufficient")
-        loop = records["feat-loop"]
-        self.assertEqual(loop["status"], "evidence")
-        self.assertEqual({a["id"]: a["passes"] for a in loop["acs"]}, {"AC-1": True, "AC-2": False})
-
-    def test_skips_non_record_directories(self):
-        write(self.root, ".dev/plan.md", "# plan")
-        write(self.root, ".dev/.active", "feat-memo")
-        write(self.root, ".dev/architecture/map.md", "x")
-        write(self.root, ".dev/feat-memo.backup-1700000000/state.md", CORE_STATE)
-        write(self.root, ".dev/feat-memo/logs-20261001-101010/state.md", CORE_STATE)
-        self.assertEqual(ev.collect(self.root)["records"], [])
-
-    def test_git_commit_date_and_author_of_state(self):
-        if shutil.which("git") is None:
-            self.skipTest("git 없음")
-        write(self.root, ".dev/feat-memo/ac.md", CORE_AC)
-        write(self.root, ".dev/feat-memo/state.md", CORE_STATE)
-        run = lambda *a: subprocess.run(["git", "-C", str(self.root), *a], check=True, capture_output=True)
-        run("init", "-q")
-        run("-c", "user.name=kim.dev", "-c", "user.email=k@example.com", "add", "-A")
-        run("-c", "user.name=kim.dev", "-c", "user.email=k@example.com",
-            "commit", "-q", "-m", "feat", "--date", "2026-10-12T10:00:00")
-        result = ev.collect(self.root)
-        rec = self.by_slug(result)["feat-memo"]
-        self.assertEqual((rec["author"], rec["date"]), ("kim.dev", "2026.10.12"))
-        self.assertEqual(result["vcs"], "git")
-
-    def test_acs_changed_after_verify_commit_are_flagged(self):
-        """2차 평가에서 발견: verify 뒤 ac.md 만 고친 커밋이 들어오면 옛 AC 의 verify 가 새 AC 의 증적처럼 보였다."""
-        if shutil.which("git") is None:
-            self.skipTest("git 없음")
-        write(self.root, ".dev/feat-memo/ac.md", CORE_AC)
-        write(self.root, ".dev/feat-memo/state.md", CORE_STATE)
-        run = lambda *a: subprocess.run(["git", "-C", str(self.root), "-c", "user.name=kim.dev",
-                                         "-c", "user.email=k@example.com", *a], check=True, capture_output=True)
-        run("init", "-q")
-        run("add", "-A")
-        run("commit", "-q", "-m", "verify")
-        self.assertFalse(self.by_slug(ev.collect(self.root))["feat-memo"]["ac_changed_after_verify"])
-        write(self.root, ".dev/feat-memo/ac.md", CORE_AC.replace("Then: 메모 1건 저장", "Then: 메모 2건 저장"))
-        run("commit", "-q", "-am", "AC-3 변경")
-        rec = self.by_slug(ev.collect(self.root))["feat-memo"]
-        self.assertTrue(rec["ac_changed_after_verify"])
-        self.assertEqual({a["id"]: a["changed_after_verify"] for a in rec["acs"]},
-                         {"AC-1": False, "AC-2": False, "AC-3": True})
-        write(self.root, ".dev/feat-memo/ac.md", CORE_AC.replace("Then: 메모 1건 저장", "Then: 메모 2건 저장")
-              .replace("공백인 메모", "빈 메모"))  # 커밋하지 않은 변경도 verify 뒤의 변경이다
-        rec = self.by_slug(ev.collect(self.root))["feat-memo"]
-        self.assertTrue({a["id"]: a["changed_after_verify"] for a in rec["acs"]}["AC-1"])
-
-    def test_git_is_read_when_repository_owner_differs(self):
-        """Codex 실측: 샌드박스가 다른 계정으로 돌아 git 이 소유권 검사로 거부했고, 도구는 조용히 vcs none 이 됐다."""
-        if shutil.which("git") is None:
-            self.skipTest("git 없음")
-        write(self.root, ".dev/feat-memo/ac.md", CORE_AC)
-        write(self.root, ".dev/feat-memo/state.md", CORE_STATE)
-        run = lambda *a: subprocess.run(["git", "-C", str(self.root), "-c", "user.name=kim.dev",
-                                         "-c", "user.email=k@example.com", *a], check=True, capture_output=True)
-        run("init", "-q")
-        run("add", "-A")
-        run("commit", "-q", "-m", "verify", "--date", "2026-10-12T10:00:00")
-        with mock.patch.dict(os.environ, {"GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"}):
-            result = ev.collect(self.root)
-        self.assertEqual((result["vcs"], result["warnings"]), ("git", []))
-        rec = self.by_slug(result)["feat-memo"]
-        self.assertEqual((rec["author"], rec["date"]), ("kim.dev", "2026.10.12"))
-        self.assertFalse(rec["ac_changed_after_verify"])
-
-    def test_unreadable_git_is_reported_not_silent(self):
-        if shutil.which("git") is None:
-            self.skipTest("git 없음")
-        write(self.root, ".git", "깨진 gitfile")
-        write(self.root, ".dev/feat-memo/ac.md", CORE_AC)
-        write(self.root, ".dev/feat-memo/state.md", CORE_STATE)
-        result = ev.collect(self.root)
-        self.assertEqual(result["vcs"], "none")
-        self.assertEqual(len(result["warnings"]), 1)
-        self.assertIn("git", result["warnings"][0])
-
-    def test_ac_doc_missing_at_verify_commit_counts_as_changed(self):
-        """최종 리뷰: verify 커밋에 AC 문서가 없으면 알 수 없음(null)이 되어 증적으로 쓰였다 — 나중에 생긴 AC 다."""
-        if shutil.which("git") is None:
-            self.skipTest("git 없음")
-        write(self.root, ".dev/feat-memo/state.md", CORE_STATE)
-        run = lambda *a: subprocess.run(["git", "-C", str(self.root), "-c", "user.name=kim.dev",
-                                         "-c", "user.email=k@example.com", *a], check=True, capture_output=True)
-        run("init", "-q")
-        run("add", "-A")
-        run("commit", "-q", "-m", "verify")
-        write(self.root, ".dev/feat-memo/ac.md", CORE_AC)
-        run("add", "-A")
-        run("commit", "-q", "-m", "AC 나중에 추가")
-        rec = self.by_slug(ev.collect(self.root))["feat-memo"]
-        self.assertTrue(rec["ac_changed_after_verify"])
-        self.assertTrue(all(a["changed_after_verify"] for a in rec["acs"]))
-
-    def test_task_block_ends_at_sibling_key(self):
-        """최종 리뷰: 태스크 끝을 들여쓰기 없는 줄로만 봐서 다음 블록의 test-file 이 앞 태스크에 붙을 수 있었다."""
-        write(self.root, ".dev/feat-memo/ac.md", CORE_AC)
-        write(self.root, ".dev/feat-memo/state.md", "pipeline: gx-tdd\nverify-status: passed\nsteps:\n  implement:\n"
-              "    - \"RGR T1 (AC-1)\":\n        red: completed\n        impl: in_progress\n"
-              "  review:\n    test-file: src/test/java/Other.java\n")
-        acs = {a["id"]: a for a in self.by_slug(ev.collect(self.root))["feat-memo"]["acs"]}
-        self.assertEqual(acs["AC-1"]["tests"], [])
-
-    def test_risk_accepted_acs_and_untested_verify_are_flagged(self):
-        """최종 리뷰: gx-tdd 가 trust-ledger 에 위험 수용으로 적은 AC(하네스 부재 제외 등)가 증적으로 나갔다."""
-        write(self.root, ".dev/feat-memo/ac.md", CORE_AC)
-        write(self.root, ".dev/feat-memo/state.md", CORE_STATE)
-        ledger = write(self.root, ".dev/feat-memo/trust-ledger.md",
-                       "## Trust Ledger\n\n### 통합 감사 (review)\n- [품질/Minor] AC-1 이름 정리\n\n### 위험 수용\n"
-                       "- [하네스 부재 AC 제외] AC-1: 프론트 러너 없음 (implement/Step 0.5)\n"
-                       "- [태스크 리뷰 미해결] T2: 경계값 누락 (implement/Step 2-V)\n"
-                       "- [신규 경고 수용] 경고 2건 (complete/Step -1)\n")
-        rec = self.by_slug(ev.collect(self.root))["feat-memo"]
-        self.assertEqual(rec["status"], "evidence")
-        self.assertEqual(len(rec["risk_acceptances"]), 3)
-        acs = {a["id"]: a for a in rec["acs"]}
-        self.assertEqual([("AC-1" in r) for r in acs["AC-1"]["risks"]], [True])  # 통합 감사 줄은 세지 않는다
-        self.assertEqual(acs["AC-2"]["risks"], [])
-        self.assertEqual(len(acs["AC-3"]["risks"]), 1)  # T2 는 AC-3 의 태스크
-        ledger.write_bytes((ledger.read_text(encoding="utf-8")
-                            + "- [검증 명령 미감지] 테스트 명령 없음 (complete/Step -1)\n").encode("utf-8"))
-        rec = self.by_slug(ev.collect(self.root))["feat-memo"]
-        self.assertEqual(rec["status"], "insufficient")
-        self.assertIn("검증 명령 미감지", rec["reason"])
-
-    def test_acs_without_rgr_task_are_marked(self):
-        """최종 리뷰: RGR 태스크가 없는(구현에서 빠진) AC 도 경고 없이 증적이 됐다."""
-        write(self.root, ".dev/feat-memo/ac.md", CORE_AC)
-        write(self.root, ".dev/feat-memo/state.md", CORE_STATE)
-        write(self.root, ".dev/feat-loop/prd.md", FULL_PRD)
-        write(self.root, ".dev/feat-loop/state.md", "pipeline: gx-ralph\norigin: gx-tdd\nverify-status: pending\n")
-        records = self.by_slug(ev.collect(self.root))
-        self.assertEqual({a["id"]: a["has_task"] for a in records["feat-memo"]["acs"]},
-                         {"AC-1": True, "AC-2": False, "AC-3": True})
-        self.assertEqual({a["has_task"] for a in records["feat-loop"]["acs"]}, {None})
-
-    def test_struck_and_en_dash_exclusions(self):
-        text = (CORE_AC.replace("- AC-2: 2,000자 초과 거부 (제외 — 위험 수용)", "- ~~AC-2: 2,000자 초과 거부~~")
-                .replace("- AC-3: 정상 저장", "- AC-3: 정상 저장 (제외 – 위험 수용)"))
-        write(self.root, ".dev/feat-memo/ac.md", text)
-        write(self.root, ".dev/feat-memo/state.md", CORE_STATE)
-        acs = {a["id"]: a for a in self.by_slug(ev.collect(self.root))["feat-memo"]["acs"]}
-        self.assertEqual(acs["AC-1"]["when"], "내용이 공백인 메모 저장")  # 지운 AC-2 의 G-W-T 가 덮지 않는다
-        self.assertEqual(acs["AC-2"]["title"], "2,000자 초과 거부")
-        self.assertTrue(acs["AC-2"]["excluded"])
-        self.assertTrue(acs["AC-3"]["excluded"])
-
-    def test_multiline_then_is_kept(self):
-        """최종 리뷰: gx-tdd 정본 예시처럼 Then 을 두 줄로 쓰면 둘째 줄(변화 없음 사후조건)이 버려졌다."""
-        write(self.root, ".dev/feat-memo/ac.md", CORE_AC.replace(
-            'Then: "메모를 입력하세요" 안내, 저장 없음', 'Then:  "메모를 입력하세요" 안내되고\n         저장 요청이 발생하지 않는다'))
-        write(self.root, ".dev/feat-memo/state.md", CORE_STATE)
-        acs = {a["id"]: a for a in self.by_slug(ev.collect(self.root))["feat-memo"]["acs"]}
-        self.assertEqual(acs["AC-1"]["then"], '"메모를 입력하세요" 안내되고 저장 요청이 발생하지 않는다')
-        self.assertEqual(acs["AC-2"]["given"], "건물 1건")
-
-    def test_ac_document_follows_mode(self):
-        """최종 리뷰: core 로 먼저 돌린 낡은 ac.md 가 남아 있으면 full(mode: all) 기록도 ac.md 를 읽었다."""
-        write(self.root, ".dev/feat-source/ac.md", CORE_AC)
-        write(self.root, ".dev/feat-source/prd.md", FULL_PRD)
-        state = write(self.root, ".dev/feat-source/state.md", CORE_STATE.replace("mode: core", "mode: all"))
-        rec = self.by_slug(ev.collect(self.root))["feat-source"]
-        self.assertEqual((rec["ac_source"], rec["acs"][0]["title"]), ("prd.md", "정상 등록"))
-        state.write_bytes(CORE_STATE.encode("utf-8"))
-        self.assertEqual(self.by_slug(ev.collect(self.root))["feat-source"]["ac_source"], "ac.md")
-
-    def test_source_can_be_a_subdirectory_of_the_repository(self):
-        """최종 리뷰: 하위 폴더를 소스로 주면 git show 경로가 어긋나 바뀌지 않은 AC 까지 변경으로 빠졌다."""
-        if shutil.which("git") is None:
-            self.skipTest("git 없음")
-        write(self.root, "app/.dev/feat-memo/ac.md", CORE_AC)
-        write(self.root, "app/.dev/feat-memo/state.md", CORE_STATE)
-        run = lambda *a: subprocess.run(["git", "-C", str(self.root), "-c", "user.name=kim.dev",
-                                         "-c", "user.email=k@example.com", *a], check=True, capture_output=True)
-        run("init", "-q")
-        run("add", "-A")
-        run("commit", "-q", "-m", "verify")
-        rec = self.by_slug(ev.collect(self.root / "app"))["feat-memo"]
-        self.assertEqual((rec["author"], rec["ac_changed_after_verify"]), ("kim.dev", False))
-
-    def test_change_after_verify_is_unknown_without_vcs(self):
-        write(self.root, ".dev/feat-memo/ac.md", CORE_AC)
-        write(self.root, ".dev/feat-memo/state.md", CORE_STATE)
-        rec = self.by_slug(ev.collect(self.root))["feat-memo"]
-        self.assertIsNone(rec["ac_changed_after_verify"])
-        self.assertIsNone(rec["acs"][0]["changed_after_verify"])
-
-    def test_missing_source_is_error(self):
-        with self.assertRaises(ev.InputError):
-            ev.collect(self.root / "없음")
-
-
-JAVA_TEST = r'''package kr.reb.source;
-
-import org.junit.jupiter.api.*;
-
-class FileSizeLimitTest {
-    private static final long MB = 1024L * 1024;
-
-    @Test
-    @DisplayName("1,001MB 파일은 \"파일 용량 초과\"로 차단되고 저장되지 않는다")
-    void rejectsOverLimit() {
-        var ex = assertThrows(FileTooLargeException.class, () -> service.upload(file(1001L * MB)));
-        assertEquals("파일 용량 초과", ex.getMessage());
-        verify(repository, never()).save(any());
-    }
-
-    @Test void acceptsExactlyLimit() {
-        service.upload(file(1000L * MB));
-        verify(repository).save(any());
-    }
-
-    @Disabled("러너 없음")
-    @Test
-    void slowCase() { }
-
-    @Nested
-    class WhenEmpty {
-        @ParameterizedTest
-        @ValueSource(strings = {"a.csv"})
-        void rejectsZeroByte(String name) {
-            assertThatThrownBy(() -> service.upload(empty(name))).hasMessage("빈 파일은 등록할 수 없습니다");
-        }
-    }
-
-    private Object file(long size) { return null; }
-}
-'''
-
-KOTLIN_TEST = '''class CycleDeleteServiceTest {
-    @Test
-    fun `처리중 회차는 삭제할 수 없다`() {
-        assertThrows<IllegalStateException> { service.delete(processing) }
-    }
-}
-'''
-
-TS_TEST = """describe('원천 데이터 등록', () => {
-  it('0바이트 파일을 거부한다', () => {
-    expect(() => upload(emptyFile)).toThrow('빈 파일은 등록할 수 없습니다');
-  });
-  it.skip('나중에', () => {});
-  describe('용량', () => {
-    test("1,001MB 차단", () => { expect(upload(big)).rejects.toThrow("파일 용량 초과"); });
-  });
-});
-xit('전역 스킵', () => {});
-"""
-
-
-def junit_xml(classname, cases, timestamp="2026-10-20T10:00:00"):
-    body = "".join(f'<testcase classname="{classname}" name="{n}" time="0.1">{extra}</testcase>' for n, extra in cases)
-    return f'<?xml version="1.0" encoding="UTF-8"?><testsuite name="{classname}" tests="{len(cases)}" timestamp="{timestamp}">{body}</testsuite>'
-
-
-class IndexTests(unittest.TestCase):
-    """테스트 코드 색인 — 근거는 레포에 실제로 있는 테스트 메서드다 (개발 도구와 무관)."""
-
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory(prefix="index 한글 ")
-        self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name) / "reb-api"
-        self.root.mkdir()
-
-    def by_name(self, result):
-        return {t["name"]: t for t in result["tests"]}
-
-    def git(self, *args, user="kim.dev", date=None):
-        env = {**os.environ}
-        if date:
-            env.update(GIT_AUTHOR_DATE=date, GIT_COMMITTER_DATE=date)
-        subprocess.run(["git", "-C", str(self.root), "-c", f"user.name={user}", "-c", "user.email=u@example.com", *args],
-                       check=True, capture_output=True, env=env)
-
-    def test_java_methods_with_display_names_literals_and_disabled(self):
-        write(self.root, "src/test/java/kr/reb/source/FileSizeLimitTest.java", JAVA_TEST)
-        tests = self.by_name(ev.index([self.root]))
-        self.assertEqual(sorted(tests), ["acceptsExactlyLimit", "rejectsOverLimit", "rejectsZeroByte", "slowCase"])
-        over = tests["rejectsOverLimit"]
-        self.assertEqual((over["repo"], over["lang"], over["class"]), ("reb-api", "java", "FileSizeLimitTest"))
-        self.assertEqual(over["file"], "src/test/java/kr/reb/source/FileSizeLimitTest.java")
-        self.assertEqual(over["display"], '1,001MB 파일은 "파일 용량 초과"로 차단되고 저장되지 않는다')
-        self.assertIn("파일 용량 초과", over["literals"])
-        self.assertIn("1001", over["literals"])
-        self.assertEqual(over["asserts"], 3)
-        self.assertEqual(over["line"], 10)
-        self.assertFalse(over["disabled"])
-        self.assertTrue(tests["slowCase"]["disabled"])
-        self.assertEqual(tests["rejectsZeroByte"]["class"], "WhenEmpty")
-        self.assertIn("빈 파일은 등록할 수 없습니다", tests["rejectsZeroByte"]["literals"])
-        self.assertEqual(tests["acceptsExactlyLimit"]["run"]["status"], "none")
-
-    def test_class_scope_survives_nested_classes_and_next_line_braces(self):
-        write(self.root, "src/test/java/OrderTest.java", "class OrderTest\n{\n    @Nested\n    class Inner\n    {\n"
-              "        @Test void a() { assertTrue(x); }\n    }\n\n    @Test\n    void b()\n    {\n        assertTrue(y);\n    }\n}\n")
-        tests = self.by_name(ev.index([self.root]))
-        self.assertEqual((tests["a"]["class"], tests["b"]["class"]), ("Inner", "OrderTest"))
-
-    def test_kotlin_backtick_names(self):
-        write(self.root, "src/test/kotlin/CycleDeleteServiceTest.kt", KOTLIN_TEST)
-        test = ev.index([self.root])["tests"][0]
-        self.assertEqual((test["name"], test["lang"], test["asserts"]), ("처리중 회차는 삭제할 수 없다", "kotlin", 1))
-
-    def test_js_describe_it_and_skips(self):
-        write(self.root, "web/src/upload.test.ts", TS_TEST)
-        tests = self.by_name(ev.index([self.root]))
-        self.assertEqual(sorted(tests), ["0바이트 파일을 거부한다", "1,001MB 차단", "나중에", "전역 스킵"])
-        self.assertEqual(tests["1,001MB 차단"]["class"], "원천 데이터 등록 > 용량")
-        self.assertIn("파일 용량 초과", tests["1,001MB 차단"]["literals"])
-        self.assertEqual([tests[n]["disabled"] for n in ("0바이트 파일을 거부한다", "나중에", "전역 스킵")],
-                         [False, True, True])
-
-    def test_build_output_and_dependencies_are_not_scanned_for_tests(self):
-        write(self.root, "node_modules/lib/x.test.js", "it('lib', () => { expect(1).toBe(1); });")
-        write(self.root, "build/generated/GenTest.java", JAVA_TEST)
-        write(self.root, ".dev/feat/reports/FooTest.java", JAVA_TEST)
-        self.assertEqual(ev.index([self.root])["tests"], [])
-
-    def test_junit_reports_give_latest_run_and_staleness(self):
-        """빌드 도구가 남긴 결과 파일을 있는 그대로 읽는다 — 따로 관리하지 않는다."""
-        test_file = write(self.root, "src/test/java/kr/reb/source/FileSizeLimitTest.java", JAVA_TEST)
-        write(self.root, "build/test-results/test/TEST-kr.reb.source.FileSizeLimitTest.xml", junit_xml(
-            "kr.reb.source.FileSizeLimitTest",
-            [("rejectsOverLimit()", ""), ("acceptsExactlyLimit()", '<failure message="x">boom</failure>'),
-             ("slowCase()", "<skipped/>")]))
-        write(self.root, "build/test-results/test/TEST-kr.reb.source.FileSizeLimitTest$WhenEmpty.xml", junit_xml(
-            "kr.reb.source.FileSizeLimitTest$WhenEmpty", [("[1] a.csv", "")]))
-        old = datetime(2026, 10, 19, 9, 0).timestamp()
-        os.utime(test_file, (old, old))
-        tests = self.by_name(ev.index([self.root]))
-        over = tests["rejectsOverLimit"]["run"]
-        self.assertEqual((over["status"], over["date"], over["by"], over["stale"]), ("passed", "2026.10.20", "report", False))
-        self.assertTrue(over["source"].endswith("TEST-kr.reb.source.FileSizeLimitTest.xml"))
-        self.assertEqual(tests["acceptsExactlyLimit"]["run"]["status"], "failed")
-        self.assertEqual(tests["slowCase"]["run"]["status"], "skipped")
-        self.assertEqual(tests["rejectsZeroByte"]["run"]["status"], "none")  # 매개변수 테스트 이름만으로는 짝을 확정하지 않는다
-        new = datetime(2026, 10, 21, 9, 0).timestamp()
-        os.utime(test_file, (new, new))  # 결과 뒤에 테스트 파일이 바뀌었다
-        self.assertTrue(self.by_name(ev.index([self.root]))["rejectsOverLimit"]["run"]["stale"])
-
-    def test_failed_run_keeps_the_failure_message(self):
-        """평가 7회차: Fail 사유에 적을 실패 메시지를 결과 파일을 직접 열어 옮겼다."""
-        write(self.root, "src/test/java/kr/reb/source/FileSizeLimitTest.java", JAVA_TEST)
-        write(self.root, "build/test-results/test/TEST-kr.reb.source.FileSizeLimitTest.xml", junit_xml(
-            "kr.reb.source.FileSizeLimitTest",
-            [("rejectsOverLimit()", '<failure message="expected 3 saved but was 0">AssertionFailedError</failure>'),
-             ("acceptsExactlyLimit()", "<error>java.lang.NullPointerException\n\tat kr.reb.X</error>"),
-             ("slowCase()", "")]))
-        tests = self.by_name(ev.index([self.root]))
-        self.assertEqual(tests["rejectsOverLimit"]["run"]["message"], "expected 3 saved but was 0")
-        self.assertEqual(tests["acceptsExactlyLimit"]["run"]["message"], "java.lang.NullPointerException")
-        self.assertNotIn("message", tests["slowCase"]["run"])
-
-    def test_summary_counts_stale_passes_apart(self):
-        """평가 7회차: 색인 요약의 '통과' 에 실행 뒤 바뀐 테스트의 결과가 섞여 보였다."""
-        test_file = write(self.root, "src/test/java/kr/reb/source/FileSizeLimitTest.java", JAVA_TEST)
-        write(self.root, "build/test-results/test/TEST-kr.reb.source.FileSizeLimitTest.xml", junit_xml(
-            "kr.reb.source.FileSizeLimitTest", [("rejectsOverLimit()", ""), ("acceptsExactlyLimit()", "")]))
-        new = datetime(2026, 10, 21, 9, 0).timestamp()
-        os.utime(test_file, (new, new))
-        err = io.StringIO()
-        with contextlib.redirect_stderr(err):
-            self.assertEqual(ev.main(["index", "--source", str(self.root), "--out", str(Path(self.tmp.name) / "t.json")]), 0)
-        self.assertIn("통과 2 (그중 실행 뒤 테스트가 바뀐 결과 2)", err.getvalue())
-
-    def test_warns_when_every_reported_test_file_looks_newer_than_its_results(self):
-        """평가 v4 보고: 폴더를 수정 시각 보존 없이 복사하면 모든 결과가 낡음으로 보여 Pass 가 0 이 된다 — 알린다."""
-        a = write(self.root, "src/test/java/kr/reb/source/FileSizeLimitTest.java", JAVA_TEST)
-        b = write(self.root, "src/test/java/kr/reb/OrderTest.java", "class OrderTest {\n    @Test void a() { assertTrue(x); }\n}\n")
-        write(self.root, "build/test-results/test/TEST-kr.reb.source.FileSizeLimitTest.xml",
-              junit_xml("kr.reb.source.FileSizeLimitTest", [("rejectsOverLimit()", "")]))
-        write(self.root, "build/test-results/test/TEST-kr.reb.OrderTest.xml", junit_xml("kr.reb.OrderTest", [("a()", "")]))
-        copied = datetime(2026, 10, 21, 9, 0).timestamp()
-        for p in (a, b):
-            os.utime(p, (copied, copied))
-        warnings = ev.index([self.root])["sources"][0]["warnings"]
-        self.assertTrue(any("원래 폴더" in w for w in warnings), warnings)
-        old = datetime(2026, 10, 19, 9, 0).timestamp()
-        os.utime(b, (old, old))  # 한 파일만 나중에 바뀐 것은 정상적인 수정이다
-        self.assertEqual(ev.index([self.root])["sources"][0]["warnings"], [])
-
-    def test_report_matches_display_names(self):
-        test_file = write(self.root, "src/test/java/kr/reb/source/FileSizeLimitTest.java", JAVA_TEST)
-        write(self.root, "target/surefire-reports/TEST-kr.reb.source.FileSizeLimitTest.xml", junit_xml(
-            "kr.reb.source.FileSizeLimitTest", [('1,001MB 파일은 &quot;파일 용량 초과&quot;로 차단되고 저장되지 않는다', "")]))
-        old = datetime(2026, 10, 19, 9, 0).timestamp()
-        os.utime(test_file, (old, old))
-        self.assertEqual(self.by_name(ev.index([self.root]))["rejectsOverLimit"]["run"]["status"], "passed")
-
-    def test_jest_junit_report_matches_titles(self):
-        test_file = write(self.root, "web/src/upload.test.ts", TS_TEST)
-        write(self.root, "web/junit.xml", '<testsuites><testsuite name="upload" timestamp="2026-10-20T10:00:00">'
-              '<testcase classname="원천 데이터 등록 0바이트 파일을 거부한다" name="원천 데이터 등록 0바이트 파일을 거부한다"/>'
-              '</testsuite></testsuites>')
-        old = datetime(2026, 10, 19, 9, 0).timestamp()
-        os.utime(test_file, (old, old))
-        tests = self.by_name(ev.index([self.root]))
-        self.assertEqual(tests["0바이트 파일을 거부한다"]["run"]["status"], "passed")
-        self.assertEqual(tests["1,001MB 차단"]["run"]["status"], "none")
-
-    def test_last_change_per_test_file_from_git(self):
-        if shutil.which("git") is None:
-            self.skipTest("git 없음")
-        write(self.root, "src/test/java/kr/reb/source/FileSizeLimitTest.java", JAVA_TEST)
-        write(self.root, "src/test/kotlin/CycleDeleteServiceTest.kt", KOTLIN_TEST)
-        self.git("init", "-q")
-        self.git("add", "-A")
-        self.git("commit", "-q", "-m", "tests", date="2026-10-12T10:00:00")
-        write(self.root, "src/test/kotlin/CycleDeleteServiceTest.kt", KOTLIN_TEST.replace("processing", "running"))
-        self.git("commit", "-q", "-am", "fix", user="park.dev", date="2026-10-15T10:00:00")
-        result = ev.index([self.root])
-        tests = self.by_name(result)
-        self.assertEqual(tests["rejectsOverLimit"]["last_change"], {"date": "2026.10.12", "author": "kim.dev"})
-        self.assertEqual(tests["처리중 회차는 삭제할 수 없다"]["last_change"], {"date": "2026.10.15", "author": "park.dev"})
-        self.assertEqual(result["sources"][0]["vcs"], "git")
-
-    def test_last_change_from_svn(self):
-        if shutil.which("svn") is None or shutil.which("svnadmin") is None:
-            self.skipTest("svn 없음")
-        repo = Path(self.tmp.name) / "svnrepo"
-        subprocess.run(["svnadmin", "create", str(repo)], check=True, capture_output=True)
-        wc = Path(self.tmp.name) / "wc"
-        subprocess.run(["svn", "checkout", "-q", repo.as_uri(), str(wc)], check=True, capture_output=True)
-        write(wc, "src/test/kotlin/CycleDeleteServiceTest.kt", KOTLIN_TEST)
-        subprocess.run(["svn", "add", "-q", "--parents", str(wc / "src")], check=True, capture_output=True)
-        subprocess.run(["svn", "commit", "-q", "-m", "t", "--username", "lee.dev", str(wc)], check=True, capture_output=True)
-        subprocess.run(["svn", "update", "-q", str(wc)], check=True, capture_output=True)
-        result = ev.index([wc])
-        self.assertEqual(result["sources"][0]["vcs"], "svn")
-        self.assertEqual(result["tests"][0]["last_change"]["author"], "lee.dev")
-        self.assertRegex(result["tests"][0]["last_change"]["date"], r"^\d{4}\.\d{2}\.\d{2}$")
-
-    def test_gx_tdd_verify_counts_as_run_for_its_test_files(self):
-        """gx-tdd 를 쓴 팀이면 verify 통과가 그 태스크 테스트 파일의 실행 근거가 된다 — 없어도 색인은 돈다."""
-        if shutil.which("git") is None:
-            self.skipTest("git 없음")
-        write(self.root, ".dev/feat-memo/ac.md", CORE_AC)
-        write(self.root, ".dev/feat-memo/state.md", CORE_STATE)
-        write(self.root, "src/test/java/MemoTest.java", "class MemoTest {\n    @Test void blank() { assertTrue(x); }\n}\n")
-        self.git("init", "-q")
-        self.git("add", "-A")
-        self.git("commit", "-q", "-m", "verify", date="2026-10-12T10:00:00")
-        result = ev.index([self.root])
-        run = self.by_name(result)["blank"]["run"]
-        self.assertEqual((run["status"], run["by"], run["date"], run["stale"]), ("passed", "gx-tdd verify", "2026.10.12", False))
-        self.assertEqual(result["gx_tdd"][0]["slug"], "feat-memo")
-        write(self.root, "src/test/java/MemoTest.java", "class MemoTest {\n    @Test void blank() { assertFalse(x); }\n}\n")
-        self.git("commit", "-q", "-am", "세션에서 수정", user="park.dev", date="2026-10-14T10:00:00")
-        self.assertTrue(self.by_name(ev.index([self.root]))["blank"]["run"]["stale"])
-
-    def test_multiple_sources_keep_repo_names(self):
-        web = Path(self.tmp.name) / "reb-web"
-        write(self.root, "src/test/kotlin/CycleDeleteServiceTest.kt", KOTLIN_TEST)
-        write(web, "src/upload.test.ts", TS_TEST)
-        result = ev.index([self.root, web])
-        self.assertEqual([s["repo"] for s in result["sources"]], ["reb-api", "reb-web"])
-        self.assertEqual({t["repo"] for t in result["tests"]}, {"reb-api", "reb-web"})
-
-    def test_run_coverage_per_source_for_the_preflight_check(self):
-        """실사용 점검: 본 작업 폴더에는 마지막에 일부만 돌린 결과(625개 중 9개 클래스)만 있었다 — 레포마다 얼마나 있는지 센다."""
-        test_file = write(self.root, "src/test/java/kr/reb/source/FileSizeLimitTest.java", JAVA_TEST)
-        stale_file = write(self.root, "src/test/java/kr/reb/OrderTest.java",
-                           "class OrderTest {\n    @Test void a() { assertTrue(x); }\n}\n")
-        write(self.root, "build/test-results/test/TEST-kr.reb.source.FileSizeLimitTest.xml", junit_xml(
-            "kr.reb.source.FileSizeLimitTest", [("rejectsOverLimit()", ""), ("acceptsExactlyLimit()", "<failure/>")]))
-        write(self.root, "build/test-results/test/TEST-kr.reb.OrderTest.xml",
-              junit_xml("kr.reb.OrderTest", [("a()", "")], timestamp="2026-10-18T10:00:00"))
-        old, new = datetime(2026, 10, 17, 9, 0).timestamp(), datetime(2026, 10, 19, 9, 0).timestamp()
-        os.utime(test_file, (old, old))
-        os.utime(stale_file, (new, new))  # 마지막 실행 뒤에 고쳤다
-        runs = ev.index([self.root])["sources"][0]["runs"]
-        # 사용 안 함(slowCase)은 세지 않는다 — 근거가 될 수 없는 테스트다
-        self.assertEqual(runs, {"tests": 4, "current": 2, "missing": 1, "stale": 1, "last_report": "2026-10-20 10:00"})
-        web = Path(self.tmp.name) / "reb-web"
-        write(web, "src/upload.test.ts", TS_TEST)
-        self.assertEqual(ev.index([web])["sources"][0]["runs"],
-                         {"tests": 2, "current": 0, "missing": 2, "stale": 0, "last_report": ""})
-
-    def test_runners_tell_what_to_run_where(self):
-        """결과가 모자랄 때 레포·폴더마다 무엇을 돌리라고 안내할지 — 빌드 도구와 JS 의 JUnit 리포터 여부."""
-        write(self.root, "backend/build.gradle.kts", "plugins { java }")
-        write(self.root, "backend/api/build.gradle.kts", "")  # 같은 Gradle 빌드의 하위 모듈 — 따로 안내하지 않는다
-        write(self.root, "frontend/package.json", '{"scripts": {"test": "vitest run"}, "devDependencies": {"vitest": "^4"}}')
-        write(self.root, "frontend/node_modules/x/package.json", '{"devDependencies": {"jest": "1"}}')
-        write(self.root, "admin/package.json", '{"devDependencies": {"jest": "29", "jest-junit": "16"}}')
-        write(self.root, "batch/pom.xml", "<project/>")
-        write(self.root, "docs/package.json", '{"devDependencies": {"vuepress": "2"}}')  # 테스트 러너가 아니다
-        self.assertEqual(ev.index([self.root])["sources"][0]["runners"], [
-            {"dir": "admin", "tool": "jest", "junit": True},
-            {"dir": "backend", "tool": "gradle"},
-            {"dir": "batch", "tool": "maven"},
-            {"dir": "frontend", "tool": "vitest", "junit": False},
-        ])
-        write(self.root, "frontend/vitest.config.js", "export default { test: { reporters: ['default', 'junit'] } }")
-        self.assertIn({"dir": "frontend", "tool": "vitest", "junit": True}, ev.index([self.root])["sources"][0]["runners"])
-        root_gradle = Path(self.tmp.name) / "mono"
-        write(root_gradle, "build.gradle", "")
-        write(root_gradle, "core/build.gradle", "")
-        self.assertEqual(ev.index([root_gradle])["sources"][0]["runners"], [{"dir": ".", "tool": "gradle"}])
-
-    def test_cli_index(self):
-        write(self.root, "src/test/kotlin/CycleDeleteServiceTest.kt", KOTLIN_TEST)
-        write(self.root, "src/test/java/kr/reb/source/FileSizeLimitTest.java", JAVA_TEST)
-        write(self.root, "build.gradle", "")
-        out = Path(self.tmp.name) / "tests.json"
-        err = io.StringIO()
-        with contextlib.redirect_stderr(err):
-            self.assertEqual(ev.main(["index", "--source", str(self.root), "--out", str(out)]), 0)
-        self.assertIn("테스트 5건", err.getvalue())
-        self.assertIn("사용 안 함 1", err.getvalue())  # 요약의 건수가 합계와 맞아야 한다 (평가 v3 보고)
-        # 레포마다 실행 결과가 얼마나 있는지 한 줄 — 전체 테스트를 돌린 폴더인지 가리는 근거
-        self.assertIn("reb-api [Gradle] 테스트 4 · 지금 결과 0 · 결과 없음 4 · 낡음 0 (결과 파일 없음)", err.getvalue())
-        self.assertEqual(len(json.loads(out.read_text(encoding="utf-8"))["tests"]), 5)
-        self.assertEqual(ev.main(["index", "--source", str(self.root / "없음"), "--out", str(out)]), 2)
 
 
 class PlanTests(unittest.TestCase):
@@ -715,11 +92,11 @@ class PlanTests(unittest.TestCase):
             ev.read_plan(self.md)
 
 
-# 대조 결과 — 001 은 PM 확인, 004 는 제외, 005 는 비기능
+# 실측 결과 — 001·002 통과, 003 환경 차단, 004 제외, 005 비기능
 JUDGED = {
-    "REB-UT-001": ("Pass", "PM 확인 — 2026.10.11", "2026.10.11", "김개발"),
-    "REB-UT-002": ("Pass", "테스트 통과 — FileSizeLimitTest.rejectsOverLimit (2026.10.10)", "2026.10.10", "김개발"),
-    "REB-UT-003": ("미검증", "기준 불일치 — 계획 1,000MB ↔ 테스트 500MB", "", ""),
+    "REB-UT-001": ("Pass", "실측 통과 — 등록 응답과 DB 1건 확인", "2026.10.14", "김개발"),
+    "REB-UT-002": ("Pass", "실측 통과 — HTTP 400 안내와 저장 없음 확인", "2026.10.14", "김개발"),
+    "REB-UT-003": ("미검증", "실행 차단 — 파일 준비 환경 없음", "", ""),
     "REB-UT-004": ("미검증", "제외 — 통합 환경 필요", "", ""),
     "REB-UT-005": ("미검증", "비기능 — 측정 절차로 검증", "", ""),
 }
@@ -736,6 +113,7 @@ class ResultTests(unittest.TestCase):
         self.plan = write(self.root, "REB-단위테스트계획서.md", PLAN_MD)
         self.result = self.root / "REB-단위테스트결과서.md"
         self.ledger = self.root / "증적" / "REB-단위테스트수행대장.md"
+        self.evidence = self.root / "증적" / "run.json"
 
     def facts(self):
         data = ev.read_plan(self.plan, result=self.result, ledger=self.ledger)
@@ -744,14 +122,49 @@ class ResultTests(unittest.TestCase):
     def changes(self, judged=None, revision=FIRST, keep=(), **over):
         data, _ = self.facts()
         judged = judged or JUDGED
+        self.make_evidence(data, judged)
         rows = {t: {"상태": s, "사유": why, "수행일": d, "담당자": who, "근거": "", "비고": "", "keep": t in keep}
                 for t, (s, why, d, who) in judged.items()}
         base = {"plan_hash": data["plan_hash"], "result_hash": data["result"]["hash"], "date": "2026.10.14",
+                "evidence_hash": hashlib.sha256(self.evidence.read_bytes()).hexdigest(),
                 "project": "테스트 사업", "sources": "reb-api D:/projects/reb-api (main · a1b2c3d)", "note": "",
                 "mapping": {"kim.dev": "김개발"}, "basis": "reb-api main · a1b2c3d",
                 "candidates": {"new": 1, "boost": 0}, "revision": revision, "rows": rows}
         base.update(over)
         return base
+
+    def write_result(self, plan, result, ledger, changes, **kwargs):
+        return ev.write_result(plan, result, ledger, changes, self.evidence, **kwargs)
+
+    def save_evidence(self, evidence):
+        self.evidence.write_text(json.dumps(evidence, ensure_ascii=False), encoding="utf-8")
+        return evidence
+
+    def make_evidence(self, plan, judged):
+        startup = write(self.evidence.parent, "startup.log", "Local app ready at http://127.0.0.1:8080\n")
+        rows = {}
+        for row in plan["rows"]:
+            tid = row["테스트ID"]
+            state = judged.get(tid, ("미검증",))[0]
+            completed = state in ("Pass", "Fail")
+            execution = "completed" if completed else "not_implemented" if state == "미구현" else "blocked"
+            raw = json.dumps({"request": row["입력"], "response": "실측 응답", "state": state}, ensure_ascii=False)
+            artifact = write(self.evidence.parent, f"raw/{tid}.json", raw)
+            rel = artifact.relative_to(self.evidence.parent).as_posix()
+            artifacts = [{"path": rel, "sha256": hashlib.sha256(artifact.read_bytes()).hexdigest()}] if completed or state == "미구현" else []
+            checks = [{"field": field, "expected": row.get(field, ""), "observed": "실제 관측: " + row.get(field, ""),
+                       "matched": not (state == "Fail" and field == "기대결과"), "artifact": rel}
+                      for field in ev.CASE_FIELDS] if completed else []
+            rows[tid] = {"fingerprint": row["fingerprint"], "execution": execution, "channel": "api" if completed else "none",
+                         "actual": f"{tid} 실측: {state}", "checks": checks, "artifacts": artifacts}
+        return self.save_evidence({"schema_version": 1, "run_id": "run-20261014-01", "plan_hash": plan["plan_hash"],
+                                   "started_at": "2026-10-14T09:00:00+09:00", "finished_at": "2026-10-14T09:10:00+09:00",
+                                   "operator": "김개발", "sources": [{"path": str(self.root), "revision": "abc123", "dirty": False}],
+                                   "targets": [{"base_url": "http://127.0.0.1:8080", "startup_evidence": "startup.log",
+                                                "startup_sha256": hashlib.sha256(startup.read_bytes()).hexdigest()}], "rows": rows})
+
+    def load_evidence(self):
+        return json.loads(self.evidence.read_text(encoding="utf-8"))
 
     def edit(self, path, old, new):
         text = path.read_text(encoding="utf-8")
@@ -765,7 +178,7 @@ class ResultTests(unittest.TestCase):
 
     def test_first_write_creates_the_result_and_leaves_the_plan_untouched(self):
         before = self.plan.read_bytes()
-        summary = ev.write_result(self.plan, self.result, self.ledger, self.changes())
+        summary = self.write_result(self.plan, self.result, self.ledger, self.changes())
         self.assertEqual(self.plan.read_bytes(), before)
         text = self.result.read_text(encoding="utf-8")
         self.assertTrue(text.startswith("# IM-03 단위테스트결과서 — 테스트\n"))  # 옛 gx-pm 의 단위테스트결과서 코드를 잇는다
@@ -773,9 +186,9 @@ class ResultTests(unittest.TestCase):
         self.assertIn("| 1.0 | 2026.10.14 | 신규 | 최초 작성 — 수행 결과 기입 | 구본승 | |", text)
         self.assertIn("## 단위테스트결과 — 테스트", text)
         head, rows = self.result_rows()
-        self.assertEqual(head[-4:], ["테스트담당자", "수행일", "결과", "사유"])
+        self.assertEqual(head[-5:], ["테스트담당자", "수행일", "결과", "사유", "실제결과"])
         self.assertEqual([rows["REB-UT-002"][c] for c in ("사전조건", "결과", "테스트담당자", "수행일")],
-                         ["〃", "Pass", "김개발", "2026.10.10"])  # 케이스 칸은 계획서 원문 그대로 옮긴다
+                         ["〃", "Pass", "김개발", "2026.10.14"])  # 케이스 칸은 계획서 원문 그대로 옮긴다
         self.assertEqual(summary["added"], list(JUDGED))
         self.assertEqual((summary["changed"], summary["dropped"]), ([], []))
         data, facts = self.facts()
@@ -792,7 +205,7 @@ class ResultTests(unittest.TestCase):
         _, facts = self.facts()
         self.assertEqual((facts["REB-UT-003"]["written_by"], facts["REB-UT-003"]["결과"]), ("human", "Fail"))
         self.assertEqual(facts["REB-UT-004"]["written_by"], "human")
-        ev.write_result(self.plan, self.result, self.ledger, self.changes(keep=("REB-UT-003", "REB-UT-004")))
+        self.write_result(self.plan, self.result, self.ledger, self.changes(keep=("REB-UT-003", "REB-UT-004")))
         _, rows = self.result_rows()
         self.assertEqual([rows["REB-UT-003"][c] for c in ("결과", "사유", "수행일", "테스트담당자")],
                          ["Fail", "기존 기입 — 사유 미기재", "2026.10.12", "홍길동"])
@@ -805,26 +218,42 @@ class ResultTests(unittest.TestCase):
         self.assertEqual(data["ledger"]["history"][-1]["Fail"], "1")  # 고객 문서에 보이는 값으로 센다
 
     def test_rerun_without_changes_leaves_the_result_alone(self):
-        ev.write_result(self.plan, self.result, self.ledger, self.changes())
+        self.write_result(self.plan, self.result, self.ledger, self.changes())
         before = self.result.read_bytes()
         with self.assertRaises(ev.InputError):  # 바뀐 것이 없는데 개정이력 행이 오면 거부
-            ev.write_result(self.plan, self.result, self.ledger, self.changes(revision={**FIRST, "버전": "2.0", "개정 사유": "보완"}))
-        summary = ev.write_result(self.plan, self.result, self.ledger, self.changes(revision=None, date="2026.10.15"))
+            self.write_result(self.plan, self.result, self.ledger, self.changes(revision={**FIRST, "버전": "2.0", "개정 사유": "보완"}))
+        summary = self.write_result(self.plan, self.result, self.ledger, self.changes(revision=None, date="2026.10.15"))
         self.assertFalse(summary["written"])
         self.assertEqual(self.result.read_bytes(), before)
         self.assertFalse((self.root / "backup").exists())
         data, _ = self.facts()
         self.assertEqual([h["반영일"] for h in data["ledger"]["history"]], ["2026.10.14", "2026.10.15"])
 
+    def test_observation_padding_does_not_create_a_false_revision(self):
+        changes = self.changes()
+        evidence = self.load_evidence()
+        evidence["rows"]["REB-UT-001"]["actual"] = "  HTTP 200; DB 0건, 상태  "
+        self.save_evidence(evidence)
+        changes["evidence_hash"] = hashlib.sha256(self.evidence.read_bytes()).hexdigest()
+        self.write_result(self.plan, self.result, self.ledger, changes)
+        before = self.result.read_bytes()
+        changes["result_hash"] = self.facts()[0]["result"]["hash"]
+        changes["revision"] = None
+        summary = self.write_result(self.plan, self.result, self.ledger, changes)
+        self.assertEqual(summary["changed"], [])
+        self.assertFalse(summary["needs_revision"])
+        self.assertFalse(summary["written"])
+        self.assertEqual(self.result.read_bytes(), before)
+
     def test_changes_need_one_higher_revision_and_keep_a_copy(self):
-        ev.write_result(self.plan, self.result, self.ledger, self.changes())
+        self.write_result(self.plan, self.result, self.ledger, self.changes())
         first = self.result.read_bytes()
-        judged = {**JUDGED, "REB-UT-003": ("Pass", "PM 확인 — 2026.10.15", "2026.10.15", "김개발")}
+        judged = {**JUDGED, "REB-UT-003": ("Pass", "실측 통과 — 등록 확인", "2026.10.14", "김개발")}
         for bad in (None, {**FIRST, "개정 사유": "보완"}, {**FIRST, "버전": "2.0", "개정 사유": "수정"}):
             with self.assertRaises(ev.InputError):
-                ev.write_result(self.plan, self.result, self.ledger, self.changes(judged=judged, revision=bad))
+                self.write_result(self.plan, self.result, self.ledger, self.changes(judged=judged, revision=bad))
         self.assertEqual(self.result.read_bytes(), first)
-        summary = ev.write_result(self.plan, self.result, self.ledger, self.changes(
+        summary = self.write_result(self.plan, self.result, self.ledger, self.changes(
             judged=judged, revision={**FIRST, "버전": "2.0", "개정 사유": "보완", "개정 내용": "결과 갱신(REB-UT-003)"}))
         self.assertEqual(summary["changed"], ["REB-UT-003"])
         copy = self.root / "backup" / f"REB-단위테스트결과서_{datetime.now():%y%m%d}.md"
@@ -832,7 +261,7 @@ class ResultTests(unittest.TestCase):
         self.assertEqual(summary["backup"], "backup/" + copy.name)
 
     def test_result_follows_rows_added_edited_and_removed_in_the_plan(self):
-        ev.write_result(self.plan, self.result, self.ledger, self.changes())
+        self.write_result(self.plan, self.result, self.ledger, self.changes())
         self.edit(self.plan, "| REB-UT-003 | REB-FN-001 | REB-RE-001 | 〃 | 1,000MB 파일 | 정상 등록 | 1건 저장 | 없음 | | | |\n", "")
         self.edit(self.plan, '| "파일 용량 초과" 안내 |', '| "파일 용량(1,000MB)을 초과했습니다" 안내 |')
         self.edit(self.plan, "| REB-UT-005 |", "| REB-UT-006 | REB-FN-002 | REB-RE-002 | 회차 0건 | 목록 조회 | \"자료 없음\" 안내 | 변화 없음 | 없음 | | | |\n| REB-UT-005 |")
@@ -846,9 +275,9 @@ class ResultTests(unittest.TestCase):
         self.assertEqual(data["result"]["only"], ["REB-UT-003"])
         self.assertEqual((data["result"]["basis_version"], data["last_version"]), ("1.0", "2.0"))  # 결과서가 낡았다
         judged = {t: v for t, v in JUDGED.items() if t != "REB-UT-003"}
-        judged["REB-UT-002"] = ("미검증", "케이스 변경 — 기대결과 수정, 테스트는 \"파일 용량 초과\" 확인", "", "")
-        judged["REB-UT-006"] = ("미구현", "대응 테스트 없음", "", "")
-        summary = ev.write_result(self.plan, self.result, self.ledger, self.changes(
+        judged["REB-UT-002"] = ("미검증", "케이스 변경 — 기대결과 수정 후 재시험 필요", "", "")
+        judged["REB-UT-006"] = ("미구현", "미구현 — 소스와 라우트의 기능 부재 확인", "", "")
+        summary = self.write_result(self.plan, self.result, self.ledger, self.changes(
             judged=judged, revision={**FIRST, "버전": "2.0", "개정 사유": "변경", "개정 내용": "계획서 v2.0 반영"}))
         self.assertEqual((summary["added"], summary["dropped"]), (["REB-UT-006"], ["REB-UT-003"]))
         self.assertIn("REB-UT-002", summary["changed"])
@@ -859,17 +288,17 @@ class ResultTests(unittest.TestCase):
 
     def test_plan_revision_alone_still_updates_the_result_basis(self):
         """계획서 버전만 올라도 결과서 근거가 낡은 채로 남지 않게 한다."""
-        ev.write_result(self.plan, self.result, self.ledger, self.changes())
+        self.write_result(self.plan, self.result, self.ledger, self.changes())
         self.edit(self.plan, "| 1.0 | 2026.09.09 | 신규 | 최초 작성 | 구본승 | |",
                   "| 1.0 | 2026.09.09 | 신규 | 최초 작성 | 구본승 | |\n| 2.0 | 2026.10.15 | 보완 | 문구 정리 | 구본승 | |")
         with self.assertRaises(ev.InputError):
-            ev.write_result(self.plan, self.result, self.ledger, self.changes(revision=None))
-        summary = ev.write_result(self.plan, self.result, self.ledger, self.changes(revision={**FIRST, "버전": "2.0", "개정 사유": "보완"}))
+            self.write_result(self.plan, self.result, self.ledger, self.changes(revision=None))
+        summary = self.write_result(self.plan, self.result, self.ledger, self.changes(revision={**FIRST, "버전": "2.0", "개정 사유": "보완"}))
         self.assertTrue(summary["written"])
         self.assertIn("> 근거: DE-13 v2.0", self.result.read_text(encoding="utf-8"))
 
     def test_hand_edits_to_the_result_are_seen(self):
-        ev.write_result(self.plan, self.result, self.ledger, self.changes())
+        self.write_result(self.plan, self.result, self.ledger, self.changes())
         self.edit(self.result, "| 5건 표시 |", "| 5건 표시(최신순) |")
         self.edit(self.result, "| 미검증 | 제외 — 통합 환경 필요 |", "| Fail | 수동 시험 실패 — 정렬 오류 |")
         xlsx = write(self.root, "xlsx/REB-단위테스트결과서.xlsx", "x")
@@ -881,18 +310,18 @@ class ResultTests(unittest.TestCase):
         self.assertTrue(data["result"]["xlsx_newer"])
 
     def test_approval_is_void_once_plan_or_result_changes(self):
-        ev.write_result(self.plan, self.result, self.ledger, self.changes())
-        judged = {**JUDGED, "REB-UT-003": ("Pass", "PM 확인 — 2026.10.15", "2026.10.15", "김개발")}
+        self.write_result(self.plan, self.result, self.ledger, self.changes())
+        judged = {**JUDGED, "REB-UT-003": ("Pass", "실측 통과 — 등록 확인", "2026.10.14", "김개발")}
         rev = {**FIRST, "버전": "2.0", "개정 사유": "보완"}
         approved = self.changes(judged=judged, revision=rev)
         self.edit(self.result, "| 미검증 | 제외 — 통합 환경 필요 |", "| Fail | 수동 시험 실패 |")
         with self.assertRaises(ev.InputError):
-            ev.write_result(self.plan, self.result, self.ledger, approved)
+            self.write_result(self.plan, self.result, self.ledger, approved)
         approved = self.changes(judged=judged, revision=rev)
         self.edit(self.plan, "| 회차 생성 |", "| 회차 신규 생성 |")
         before = self.result.read_bytes()
         with self.assertRaises(ev.InputError):
-            ev.write_result(self.plan, self.result, self.ledger, approved)
+            self.write_result(self.plan, self.result, self.ledger, approved)
         self.assertEqual(self.result.read_bytes(), before)
 
     def test_refuses_broken_tables_duplicate_ids_and_bad_rows(self):
@@ -910,52 +339,52 @@ class ResultTests(unittest.TestCase):
         cases.append(self.changes(revision={**FIRST, "버전": "2.0"}))  # 새 결과서는 1.0 신규로 시작한다
         for changes in cases:
             with self.assertRaises(ev.InputError):
-                ev.write_result(self.plan, self.result, self.ledger, changes)
+                self.write_result(self.plan, self.result, self.ledger, changes)
         self.assertFalse(self.result.exists() or self.ledger.exists())
         self.edit(self.plan, "| REB-UT-004 |", "| REB-UT-001 |")
         data, _ = self.facts()
         self.assertEqual(data["duplicates"], ["REB-UT-001"])
         with self.assertRaises(ev.InputError):
-            ev.write_result(self.plan, self.result, self.ledger, self.changes())
+            self.write_result(self.plan, self.result, self.ledger, self.changes())
 
     def test_broken_result_table_is_reported_and_not_overwritten(self):
-        ev.write_result(self.plan, self.result, self.ledger, self.changes())
+        self.write_result(self.plan, self.result, self.ledger, self.changes())
         self.edit(self.result, "| 미검증 | 제외 — 통합 환경 필요 |", "| 미검증 | 제외 | 통합 환경 필요 |")
         data, _ = self.facts()
         self.assertEqual(data["result"]["malformed"], ["REB-UT-004"])
         before = self.result.read_bytes()
-        judged = {**JUDGED, "REB-UT-003": ("Pass", "PM 확인 — 2026.10.15", "2026.10.15", "김개발")}
+        judged = {**JUDGED, "REB-UT-003": ("Pass", "실측 통과 — 등록 확인", "2026.10.14", "김개발")}
         with self.assertRaises(ev.InputError):
-            ev.write_result(self.plan, self.result, self.ledger, self.changes(judged=judged, revision={**FIRST, "버전": "2.0", "개정 사유": "보완"}))
+            self.write_result(self.plan, self.result, self.ledger, self.changes(judged=judged, revision={**FIRST, "버전": "2.0", "개정 사유": "보완"}))
         self.assertEqual(self.result.read_bytes(), before)
 
     def test_ledger_behind_the_result_is_flagged(self):
         """결과서만 바뀌고 수행대장이 따라오지 못한 상태(손 수정·끊긴 반영)를 알린다."""
-        ev.write_result(self.plan, self.result, self.ledger, self.changes())
+        self.write_result(self.plan, self.result, self.ledger, self.changes())
         self.edit(self.result, "| 1.0 | 2026.10.14 | 신규 | 최초 작성 — 수행 결과 기입 | 구본승 | |",
                   "| 1.0 | 2026.10.14 | 신규 | 최초 작성 — 수행 결과 기입 | 구본승 | |\n| 2.0 | 2026.10.15 | 보완 | 손 수정 | 홍길동 | |")
         data, _ = self.facts()
         self.assertTrue(data["ledger"]["stale"])
 
     def test_missing_ledger_or_missing_result(self):
-        ev.write_result(self.plan, self.result, self.ledger, self.changes())
+        self.write_result(self.plan, self.result, self.ledger, self.changes())
         self.ledger.unlink()
         data, facts = self.facts()
         self.assertFalse(data["ledger"]["exists"])
         self.assertEqual({r["written_by"] for r in facts.values()}, {"human"})  # 누가 썼는지 가릴 근거가 없다
-        ev.write_result(self.plan, self.result, self.ledger, self.changes(revision=None))
+        self.write_result(self.plan, self.result, self.ledger, self.changes(revision=None))
         self.result.unlink()
         data, facts = self.facts()
         self.assertFalse(data["result"]["exists"])
         self.assertEqual({r["written_by"] for r in facts.values()}, {"empty"})
-        ev.write_result(self.plan, self.result, self.ledger, self.changes())  # 결과서를 1.0 신규로 다시 만든다
+        self.write_result(self.plan, self.result, self.ledger, self.changes())  # 결과서를 1.0 신규로 다시 만든다
         data, _ = self.facts()
         self.assertEqual(len(data["ledger"]["history"]), 2)  # 수행대장을 지운 뒤 다시 쌓인 이력
 
-    def test_inherits_exclusion_and_pm_confirmation_until_the_case_changes(self):
-        ev.write_result(self.plan, self.result, self.ledger, self.changes())
+    def test_inherits_only_exclusion_until_the_case_changes(self):
+        self.write_result(self.plan, self.result, self.ledger, self.changes())
         _, facts = self.facts()
-        self.assertEqual({t: r["inherit"] for t, r in facts.items() if r["inherit"]}, {"REB-UT-001": "PM 확인", "REB-UT-004": "제외"})
+        self.assertEqual({t: r["inherit"] for t, r in facts.items() if r["inherit"]}, {"REB-UT-004": "제외"})
         self.edit(self.plan, "| 5건 표시 |", "| 5건 표시, 등록일 역순 |")
         _, facts = self.facts()
         self.assertTrue(facts["REB-UT-004"]["case_changed"])
@@ -968,7 +397,7 @@ class ResultTests(unittest.TestCase):
                "| 테스트ID | 상태 | 사유 | 근거 | 수행일 | 담당자 | 행 지문 | 비고 |\n|---|---|---|---|---|---|---|---|\n\n"
                "## 반영 이력\n\n| 반영일 | DE-13 버전 | 수행 | 실패 | 수행률 |\n|---|---|---|---|---|\n| 2026.10.10 | 1.0 | 3 | 1 | 60% |\n")
         write(self.ledger.parent, self.ledger.name, old)
-        ev.write_result(self.plan, self.result, self.ledger, self.changes(project="", mapping={"kim.dev": "김개발", "park.dev": "박개발"}))
+        self.write_result(self.plan, self.result, self.ledger, self.changes(project="", mapping={"kim.dev": "김개발", "park.dev": "박개발"}))
         data, _ = self.facts()
         self.assertEqual(data["ledger"]["project"], "옛 사업")
         self.assertEqual(data["ledger"]["mapping"], {"kim.dev": "김개발(옛)", "lee.dev": "이개발", "park.dev": "박개발"})
@@ -977,31 +406,31 @@ class ResultTests(unittest.TestCase):
         self.assertEqual(data["ledger"]["history"][-1]["수행률"], "67% (2/3)")
 
     def test_dry_run_and_unwritable_text_write_nothing(self):
-        summary = ev.write_result(self.plan, self.result, self.ledger, self.changes(), dry_run=True)
+        summary = self.write_result(self.plan, self.result, self.ledger, self.changes(), dry_run=True)
         self.assertEqual((summary["counts"]["Pass"], summary["rate"], summary["written"]), (2, "67% (2/3)", False))
         self.assertFalse(self.result.exists() or self.ledger.exists())
         bad = self.changes()
         bad["rows"]["REB-UT-002"]["사유"] = "테스트 통과 \ud800"
         with self.assertRaises(ev.InputError):
-            ev.write_result(self.plan, self.result, self.ledger, bad)
+            self.write_result(self.plan, self.result, self.ledger, bad)
         self.assertFalse(self.result.exists() or self.ledger.exists())
 
     def test_dry_run_comes_before_the_revision(self):
         """평가 8회차: 스킬은 dry-run 숫자로 개정이력을 정하는데 도구가 개정이력 없는 dry-run 을 거부했다."""
-        s = ev.write_result(self.plan, self.result, self.ledger, self.changes(revision=None), dry_run=True)
+        s = self.write_result(self.plan, self.result, self.ledger, self.changes(revision=None), dry_run=True)
         self.assertEqual((s["needs_revision"], s["next_version"], len(s["added"])), (True, "1.0", 5))
-        ev.write_result(self.plan, self.result, self.ledger, self.changes())
-        judged = {**JUDGED, "REB-UT-003": ("Pass", "PM 확인 — 2026.10.15", "2026.10.15", "김개발")}
-        s = ev.write_result(self.plan, self.result, self.ledger, self.changes(judged=judged, revision=None), dry_run=True)
+        self.write_result(self.plan, self.result, self.ledger, self.changes())
+        judged = {**JUDGED, "REB-UT-003": ("Pass", "실측 통과 — 등록 확인", "2026.10.14", "김개발")}
+        s = self.write_result(self.plan, self.result, self.ledger, self.changes(judged=judged, revision=None), dry_run=True)
         self.assertEqual((s["needs_revision"], s["next_version"], s["changed"]), (True, "2.0", ["REB-UT-003"]))
-        s = ev.write_result(self.plan, self.result, self.ledger, self.changes(revision=None), dry_run=True)
+        s = self.write_result(self.plan, self.result, self.ledger, self.changes(revision=None), dry_run=True)
         self.assertFalse(s["needs_revision"])
         changes = self.root / "changes.json"
         changes.write_text(json.dumps(self.changes(judged=judged, revision=None), ensure_ascii=False), encoding="utf-8")
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             self.assertEqual(ev.main(["write", "--de13", str(self.plan), "--result", str(self.result), "--ledger", str(self.ledger),
-                                      "--changes", str(changes), "--dry-run"]), 0)
+                                      "--changes", str(changes), "--evidence", str(self.evidence), "--dry-run"]), 0)
         self.assertIn("REB-UT-003", out.getvalue())  # 개정 내용에 바뀐 행 ID 를 적어야 한다
 
     def test_control_characters_are_refused(self):
@@ -1010,27 +439,27 @@ class ResultTests(unittest.TestCase):
             if bad["sources"].startswith("reb-api D:/"):
                 bad["rows"]["REB-UT-002"]["사유"] = "테스트 통과\x0b"
             with self.assertRaises(ev.InputError):
-                ev.write_result(self.plan, self.result, self.ledger, bad)
+                self.write_result(self.plan, self.result, self.ledger, bad)
         self.assertFalse(self.result.exists() or self.ledger.exists())
 
     def test_ledger_title_takes_the_plan_name_when_project_is_blank(self):
         """평가 8회차: 결과서 제목은 계획서에서, 수행대장 제목은 프로파일에서 와서 사업명이 달랐다."""
-        ev.write_result(self.plan, self.result, self.ledger, self.changes(project=""))
+        self.write_result(self.plan, self.result, self.ledger, self.changes(project=""))
         self.assertTrue(self.ledger.read_text(encoding="utf-8").startswith("# 단위테스트 수행대장 — 테스트\n"))
 
-    def test_dropping_an_inherited_judgment_is_reported(self):
-        """평가 8회차: 이어받아야 할 PM 확인을 '실행 결과 없음' 으로 덮어써도 도구가 말없이 받았다."""
-        ev.write_result(self.plan, self.result, self.ledger, self.changes())
-        judged = {**JUDGED, "REB-UT-001": ("미검증", "실행 결과 없음 — CycleTest.creates", "", "")}
+    def test_dropping_an_inherited_exclusion_is_reported(self):
+        """새 판단에서 제외 승계를 버린 행을 명시한다."""
+        self.write_result(self.plan, self.result, self.ledger, self.changes())
+        judged = {**JUDGED, "REB-UT-004": ("미검증", "실행 차단 — 환경 준비 실패", "", "")}
         rev = {**FIRST, "버전": "2.0", "개정 사유": "보완"}
-        s = ev.write_result(self.plan, self.result, self.ledger, self.changes(judged=judged, revision=rev), dry_run=True)
-        self.assertEqual(s["inherit_dropped"], ["REB-UT-001"])
-        s = ev.write_result(self.plan, self.result, self.ledger, self.changes(revision=None), dry_run=True)
+        s = self.write_result(self.plan, self.result, self.ledger, self.changes(judged=judged, revision=rev), dry_run=True)
+        self.assertEqual(s["inherit_dropped"], ["REB-UT-004"])
+        s = self.write_result(self.plan, self.result, self.ledger, self.changes(revision=None), dry_run=True)
         self.assertEqual(s["inherit_dropped"], [])
 
     def test_plan_edits_missing_from_the_plan_revisions_are_flagged(self):
         """평가 8회차: 개정이력 없이 고친 계획서 케이스를 실행자가 개정이력을 직접 읽어 가렸다."""
-        ev.write_result(self.plan, self.result, self.ledger, self.changes())
+        self.write_result(self.plan, self.result, self.ledger, self.changes())
         self.edit(self.plan, '| "파일 용량 초과" 안내 |', '| "파일 용량(1,000MB)을 초과했습니다" 안내 |')
         data, _ = self.facts()
         self.assertEqual(data["ledger"]["unrecorded"], ["REB-UT-002"])
@@ -1040,11 +469,11 @@ class ResultTests(unittest.TestCase):
         self.assertEqual(data["ledger"]["unrecorded"], [])
 
     def test_keeps_line_endings_and_title_of_an_existing_result(self):
-        ev.write_result(self.plan, self.result, self.ledger, self.changes())
+        self.write_result(self.plan, self.result, self.ledger, self.changes())
         text = self.result.read_text(encoding="utf-8").replace("# IM-03 단위테스트결과서 — 테스트", "# IM-03 단위테스트결과서 — 테스트 (1차)")
         self.result.write_bytes(text.replace("\n", "\r\n").encode("utf-8"))
-        judged = {**JUDGED, "REB-UT-003": ("Pass", "PM 확인 — 2026.10.15", "2026.10.15", "김개발")}
-        ev.write_result(self.plan, self.result, self.ledger, self.changes(judged=judged, revision={**FIRST, "버전": "2.0", "개정 사유": "보완"}))
+        judged = {**JUDGED, "REB-UT-003": ("Pass", "실측 통과 — 등록 확인", "2026.10.14", "김개발")}
+        self.write_result(self.plan, self.result, self.ledger, self.changes(judged=judged, revision={**FIRST, "버전": "2.0", "개정 사유": "보완"}))
         raw = self.result.read_bytes().decode("utf-8")
         self.assertNotIn("\n", raw.replace("\r\n", ""))
         self.assertTrue(raw.startswith("# IM-03 단위테스트결과서 — 테스트 (1차)\r\n"))
@@ -1057,12 +486,438 @@ class ResultTests(unittest.TestCase):
         self.assertFalse(json.loads(out.read_text(encoding="utf-8"))["result"]["exists"])
         changes = self.root / "changes.json"
         changes.write_text(json.dumps(self.changes(), ensure_ascii=False), encoding="utf-8")
-        args = ["write", "--de13", str(self.plan), "--result", str(self.result), "--ledger", str(self.ledger), "--changes", str(changes)]
+        args = ["write", "--de13", str(self.plan), "--result", str(self.result), "--ledger", str(self.ledger), "--changes", str(changes), "--evidence", str(self.evidence)]
         self.assertEqual(ev.main(args + ["--dry-run"]), 0)
         self.assertFalse(self.result.exists())
         self.assertEqual(ev.main(args), 0)
         self.assertTrue(self.result.exists())
         self.assertEqual(ev.main(args), 2)  # 같은 승인안을 두 번 쓰면 결과서 지문이 달라 거부
+
+    def test_missing_and_partial_observations_cannot_pass(self):
+        changes = self.changes()
+        baseline = self.load_evidence()
+        for field, matched in (("사전조건", False), ("입력", False), ("기대결과", None), ("사후조건", None)):
+            with self.subTest(field=field):
+                evidence = copy.deepcopy(baseline)
+                row = evidence["rows"]["REB-UT-001"]
+                row["checks"] = [c for c in row["checks"] if c["field"] != field]
+                if field in ("사전조건", "입력"):
+                    original = next(c for c in baseline["rows"]["REB-UT-001"]["checks"] if c["field"] == field)
+                    row["checks"].append({**original, "matched": matched})
+                self.save_evidence(evidence)
+                judged = ev.validate_execution(ev.read_plan(self.plan), self.evidence)
+                self.assertEqual(judged["rows"]["REB-UT-001"]["상태"], "미검증")
+                changes["evidence_hash"] = judged["evidence_hash"]
+                with self.assertRaisesRegex(ev.InputError, "증적 판정"):
+                    self.write_result(self.plan, self.result, self.ledger, changes)
+        evidence = copy.deepcopy(baseline)
+        row = evidence["rows"]["REB-UT-001"]
+        row.update(checks=[], artifacts=[], channel="none")
+        self.save_evidence(evidence)
+        self.assertEqual(ev.validate_execution(ev.read_plan(self.plan), self.evidence)["rows"]["REB-UT-001"]["상태"], "미검증")
+        self.assertFalse(self.result.exists() or self.ledger.exists())
+
+    def test_expected_and_postcondition_mismatches_fail_only_with_valid_inputs(self):
+        self.changes()
+        baseline = self.load_evidence()
+        for field in ("기대결과", "사후조건"):
+            evidence = copy.deepcopy(baseline)
+            checks = evidence["rows"]["REB-UT-001"]["checks"]
+            next(c for c in checks if c["field"] == field)["matched"] = False
+            self.save_evidence(evidence)
+            self.assertEqual(ev.validate_execution(ev.read_plan(self.plan), self.evidence)["rows"]["REB-UT-001"]["상태"], "Fail")
+            next(c for c in checks if c["field"] == "사전조건")["matched"] = False
+            self.save_evidence(evidence)
+            self.assertEqual(ev.validate_execution(ev.read_plan(self.plan), self.evidence)["rows"]["REB-UT-001"]["상태"], "미검증")
+
+    def test_execution_requires_complete_original_checks_and_raw_artifacts(self):
+        self.changes()
+        baseline = self.load_evidence()
+        mutations = [
+            lambda r: r.update(actual=" "),
+            lambda r: r.update(execution="passed"),
+            lambda r: r.update(channel="junit"),
+            lambda r: r.update(checks="not an array"),
+            lambda r: r.update(artifacts="not an array"),
+            lambda r: r["checks"][0].update(expected="다른 사전조건"),
+            lambda r: r["checks"][0].update(observed=""),
+            lambda r: r["checks"][0].update(matched=1),
+            lambda r: r["checks"][0].pop("matched"),
+            lambda r: r["checks"][0].update(artifact="unlisted.json"),
+            lambda r: r["checks"].append(copy.deepcopy(r["checks"][0])),
+            lambda r: r["artifacts"][0].update(sha256="0" * 64),
+            lambda r: r["artifacts"][0].update(sha256="abc123"),
+            lambda r: r["artifacts"].append(copy.deepcopy(r["artifacts"][0])),
+            lambda r: r["artifacts"][0].update(path="../outside.json"),
+            lambda r: r["artifacts"][0].update(path="C:/outside.json"),
+            lambda r: r["artifacts"][0].update(path="/outside.json"),
+            lambda r: r["artifacts"][0].update(path="missing.json"),
+        ]
+        for index, mutate in enumerate(mutations):
+            with self.subTest(mutation=index):
+                evidence = copy.deepcopy(baseline)
+                mutate(evidence["rows"]["REB-UT-001"])
+                self.save_evidence(evidence)
+                with self.assertRaises(ev.InputError):
+                    ev.validate_execution(ev.read_plan(self.plan), self.evidence)
+        self.save_evidence(baseline)
+        (self.evidence.parent / baseline["rows"]["REB-UT-001"]["artifacts"][0]["path"]).write_bytes(b"")
+        with self.assertRaises(ev.InputError):
+            ev.validate_execution(ev.read_plan(self.plan), self.evidence)
+
+    def test_execution_binds_plan_rows_times_and_local_targets(self):
+        self.changes()
+        baseline = self.load_evidence()
+        mutations = [
+            lambda e: e.update(schema_version=True),
+            lambda e: e.update(run_id=""),
+            lambda e: e.update(operator=""),
+            lambda e: e.update(plan_hash="changed"),
+            lambda e: e["rows"].pop("REB-UT-005"),
+            lambda e: e["rows"].update({"UNKNOWN": e["rows"]["REB-UT-001"]}),
+            lambda e: e["rows"]["REB-UT-001"].update(fingerprint="changed"),
+            lambda e: e.update(started_at="2026-10-14T09:00:00"),
+            lambda e: e.update(finished_at="2026-10-13T09:00:00+09:00"),
+            lambda e: e.update(finished_at="2026-02-30T09:00:00+09:00"),
+            lambda e: e.update(sources=[]),
+            lambda e: e["sources"][0].update(dirty="false"),
+            lambda e: e["sources"][0].update(revision=""),
+            lambda e: e.update(targets=[]),
+            lambda e: e["targets"][0].update(startup_evidence="../outside.log"),
+            lambda e: e["targets"][0].update(startup_evidence="missing.log"),
+        ]
+        for url in ("https://example.com", "http://192.168.0.2", "file:///local", "http://localhost.evil.com", "http://[::2]", "http://user@localhost", "http://localhost:invalid", "http://[bad"):
+            mutations.append(lambda e, url=url: e["targets"][0].update(base_url=url))
+        for index, mutate in enumerate(mutations):
+            with self.subTest(mutation=index):
+                evidence = copy.deepcopy(baseline)
+                mutate(evidence)
+                self.save_evidence(evidence)
+                with self.assertRaises(ev.InputError):
+                    ev.validate_execution(ev.read_plan(self.plan), self.evidence)
+        for url in ("http://127.0.0.1:8080", "http://127.3.4.5:9000", "https://localhost", "http://[::1]:8080"):
+            evidence = copy.deepcopy(baseline)
+            evidence["targets"][0]["base_url"] = url
+            self.save_evidence(evidence)
+            self.assertEqual(ev.validate_execution(ev.read_plan(self.plan), self.evidence)["rows"]["REB-UT-001"]["상태"], "Pass")
+
+    def test_duplicate_json_keys_are_rejected(self):
+        self.changes()
+        raw = self.evidence.read_text(encoding="utf-8")
+        self.evidence.write_text(raw.replace('"schema_version": 1', '"schema_version": 1, "schema_version": 1'), encoding="utf-8")
+        with self.assertRaisesRegex(ev.InputError, "중복 키"):
+            ev.validate_execution(ev.read_plan(self.plan), self.evidence)
+
+    def test_all_rows_blocked_before_url_discovery_can_be_recorded_without_targets(self):
+        judged = {tid: ("미검증", "실행 차단 — PORT 미설정으로 기동 주소 확인 불가", "", "") for tid in JUDGED}
+        changes = self.changes(judged=judged)
+        evidence = self.load_evidence()
+        evidence["targets"] = []
+        self.save_evidence(evidence)
+        changes["evidence_hash"] = hashlib.sha256(self.evidence.read_bytes()).hexdigest()
+        summary = self.write_result(self.plan, self.result, self.ledger, changes)
+        self.assertEqual(summary["counts"]["미검증"], len(JUDGED))
+        self.assertEqual({r["결과"] for r in self.result_rows()[1].values()}, {"미검증"})
+        evidence["rows"]["REB-UT-001"].update(execution="completed", channel="api")
+        self.save_evidence(evidence)
+        with self.assertRaisesRegex(ev.InputError, "targets"):
+            ev.validate_execution(ev.read_plan(self.plan), self.evidence)
+
+    def test_startup_log_hash_is_required_and_detects_changes_after_approval(self):
+        changes = self.changes()
+        evidence = self.load_evidence()
+        baseline = copy.deepcopy(evidence)
+        for digest in (None, "abc123", "0" * 64):
+            evidence["targets"][0]["startup_sha256"] = digest
+            self.save_evidence(evidence)
+            with self.assertRaisesRegex(ev.InputError, "SHA256"):
+                ev.validate_execution(ev.read_plan(self.plan), self.evidence)
+        self.save_evidence(baseline)
+        self.assertEqual(hashlib.sha256(self.evidence.read_bytes()).hexdigest(), changes["evidence_hash"])
+        write(self.evidence.parent, "startup.log", "Unexpected other service is running\n")
+        for dry_run in (True, False):
+            with self.assertRaisesRegex(ev.InputError, "SHA256 가 다릅니다"):
+                self.write_result(self.plan, self.result, self.ledger, changes, dry_run=dry_run)
+        self.assertFalse(self.result.exists() or self.ledger.exists())
+
+    def test_observed_nonfunctional_passes_stay_in_rate_denominator(self):
+        judged = {"REB-UT-001": ("Pass", "비기능 — 응답시간 기준 충족", "2026.10.14", "김개발"),
+                  "REB-UT-002": ("Pass", "비기능 — 메모리 기준 충족", "2026.10.14", "김개발"),
+                  "REB-UT-003": ("미검증", "비기능 — 부하 환경 미준비", "", ""),
+                  "REB-UT-004": ("미검증", "제외 — 승인된 범위 밖", "", ""),
+                  "REB-UT-005": ("미검증", "기준값 미확정 — 응답시간 미정", "", "")}
+        summary = self.write_result(self.plan, self.result, self.ledger, self.changes(judged=judged))
+        self.assertEqual(summary["rate"], "100% (2/2)")
+        self.assertEqual(ev.read_ledger(self.ledger)["history"][-1]["수행률"], "100% (2/2)")
+        counts, rate = ev._rate(["Pass", "Fail", "미구현", "미검증"],
+                                ["비기능 — 충족", "비기능 — 미충족", "제외 — 구현 부재", "비기능 — 미측정"])
+        self.assertEqual((counts["Pass"], rate), (1, "33% (1/3)"))
+
+    def test_raw_artifact_and_startup_log_cannot_be_overwritten_by_a_ledger(self):
+        changes = self.changes()
+        evidence = self.load_evidence()
+        paths = [self.evidence.parent / evidence["rows"]["REB-UT-001"]["artifacts"][0]["path"],
+                 self.evidence.parent / evidence["targets"][0]["startup_evidence"]]
+        for artifact in paths:
+            before = artifact.read_bytes()
+            for dry_run in (True, False):
+                with self.assertRaisesRegex(ev.InputError, "원본 증적 파일"):
+                    self.write_result(self.plan, self.result, artifact, changes, dry_run=dry_run)
+            self.assertEqual(artifact.read_bytes(), before)
+        self.assertFalse(self.result.exists() or self.ledger.exists())
+
+    def test_not_implemented_requires_observed_absence_and_blocked_requires_actual(self):
+        judged = {**JUDGED, "REB-UT-003": ("미구현", "미구현 — 라우트와 구현 부재 확인", "", "")}
+        changes = self.changes(judged=judged)
+        self.write_result(self.plan, self.result, self.ledger, changes, dry_run=True)
+        evidence = self.load_evidence()
+        evidence["rows"]["REB-UT-003"]["artifacts"] = []
+        self.save_evidence(evidence)
+        with self.assertRaisesRegex(ev.InputError, "미구현"):
+            ev.validate_execution(ev.read_plan(self.plan), self.evidence)
+        self.changes()
+        evidence = self.load_evidence()
+        evidence["rows"]["REB-UT-003"]["actual"] = ""
+        self.save_evidence(evidence)
+        with self.assertRaisesRegex(ev.InputError, "actual"):
+            ev.validate_execution(ev.read_plan(self.plan), self.evidence)
+
+    def test_unknown_plan_values_cannot_pass_and_ordinary_literal_text_can(self):
+        self.edit(self.plan, "| 회차 생성 |", "| [미확정] 회차 생성 |")
+        changes = self.changes()
+        self.assertEqual(ev.validate_execution(ev.read_plan(self.plan), self.evidence)["rows"]["REB-UT-001"]["상태"], "미검증")
+        with self.assertRaises(ev.InputError):
+            self.write_result(self.plan, self.result, self.ledger, changes)
+        self.edit(self.plan, "| [미확정] 회차 생성 |", '| "확인 필요" 안내 |')
+        changes = self.changes()
+        self.write_result(self.plan, self.result, self.ledger, changes, dry_run=True)
+        changes["rows"]["REB-UT-001"]["사유"] = "기준값 미확정 — 응답 미정"
+        with self.assertRaisesRegex(ev.InputError, "기준값 미확정"):
+            self.write_result(self.plan, self.result, self.ledger, changes)
+
+    def test_execution_supplies_actual_date_operator_and_basis(self):
+        changes = self.changes()
+        for key in ("수행일", "담당자", "근거", "실제결과"):
+            bad = copy.deepcopy(changes)
+            bad["rows"]["REB-UT-001"][key] = "다른 값"
+            with self.assertRaisesRegex(ev.InputError, "실행 증적과 다릅니다"):
+                self.write_result(self.plan, self.result, self.ledger, bad)
+        for row in changes["rows"].values():
+            row.pop("수행일")
+            row.pop("담당자")
+        self.write_result(self.plan, self.result, self.ledger, changes)
+        _, rows = self.result_rows()
+        self.assertEqual((rows["REB-UT-001"]["수행일"], rows["REB-UT-001"]["테스트담당자"]), ("2026.10.14", "김개발"))
+        self.assertEqual((rows["REB-UT-003"]["수행일"], rows["REB-UT-003"]["테스트담당자"]), ("", ""))
+        ledger = ev.read_ledger(self.ledger)["rows"]["REB-UT-001"]
+        self.assertIn("run_id=run-20261014-01", ledger["근거"])
+        self.assertIn("raw/REB-UT-001.json", ledger["근거"])
+        self.assertEqual(ledger["실제결과"], rows["REB-UT-001"]["실제결과"])
+
+    def test_evidence_edits_after_approval_invalidate_dry_run_and_write(self):
+        changes = self.changes()
+        evidence = self.load_evidence()
+        evidence["rows"]["REB-UT-001"]["actual"] = "승인 뒤 바뀐 관측"
+        self.save_evidence(evidence)
+        for dry_run in (True, False):
+            with self.assertRaisesRegex(ev.InputError, "evidence_hash"):
+                self.write_result(self.plan, self.result, self.ledger, changes, dry_run=dry_run)
+        self.assertFalse(self.result.exists() or self.ledger.exists())
+
+    def test_human_actual_result_is_preserved_and_current_observation_goes_to_ledger(self):
+        self.write_result(self.plan, self.result, self.ledger, self.changes())
+        self.edit(self.result, "REB-UT-001 실측: Pass", "담당자가 현장에서 확인한 실제 결과")
+        _, facts = self.facts()
+        self.assertEqual(facts["REB-UT-001"]["written_by"], "human")
+        self.write_result(self.plan, self.result, self.ledger, self.changes(keep=("REB-UT-001",), revision=None))
+        _, rows = self.result_rows()
+        self.assertEqual(rows["REB-UT-001"]["실제결과"], "담당자가 현장에서 확인한 실제 결과")
+        self.assertEqual(ev.read_ledger(self.ledger)["rows"]["REB-UT-001"]["실제결과"], "REB-UT-001 실측: Pass")
+
+    def test_changed_case_cannot_keep_a_human_pass_and_backup_preserves_old_value(self):
+        self.write_result(self.plan, self.result, self.ledger, self.changes())
+        self.edit(self.result, "REB-UT-001 실측: Pass", "담당자가 현장에서 확인한 실제 결과")
+        old_result = self.result.read_bytes()
+        self.edit(self.plan, "| 회차 생성 |", "| 회차 생성, 상태 등록완료 |")
+        _, facts = self.facts()
+        self.assertEqual(facts["REB-UT-001"]["written_by"], "human")
+        self.assertTrue(facts["REB-UT-001"]["case_changed"])
+        judged = {**JUDGED, "REB-UT-001": ("Fail", "실측 실패 — 생성 후 상태가 등록중", "2026.10.14", "김개발")}
+        changes = self.changes(judged=judged, keep=("REB-UT-001",),
+                               revision={**FIRST, "버전": "2.0", "개정 사유": "변경"})
+        for dry_run in (True, False):
+            with self.assertRaisesRegex(ev.InputError, "케이스가 바뀐 행"):
+                self.write_result(self.plan, self.result, self.ledger, changes, dry_run=dry_run)
+        self.assertEqual(self.result.read_bytes(), old_result)
+        self.assertFalse((self.root / "backup").exists())
+        changes["rows"]["REB-UT-001"]["keep"] = False
+        summary = self.write_result(self.plan, self.result, self.ledger, changes)
+        row = self.result_rows()[1]["REB-UT-001"]
+        self.assertEqual((row["기대결과"], row["결과"]), ("회차 생성, 상태 등록완료", "Fail"))
+        self.assertEqual((self.root / summary["backup"]).read_bytes(), old_result)
+
+    def test_missing_both_outcome_criteria_is_unverified(self):
+        self.edit(self.plan, "| 회차 생성 | TB_CYCL 1건 |", "| | |")
+        changes = self.changes()
+        evidence = self.load_evidence()
+        row = evidence["rows"]["REB-UT-001"]
+        # 빈 결과 칸에 true 를 넣어도, 사전조건·입력만 확인해도 판정 기준이 생기지는 않는다.
+        for checks in (row["checks"], [c for c in row["checks"] if c["field"] in ("사전조건", "입력")]):
+            row["checks"] = checks
+            row["actual"] = "요청을 수행했으나 기대결과와 사후조건의 판정 기준이 없음"
+            self.save_evidence(evidence)
+            judged = ev.validate_execution(ev.read_plan(self.plan), self.evidence)
+            self.assertEqual(judged["rows"]["REB-UT-001"]["상태"], "미검증")
+        changes["rows"]["REB-UT-001"].update(상태="미검증", 사유="기준값 미확정 — 결과 판정 기준 없음", 수행일="", 담당자="")
+        changes["evidence_hash"] = judged["evidence_hash"]
+        self.write_result(self.plan, self.result, self.ledger, changes)
+        self.assertEqual(self.result_rows()[1]["REB-UT-001"]["결과"], "미검증")
+
+    def test_blank_precondition_or_input_still_needs_an_explicit_observation(self):
+        self.edit(self.plan, "| 회차 없음 | 4종 파일 등록 |", "| | |")
+        self.changes()
+        baseline = self.load_evidence()
+        judged = ev.validate_execution(ev.read_plan(self.plan), self.evidence)
+        self.assertEqual(judged["rows"]["REB-UT-001"]["상태"], "Pass")
+        for field in ("사전조건", "입력"):
+            evidence = copy.deepcopy(baseline)
+            row = evidence["rows"]["REB-UT-001"]
+            row["checks"] = [c for c in row["checks"] if c["field"] != field]
+            self.save_evidence(evidence)
+            self.assertEqual(ev.validate_execution(ev.read_plan(self.plan), self.evidence)["rows"]["REB-UT-001"]["상태"], "미검증")
+
+    def test_old_automatic_pass_and_pm_confirmation_cannot_be_inherited(self):
+        self.write_result(self.plan, self.result, self.ledger, self.changes())
+        for path in (self.result, self.ledger):
+            self.edit(path, JUDGED["REB-UT-001"][1], "PM 확인 — 2026.10.14")
+        _, facts = self.facts()
+        self.assertEqual(facts["REB-UT-001"]["inherit"], "")
+        self.assertEqual(facts["REB-UT-001"]["written_by"], "tool")
+        judged = {**JUDGED, "REB-UT-001": ("미검증", "실행 차단 — DB 접속 불가", "", "")}
+        changes = self.changes(judged=judged, keep=("REB-UT-001",), revision=None)
+        with self.assertRaisesRegex(ev.InputError, "keep"):
+            self.write_result(self.plan, self.result, self.ledger, changes)
+        changes["rows"]["REB-UT-001"]["keep"] = False
+        changes["revision"] = {**FIRST, "버전": "2.0", "개정 사유": "보완"}
+        self.write_result(self.plan, self.result, self.ledger, changes)
+        self.assertEqual(self.result_rows()[1]["REB-UT-001"]["결과"], "미검증")
+
+    def test_legacy_documents_without_actual_column_remain_recognized_as_automatic(self):
+        self.write_result(self.plan, self.result, self.ledger, self.changes())
+        for path in (self.result, self.ledger):
+            lines, column = [], None
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if not line.startswith("|"):
+                    column = None
+                else:
+                    cells = ev._split_row(line)
+                    if "실제결과" in cells:
+                        column = cells.index("실제결과")
+                    if column is not None:
+                        cells.pop(column)
+                        line = ev._join_row(cells)
+                lines.append(line)
+            path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        _, facts = self.facts()
+        self.assertEqual({r["written_by"] for r in facts.values()}, {"tool"})
+        summary = self.write_result(self.plan, self.result, self.ledger,
+                                    self.changes(revision={**FIRST, "버전": "2.0", "개정 사유": "보완"}))
+        self.assertEqual(summary["changed"], list(JUDGED))
+        self.assertEqual(self.result_rows()[0][-1], "실제결과")
+
+    def test_current_plan_produces_fourteen_columns_with_actual_last(self):
+        doc = ev._load(self.plan)
+        head = doc["head"][:3] + ["요구사항명"] + doc["head"][3:]
+        table = [ev._join_row(head), "|" + "---|" * len(head)]
+        for row in doc["recs"]:
+            cells = [row["_raw"].get(h, "원천 데이터 등록") for h in head]
+            table.append(ev._join_row(cells))
+        lines = doc["lines"]
+        lines[doc["head_line"]:doc["table_end"]] = table
+        self.plan.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        before = self.plan.read_bytes()
+        self.write_result(self.plan, self.result, self.ledger, self.changes())
+        head, _ = self.result_rows()
+        self.assertEqual((len(head), head[-2:]), (14, ["사유", "실제결과"]))
+        self.assertEqual(self.plan.read_bytes(), before)
+
+    def test_plan_and_evidence_cannot_be_used_as_output_paths(self):
+        changes = self.changes()
+        before = self.plan.read_bytes()
+        for result, ledger in ((self.plan, self.ledger), (self.result, self.plan), (self.evidence, self.ledger)):
+            with self.assertRaises(ev.InputError):
+                self.write_result(self.plan, result, ledger, changes)
+        self.assertEqual(self.plan.read_bytes(), before)
+
+    def test_old_index_cli_and_write_without_evidence_are_rejected(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as error:
+                ev.main(["index", "--source", str(self.root)])
+            self.assertEqual(error.exception.code, 2)
+            with self.assertRaises(SystemExit) as error:
+                ev.main(["write", "--de13", str(self.plan), "--result", str(self.result), "--ledger", str(self.ledger), "--changes", "changes.json"])
+            self.assertEqual(error.exception.code, 2)
+
+    def test_real_loopback_http_error_is_a_pass_and_wrong_postcondition_is_a_fail(self):
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(handler):
+                body = handler.rfile.read(int(handler.headers.get("Content-Length", "0")))
+                if json.loads(body)["size"] > 1000:
+                    handler.send_response(400)
+                    response = {"message": "파일 용량 초과", "saved": 0}
+                else:
+                    handler.send_response(201)
+                    response = {"message": "정상 등록", "saved": 0}  # DB 저장 결함을 재현한다.
+                handler.send_header("Content-Type", "application/json; charset=utf-8")
+                handler.end_headers()
+                handler.wfile.write(json.dumps(response, ensure_ascii=False).encode("utf-8"))
+
+            def log_message(handler, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            judged = {**JUDGED, "REB-UT-003": ("Fail", "실측 실패 — 정상 응답 뒤 저장 0건", "2026.10.14", "김개발")}
+            changes = self.changes(judged=judged)
+            evidence = self.load_evidence()
+            url = f"http://127.0.0.1:{server.server_port}"
+            evidence["targets"][0]["base_url"] = url
+            startup = write(self.evidence.parent, "startup.log", f"Local app ready at {url}\n")
+            evidence["targets"][0]["startup_sha256"] = hashlib.sha256(startup.read_bytes()).hexdigest()
+            for tid, size in (("REB-UT-002", 1001), ("REB-UT-003", 1000)):
+                request_body = json.dumps({"size": size}).encode("utf-8")
+                request = Request(url + "/files", data=request_body, headers={"Content-Type": "application/json"})
+                try:
+                    response = urlopen(request, timeout=5)
+                except HTTPError as response_error:
+                    response = response_error
+                with response:
+                    status, body = response.status, response.read().decode("utf-8")
+                raw = write(self.evidence.parent, f"raw/{tid}.http", f"POST {url}/files\n{request_body.decode()}\nHTTP {status}\n{body}")
+                rel = raw.relative_to(self.evidence.parent).as_posix()
+                row = evidence["rows"][tid]
+                row["actual"] = f"HTTP {status}; {body}"
+                row["artifacts"] = [{"path": rel, "sha256": hashlib.sha256(raw.read_bytes()).hexdigest()}]
+                for check in row["checks"]:
+                    check["artifact"] = rel
+                    check["observed"] = row["actual"]
+                    check["matched"] = not (tid == "REB-UT-003" and check["field"] == "사후조건")
+            self.save_evidence(evidence)
+            changes["evidence_hash"] = hashlib.sha256(self.evidence.read_bytes()).hexdigest()
+            before = self.plan.read_bytes()
+            self.write_result(self.plan, self.result, self.ledger, changes)
+            _, rows = self.result_rows()
+            self.assertEqual(rows["REB-UT-002"]["결과"], "Pass")
+            self.assertIn("HTTP 400", rows["REB-UT-002"]["실제결과"])
+            self.assertEqual(rows["REB-UT-003"]["결과"], "Fail")
+            self.assertIn('"saved": 0', rows["REB-UT-003"]["실제결과"])
+            self.assertEqual(self.plan.read_bytes(), before)
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
 
 
 if __name__ == "__main__":

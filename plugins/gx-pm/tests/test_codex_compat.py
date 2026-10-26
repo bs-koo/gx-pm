@@ -20,7 +20,7 @@ class CodexCompatibilityTest(unittest.TestCase):
             re.search(r"version-([\d.]+)-blue", readme).group(1),
             re.search(r"## \[([\d.]+)\]", changelog).group(1),
         }
-        self.assertEqual(versions, {"4.4.0"})
+        self.assertEqual(versions, {"4.5.0"})
         self.assertIn("Codex", site)
 
     def test_매니페스트가_현재_플러그인을_등록한다(self):

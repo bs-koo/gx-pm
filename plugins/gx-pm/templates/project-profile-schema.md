@@ -74,7 +74,7 @@ DE-13 의 `입력` 칸이 그 경로를 가리킨다. 규칙의 정본은
 | 필드 | 타입 | 설명 | 예시 |
 |------|------|------|------|
 | `sourcePath` | string\|null | 소스코드 로컬 경로 | `"D:\\projects\\ehr-system"` |
-| `testSourcePaths` | string[]\|null | `/gx-단위테스트결과반영` 이 테스트를 읽을 개발 레포 경로들. 레포가 여럿이면 모두 적는다. 없으면 `sourcePath` 하나를 쓴다 | `["D:\\projects\\ehr-api", "D:\\projects\\ehr-web"]` |
+| `testSourcePaths` | string[]\|null | `/gx-단위테스트결과반영`이 실제 실행할 프로젝트 경로들. 백엔드·프론트가 나뉘면 모두 적는다. 하위 호환을 위해 이름을 유지한다. 없으면 `sourcePath`, 실제 애플리케이션인 현재 폴더 순으로 찾는다 | `["D:\\projects\\ehr-api", "D:\\projects\\ehr-web"]` |
 | `ddlFile` | string\|null | DDL 파일명 (프로젝트 폴더 내) | `"ddl.sql"` |
 | `existingArtifacts` | string\|null | 기존 산출물 폴더 경로 | `"D:\\docs\\ehr-artifacts"` |
 
