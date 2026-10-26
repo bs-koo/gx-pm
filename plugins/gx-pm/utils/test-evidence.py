@@ -756,7 +756,7 @@ def write_result(plan_md: Path, result_md: Path, ledger_md: Path, changes: dict,
     else:
         name = _doc_name(plan_doc["lines"])
         lines = [f"# IM-03 단위테스트결과서 — {name}" if name else "# IM-03 단위테스트결과서", "",
-                 f"> 생성: /gx-단위테스트결과반영 · {datetime.now():%Y-%m-%d %H:%M}", basis, "",
+                 f"> 생성: /gx-단위테스트실행 · {datetime.now():%Y-%m-%d %H:%M}", basis, "",
                  "## 개정이력", "", _join_row(REVISION_HEAD), "|------|--------|----------|----------|--------|--------|",
                  rev_line, "", _result_heading(plan_doc["lines"], plan_doc["head_line"]), "", *table_lines]
     try:  # 파일을 열기 전에 인코딩한다 — 열고 나서 실패하면 빈 파일이 남는다

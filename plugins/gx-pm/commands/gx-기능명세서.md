@@ -14,9 +14,9 @@ argument-hint: "<요구사항정의서 또는 파일>"
 **load-project-profile** 스킬로 활성 프로젝트를 확인한다. 프로파일이 없으면
 `/gx-프로젝트설정` 을 먼저 실행하라고 안내 후 종료.
 
-**확인요청서가 있으면 3분기보다 먼저 묻는다.** 「확인요청서 반영하고 이어가기」를 고르면
-**apply-confirmations** 스킬로 반영한다. 화면과 분기는
-`templates/confirmation-request.md` §낱개 커맨드에서도 같은 규칙으로 낸다 가 정본이다.
+**review-confirmations**의 기존 응답 보호 절차로 확인요청서 md/xlsx를 먼저 확인한다.
+응답 반영을 요청받았으면 **apply-confirmations**로 파일 전체를 반영하고 이어간다.
+의도가 불분명할 때만 「확인요청서 반영하고 이어가기」를 묻는다.
 
 **detect-existing-artifact** 스킬로 기존 `{시스템코드}-기능명세서.md` 를 확인한다.
 
@@ -45,15 +45,16 @@ argument-hint: "<요구사항정의서 또는 파일>"
 
 ## Step 4-1: 저장 + 확인요청서
 
-`{시스템코드}-기능명세서.md` 로 저장한 뒤, **xlsx 를 묻기 전에** `[가정]` + `[미확정]`
-합계로 확인요청서를 판정한다 — `templates/confirmation-request.md` §낱개 커맨드에서도 같은 규칙으로 낸다.
-0건이면 Step 5 로, 1~5건이면 그 자리에서 대화로 묻고 Step 5 로 간다.
-**6건 이상이라 발행했으면 Step 5 로 가지 않고 끝낸다.**
-Step 3 의 목록 표시로 갈음하지 않는다 — 보여준 것과 물은 것은 다르다.
+승인된 `{시스템코드}-기능명세서.md`를 저장한 뒤, **xlsx 를 묻기 전에**
+**review-confirmations**로 이번 확인 항목의 합계를 판정한다.
+`templates/confirmation-request.md` §낱개 커맨드에서도 같은 규칙으로 낸다를 따른다.
+0건은 추가 발행 없음, 1~5건은 실제 응답을 기다리고 이력 기록, 6건 이상은 확인요청서 md·xlsx 발행 후 보류다.
+미결이 남은 최종본은 보류하되 요청한 검토용 초안은 별도 출력한다. 이미 정한 xlsx 선택은 다시 묻지 않는다.
 
 ## Step 5: xlsx 추출
 
-`utils/export-xlsx.py` 로 추출한다. 이 산출물에 `[미확정]` 이 남아 있으면 뽑지 않는다
+`utils/export-xlsx.py` 로 추출한다. 이 산출물에 미결이 남아 있으면 최종본을 보류하며,
+요청받은 검토용 초안은 `--draft --separate`로 제공한다
 (`templates/confirmation-request.md` §미확정이 0이어야 최종본을 낸다).
 
 ## 다음 제안

@@ -596,7 +596,8 @@ def _column_width(values: list[str], min_width: int = 0) -> int:
 def create_xlsx(
     file_tables: list[tuple[str, list[tuple[str, list[str]]]]],
     output_path: str,
-) -> str:
+    draft: bool = False,
+) -> tuple[str, int]:
     """
     file_tables: [(파일명, [(표제목, 표라인[]), ...]), ...]
 
@@ -608,6 +609,12 @@ def create_xlsx(
 
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
+    if draft:
+        target = Path(output_path)
+        if not target.stem.endswith("-검토용초안"):
+            target = target.with_name(target.stem + "-검토용초안" + target.suffix)
+        output_path = str(target)
+        wb.properties.title = "검토용초안 — 미결 항목 확인 필요"
 
     # 스타일 정의
     header_font = Font(name="맑은 고딕", bold=True, size=10)
@@ -639,7 +646,15 @@ def create_xlsx(
 
         for title, table_lines in tables:
             rows = table_lines_to_rows(table_lines)
-            if not rows or is_metadata_table(rows):
+            if not rows:
+                continue
+            # 양식에 정의된 본문은 행 수로 버리지 않는다. 안내가 한 줄인
+            # 확인요청서도 4개 시트를 유지해야 한다.
+            known_header = any(
+                set(rows[0]) == set(columns)
+                for columns in DOCUMENT_PROFILES.get(file_doc_type, {}).get("columns", [])
+            )
+            if is_metadata_table(rows) and not known_header:
                 continue
 
             key = _header_key(rows)
@@ -698,6 +713,11 @@ def create_xlsx(
             # 제목 행이 생기면 헤더가 한 행 밀리므로, 아래 병합·고정·필터가 전부
             # row_offset 만큼 보정해야 한다.
             sheet_title = doc_profile.get("sheet_title") if (doc_profile and set_index is not None) else None
+            if draft:
+                sheet_title = "검토용초안 · " + (sheet_title or sheet_name)
+                ws.oddHeader.center.text = "검토용초안 — 미결 항목 확인 필요"
+                ws.evenHeader.center.text = ws.oddHeader.center.text
+                ws.firstHeader.center.text = ws.oddHeader.center.text
             row_offset = 1 if sheet_title else 0
             if sheet_title:
                 last_col_letter = get_column_letter(len(rows[0]))
@@ -776,7 +796,11 @@ def create_xlsx(
 
     if not wb.sheetnames:
         ws = wb.create_sheet(title="빈 시트")
-        ws.cell(row=1, column=1, value="표 데이터가 없습니다")
+        ws.cell(row=1, column=1, value="검토용초안 · 표 데이터가 없습니다" if draft else "표 데이터가 없습니다")
+        if draft:
+            ws.oddHeader.center.text = "검토용초안 — 미결 항목 확인 필요"
+            ws.evenHeader.center.text = ws.oddHeader.center.text
+            ws.firstHeader.center.text = ws.oddHeader.center.text
 
     wb.save(output_path)
     return output_path, len(wb.sheetnames)
@@ -815,6 +839,7 @@ def main():
         action="store_true",
         help="각 md 파일을 별도 xlsx로 생성 (기본: 하나의 xlsx에 통합)",
     )
+    parser.add_argument("--draft", action="store_true", help="검토용초안 파일명·시트 제목·인쇄 머리말로 출력 (최종본 보존)")
 
     args = parser.parse_args()
 
@@ -840,7 +865,7 @@ def main():
         text = sys.stdin.read()
         tables = parse_markdown_tables(text)
         out = args.output or "output.xlsx"
-        result, total_sheets = create_xlsx([("stdin", tables)], out)
+        result, total_sheets = create_xlsx([("stdin", tables)], out, draft=args.draft)
         print(f"✅ 생성 완료: {result} ({total_sheets}개 시트)")
         return
 
@@ -864,7 +889,7 @@ def main():
             else:
                 out = md_file.with_suffix(".xlsx")
             if tables:
-                result, total_sheets = create_xlsx([(md_file.name, tables)], str(out))
+                result, total_sheets = create_xlsx([(md_file.name, tables)], str(out), draft=args.draft)
                 print(f"✅ {md_file.name} → {result} ({total_sheets}개 시트)")
             else:
                 print(f"⚠ {md_file.name}: 표가 없어 건너뜁니다")
@@ -890,7 +915,7 @@ def main():
             prefix = prefix_match.group(1) if prefix_match else "output"
             out = f"{prefix}-산출물.xlsx"
 
-        result, total_sheets = create_xlsx(all_tables, out)
+        result, total_sheets = create_xlsx(all_tables, out, draft=args.draft)
         print(f"✅ 생성 완료: {result} ({total_sheets}개 시트)")
 
 

@@ -226,14 +226,14 @@ class ArchiveIsolationTest(unittest.TestCase):
 class SurfaceTest(unittest.TestCase):
     """기능 축 전환 후 사용자에게 보이는 표면."""
 
-    def test_커맨드가_여덟_개다(self):
+    def test_커맨드_8기능과_호환별칭이_있다(self):
         self.assertEqual(
             sorted(command_names()),
             sorted([
                 "gx-프로젝트설정", "gx-명세일괄",
                 "gx-요구사항정의서", "gx-기능명세서", "gx-테이블정의서",
                 "gx-단위테스트계획서", "gx-추적매트릭스",
-                "gx-단위테스트결과반영",
+                "gx-단위테스트실행", "gx-단위테스트결과반영",
             ]),
         )
 
@@ -1003,24 +1003,12 @@ class PipelineCommandTest(unittest.TestCase):
             "gx-명세일괄 이 확인요청서 양식 정본을 가리키지 않습니다",
         )
 
-    def test_반영_무응답이_묵시적_승인이다(self):
-        """무응답에서 멈추면 파이프라인이 사람을 기다린다.
-
-        착수 전에는 답할 수 없는 것이 많아 무응답이 정상이다. 이 규칙이 없으면
-        확인요청서가 파이프라인을 막는 새 관문이 된다 — 없애려던 문제 그 자체다.
-        """
-        스킬 = (
-            PLUGIN_ROOT / "skills" / "apply-confirmations" / "SKILL.md"
-        ).read_text(encoding="utf-8")
-        self.assertIn("묵시적 승인", 스킬)
-        self.assertRegex(
-            스킬, r"무응답도 정상 종료",
-            "무응답으로도 끝난다는 규칙이 없습니다",
-        )
-        self.assertIn(
-            "templates/pipeline-protocol.md", 스킬,
-            "파급 규칙 정본을 가리키지 않습니다 — 여기서 복제하면 두 벌이 갈립니다",
-        )
+    def test_반영_무응답은_대기이며_반복_읽기는_중복처리하지_않는다(self):
+        스킬 = (PLUGIN_ROOT / "skills/apply-confirmations/SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("가정과 항목을 대기로 유지", 스킬)
+        self.assertIn("승인·반영으로 기록하지 않는다", 스킬)
+        self.assertIn("동일 응답은 다시 반영하거나 이력·차수를 늘리지 않는다", 스킬)
+        self.assertIn("templates/pipeline-protocol.md", 스킬)
 
     def test_게이트마다_저장한다(self):
         """저장이 Step 10 한 곳뿐이면 중간에 끊겼을 때 승인분이 사라진다.
@@ -2253,15 +2241,9 @@ class ConfirmationSheetTest(unittest.TestCase):
         )
 
     def test_빈칸이_정상임을_밝힌다(self):
-        """사람이 한 줄도 안 써도 넘어간다는 것이 이 설계의 핵심이다.
-
-        이 문장이 없으면 확인요청서가 파이프라인을 막는 새 관문이 된다.
-        """
-        self.assertIn("빈칸", self.text)
-        self.assertRegex(
-            self.text, r"그대로 진행|그 값으로 진행",
-            "빈칸을 두면 어떻게 되는지가 없습니다",
-        )
+        self.assertIn("빈칸은 미응답", self.text)
+        self.assertIn("명시적 수락 없이 확정하거나 닫지 않는다", self.text)
+        self.assertIn("독립된 문서 작업은 이어간다", self.text)
 
     def test_입력란_색_규칙이_있다(self):
         """8열 중 3열만 입력란이라 색이 없으면 어디를 채울지 모른다."""
@@ -2322,7 +2304,7 @@ class ConfirmationRoundTest(unittest.TestCase):
             with self.subTest(게이트=제목):
                 절 = self._절(제목)
                 self.assertRegex(
-                    절, r"export-xlsx\.py[^\n]*--separate[^\n]*--output xlsx",
+                    절, r"export-xlsx\.py[^\n]*--separate[^\n]*--output [^\n]*xlsx",
                     f"{제목} 의 발행 절차에 확인요청서 xlsx 추출 명령이 없습니다 "
                     "— 화면은 xlsx/ 경로를 안내하는데 그 파일을 만드는 지시가 "
                     "어디에도 없습니다",
@@ -2340,9 +2322,8 @@ class ConfirmationRoundTest(unittest.TestCase):
             "어디를 채우는지 안내가 없습니다",
         )
         self.assertRegex(
-            절, r"빈칸[^\n]*(그대로 진행|그 값으로 진행)",
-            "빈칸이 「그대로 진행」이라는 뜻임이 안내에 없습니다 "
-            "— 이 한 줄이 없으면 사용자가 전건을 채워야 하는 줄 알고 거기서 멈춥니다",
+            절, r"빈칸[^\n]*미응답",
+            "빈칸을 자동 승인하지 않는다는 안내가 없습니다",
         )
         self.assertRegex(
             절, r"/gx-명세일괄.*다시",
@@ -2591,8 +2572,8 @@ class ConfirmationCloseoutTest(unittest.TestCase):
             "skills/apply-confirmations/SKILL.md", "다음 차수를 예고하지 않는다"
         )
         self.assertRegex(
-            절, r"[^\n]*발행 여부는[^\n]*게이트[^\n]*정한다",
-            "발행을 게이트가 정한다는 근거가 없습니다",
+            절, r"[^\n]*review-confirmations[^\n]*미결 상태로 정한다",
+            "후속 질문을 공통 확인 스킬이 현재 상태로 정한다는 근거가 없습니다",
         )
         self.assertRegex(
             절, r"[^\n]*지금 상태만[^\n]*",
@@ -2630,7 +2611,7 @@ class QuestionThresholdTest(unittest.TestCase):
         구간 = re.search(r"^## 언제 만드나$(.*?)(?=^## )", 절, re.M | re.S)
         self.assertIsNotNone(구간, "§언제 만드나 절이 없습니다")
         본문 = 구간.group(1)
-        for 표기, 뜻 in (("0건", "물을 것이 없"), ("1~5건", "대화"), ("6건 이상", "중단")):
+        for 표기, 뜻 in (("0건", "추가 발행하지 않는다"), ("1~5건", "대화"), ("6건 이상", "중단")):
             with self.subTest(구간=표기):
                 # 앞뒤 산문에도 같은 낱말이 나온다. **구간 표의 그 행**만 본다 —
                 # 표 행은 `|` 로 시작하고 첫 칸이 그 표기다.
@@ -2674,7 +2655,7 @@ class StandaloneConfirmationTest(unittest.TestCase):
     만드는 AN-03·DE-08·DE-13 세 커맨드가 같은 정본을 가리켜야 한다.
     """
 
-    대상 = ("gx-기능명세서", "gx-테이블정의서", "gx-단위테스트계획서")
+    대상 = ("gx-요구사항정의서", "gx-기능명세서", "gx-테이블정의서", "gx-단위테스트계획서", "gx-추적매트릭스")
     절_제목 = "낱개 커맨드에서도 같은 규칙으로 낸다"
 
     def setUp(self):
@@ -2692,37 +2673,33 @@ class StandaloneConfirmationTest(unittest.TestCase):
     def _커맨드(self, 이름):
         return (PLUGIN_ROOT / "commands" / f"{이름}.md").read_text(encoding="utf-8")
 
-    def test_정본이_세_커맨드를_이름으로_든다(self):
+    def test_정본이_다섯_커맨드를_이름으로_든다(self):
         절 = self._절()
         for 이름 in self.대상:
             with self.subTest(커맨드=이름):
                 self.assertIn(f"/{이름}", 절)
 
     def test_정본이_같은_기준어로_가른다(self):
-        """기준어(합계)가 빠지면 다른 기준으로 바뀌어도 조용히 통과한다."""
         절 = self._절()
-        self.assertRegex(
-            절, r"\[가정\][^\n]*\[미확정\][^\n]*합계",
-            "낱개 경로의 발행 기준이 「`[가정]` + `[미확정]` 합계」가 아닙니다",
-        )
-        self.assertRegex(절, r"1~5건[^\n]*대화로 묻", "1~5건 → 대화 분기가 없습니다")
-        self.assertRegex(절, r"6건 이상[^\n]*(내고|발행)", "6건 이상 → 발행 분기가 없습니다")
+        self.assertIn("이번에 물을 항목", 절)
+        self.assertIn("합계", 절)
+        self.assertIn("§언제 만드나", 절)
+        self.assertIn("review-confirmations", 절)
 
     def test_정본이_확인요청서_xlsx_를_실제로_뽑는다(self):
         """게이트와 같은 이유 — 연노랑 입력란·드롭다운은 xlsx 에만 있다."""
         self.assertRegex(
-            self._절(), r"export-xlsx\.py[^\n]*--separate[^\n]*--output xlsx",
+            self._절(), r"export-xlsx\.py[^\n]*--separate[^\n]*--output [^\n]*xlsx",
             "낱개 경로에 확인요청서 xlsx 추출 명령이 없습니다",
         )
 
     def test_다시_뽑기_전에_응답부터_반영한다(self):
-        """반영 없이 다시 뽑으면 사람이 xlsx 에 적은 답이 md 로 덮인다."""
-        self.assertRegex(
-            self._절(), r"[^\n]*이미 있으면[^\n]*응답부터 반영",
-            "파일이 있을 때 먼저 반영하라는 규칙이 없습니다 — 사람이 적은 답이 사라집니다",
-        )
+        절 = self._절()
+        self.assertIn("apply-confirmations", 절)
+        self.assertIn("새로운 응답", 절)
+        self.assertIn("반영하지 않고 계속한 파일은 덮어쓰지 않는다", 절)
 
-    def test_세_커맨드가_정본을_가리킨다(self):
+    def test_다섯_커맨드가_정본을_가리킨다(self):
         for 이름 in self.대상:
             with self.subTest(커맨드=이름):
                 self.assertIn(
@@ -2732,7 +2709,7 @@ class StandaloneConfirmationTest(unittest.TestCase):
                     "— 이 경로에서는 확인요청서가 나오지 않습니다",
                 )
 
-    def test_세_커맨드의_Step0_이_반영_경로를_연다(self):
+    def test_다섯_커맨드의_Step0_이_반영_경로를_연다(self):
         """다시 불렀을 때 채운 답을 읽을 길이 있어야 왕복이 닫힌다."""
         for 이름 in self.대상:
             with self.subTest(커맨드=이름):
@@ -2743,7 +2720,7 @@ class StandaloneConfirmationTest(unittest.TestCase):
                 self.assertIn("**apply-confirmations**", 구간.group(1))
                 self.assertIn("확인요청서 반영하고 이어가기", 구간.group(1))
 
-    def test_세_커맨드가_xlsx_를_묻기_전에_판정한다(self):
+    def test_다섯_커맨드가_xlsx_를_묻기_전에_판정한다(self):
         """판정이 xlsx 질문 뒤에 오면 미확정이 남은 최종본이 먼저 나간다."""
         for 이름 in self.대상:
             with self.subTest(커맨드=이름):
@@ -2957,7 +2934,7 @@ class FinalOutputGateTest(unittest.TestCase):
         self.assertIsNotNone(구간, "§미확정이 0이어야 최종본을 낸다 절이 없습니다")
         절 = 구간.group(1)
         self.assertRegex(
-            절, r"[^\n]*1건이라도 남아 있으면[^\n]*xlsx 를 뽑지 않는다",
+            절, r"[^\n]*남아 있으면[^\n]*최종본 xlsx를 뽑지 않는다",
             "보류 조건이 없습니다",
         )
         # 이 문장은 줄바꿈을 넘어간다. 줄이 아니라 **한 문장** 으로 좁힌다 —
