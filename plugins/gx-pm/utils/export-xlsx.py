@@ -17,6 +17,8 @@ import re
 import os
 import io
 import argparse
+import math
+import unicodedata
 from pathlib import Path
 
 # 목록 표지는 마커 뒤에 공백이 온다("- 항목", "1. 항목").
@@ -168,7 +170,7 @@ DOCUMENT_PROFILES = {
         "merge_columns": [],
         "left_align": [
             "안내", "위치", "근거", "비고", "무엇이 없나", "왜 못 정했나", "응답",
-            "물은 것", "받은 답", "발행처",
+            "물은 것", "받은 답", "발행처", "AI 가 정한 값", "정정값",
         ],
         "dropdowns": [
             {},
@@ -275,6 +277,7 @@ def strip_markdown(text: str) -> str:
     코드 표기를 걷어내고 알맹이만 남긴다. `[가정]` 같은 대괄호 표식은
     산출물의 뜻이므로 건드리지 않는다.
     """
+    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
     text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
     text = re.sub(r"__(.+?)__", r"\1", text)
     # 굵게를 먼저 걷어낸 뒤라 남은 홑표는 기울임이다. 앞뒤로 같은 기호가
@@ -579,18 +582,93 @@ def _apply_dropdowns(ws, doc_profile, set_index, header_names, first_row, last_r
         dv.add(f"{letter}{first_row}:{letter}{last_row}")
 
 
-def _column_width(values: list[str], min_width: int = 0) -> int:
-    """열의 자동 계산 너비와 최소 너비 중 큰 값을 60 이내로 돌려준다.
+def _display_width(text: str) -> int:
+    """줄 하나의 대략적인 표시 폭. 한글·전각은 2, 결합 문자는 0이다."""
+    return sum(
+        0 if unicodedata.combining(c) else 2 if unicodedata.east_asian_width(c) in ("W", "F") else 1
+        for c in text.expandtabs(4)
+    )
+
+
+def _column_width(values: list[str], min_width: int = 0, max_width: int = 60) -> int:
+    """명시적 줄바꿈의 가장 긴 줄과 열별 최소·최대 너비를 적용한다.
 
     자동 계산은 각 값의 표시 폭(전각 2 · 반각 1)에 여백 4를 더한 값이다.
     `min_width` 는 DOCUMENT_PROFILES 의 `min_widths` 에서 온다 — "신규"처럼
     짧은 값만 있는 열이 지나치게 좁아지는 것을 막는다.
     """
-    max_len = 0
-    for value in values:
-        length = sum(2 if ord(c) > 127 else 1 for c in str(value))
-        max_len = max(max_len, length)
-    return min(max(max_len + 4, min_width), 60)
+    max_len = max((_display_width(line) for value in values for line in str(value).splitlines()), default=0)
+    return min(max(max_len + 4, min_width), max_width)
+
+
+_LONG_TEXT_COLUMNS = {
+    "개정 내용", "요구사항 상세내용", "기능설명", "입력항목", "처리내용(로직)", "출력결과",
+    "사전조건", "입력", "기대결과", "사후조건", "사유", "실제결과", "요구사항 근거", "변경 근거",
+}
+_READABLE_WIDTHS = {
+    "안내": (72, 104), "근거": (56, 84), "왜 못 정했나": (56, 84),
+    "위치": (24, 40), "AI 가 정한 값": (22, 44), "정정값": (24, 48),
+    "응답": (28, 56), "물은 것": (36, 72), "받은 답": (28, 56), "비고": (28, 64),
+}
+
+
+def _readable_column_width(values, name, min_width):
+    lower, upper = _READABLE_WIDTHS.get(name, (36, 80) if name in _LONG_TEXT_COLUMNS else (8, 60))
+    return _column_width(values, max(lower, min_width), upper)
+
+
+def _text_height(value, width, font_size=10):
+    # 열 너비는 Excel 문자 단위다. 단어 단위 줄바꿈·글꼴 차이를 위한 여유를 둔다.
+    usable = max(1, (width - 4) * 0.85 * 10 / font_size)
+    lines = sum(max(1, math.ceil(_display_width(line) / usable)) for line in str(value).split("\n"))
+    return max(26, lines * (font_size * 1.5) + 6)
+
+
+def _fit_row_heights(ws, header_row):
+    """저장 시 높이를 계산한다. 병합 셀도 범위 전체 높이가 설명을 담게 한다."""
+    from openpyxl.utils import get_column_letter
+
+    # Excel 행 높이 상한: https://support.microsoft.com/en-us/excel/change-the-column-width-and-row-height
+    max_height = 409
+    anchors = {(m.min_row, m.min_col): m for m in ws.merged_cells.ranges}
+    deferred = []
+    clipped = []
+    for row in ws.iter_rows():
+        row_number = row[0].row
+        height = 30 if row_number <= header_row else 26
+        for cell in row:
+            if cell.value is None:
+                continue
+            merged = anchors.get((cell.row, cell.column))
+            if merged:
+                deferred.append((cell, merged))
+                continue
+            width = ws.column_dimensions[get_column_letter(cell.column)].width
+            needed = _text_height(cell.value, width, cell.font.sz or 10)
+            height = max(height, needed)
+            if needed > max_height:
+                clipped.append(cell.coordinate)
+        ws.row_dimensions[row_number].height = min(height, max_height)
+
+    for cell, merged in deferred:
+        width = sum(ws.column_dimensions[get_column_letter(c)].width
+                    for c in range(merged.min_col, merged.max_col + 1))
+        needed = _text_height(cell.value, width, cell.font.sz or 10)
+        row_numbers = list(range(merged.min_row, merged.max_row + 1))
+        remaining = needed - sum(ws.row_dimensions[r].height for r in row_numbers)
+        while remaining > 0.01:
+            available = [r for r in row_numbers if ws.row_dimensions[r].height < max_height]
+            if not available:
+                clipped.append(cell.coordinate)
+                break
+            share = remaining / len(available)
+            for r in available:
+                added = min(share, max_height - ws.row_dimensions[r].height)
+                ws.row_dimensions[r].height += added
+                remaining -= added
+    if clipped:
+        print(f"주의: {ws.title} {', '.join(clipped[:5])} 등 {len(clipped)}개 셀은 Excel 행 높이 상한을 넘습니다. "
+              "원문은 보존되어 있으며 수식 입력줄에서 전체 내용을 확인할 수 있습니다.", file=sys.stderr)
 
 
 def create_xlsx(
@@ -773,8 +851,8 @@ def create_xlsx(
                 col_letter = get_column_letter(col_idx + 1)
                 col_name = header_names[col_idx] if col_idx < len(header_names) else ""
                 values = [row[col_idx] for row in rows if col_idx < len(row)]
-                ws.column_dimensions[col_letter].width = _column_width(
-                    values, min_widths.get(col_name, 0)
+                ws.column_dimensions[col_letter].width = _readable_column_width(
+                    values, col_name, min_widths.get(col_name, 0)
                 )
 
             # 헤더 행 고정 + 필터 — 제목 행이 있으면 한 행씩 밀어 제목은 제외한다.
@@ -783,6 +861,8 @@ def create_xlsx(
             last_col_letter = get_column_letter(len(rows[0]))
             ws.freeze_panes = f"A{header_row + 1}"
             ws.auto_filter.ref = f"A{header_row}:{last_col_letter}{last_row}"
+            _fit_row_heights(ws, header_row)
+            ws.print_title_rows = f"1:{header_row}"
 
             # 열거형 열에 드롭다운(데이터 검증)을 건다.
             # 범위는 데이터 행만이다 — 열 전체로 걸면 제목 병합 셀과 헤더까지
