@@ -37,7 +37,7 @@ argument-hint: "[로컬에서 실행할 프로젝트 경로 ...]"
 
 **apply-test-results** Step 5를 따른다. 실행 증적을 검증하는 dry-run 뒤 **manage-revision-history** 스킬로 개정이력을 확정하고 결과서·수행대장을 기록한다. 계획서 원문은 바뀌지 않는다.
 
-결과서가 바뀌면 이미 정한 출력 형식을 적용해 `utils/export-xlsx.py --separate`로 결과서만 추출한다. 출력 형식이 미정이면 Step 3 검토에 `xlsx 추출 / 마크다운만 저장` 선택을 포함한다. 내부 증적은 고객 xlsx에 포함하지 않는다.
+결과서가 바뀌면 이미 정한 출력 형식을 적용해 `utils/export-xlsx.py --strict --separate`로 결과서만 추출한다. 출력 형식이 미정이면 Step 3 검토에 `xlsx 추출 / 마크다운만 저장` 선택을 포함한다. 내부 증적은 고객 xlsx에 포함하지 않는다.
 
 ### Step 5: 다음 안내
 

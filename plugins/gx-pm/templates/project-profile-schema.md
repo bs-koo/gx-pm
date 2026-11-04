@@ -12,6 +12,7 @@
   └── {프로젝트명}/
         ├── profile.json        ← 이 파일
         ├── source-index.json   ← 소스 스캔 캐시 (선택)
+        ├── requirements-state.json ← 원문·요구사항·CQ 결정·사용 ID·검토 상태
         ├── ddl.sql             ← DDL 원본 (선택)
         ├── {시스템코드}-*.md   ← 산출물들
         ├── backup/             ← 이전 버전 백업
@@ -43,6 +44,7 @@ DE-13 의 `입력` 칸이 그 경로를 가리킨다. 규칙의 정본은
 | `networkType` | string | Y | 망 구분. **현재 소비처 없음** — 아래 §소비처 없는 필드 | `"internal"`, `"external"`, `"mixed"` |
 | `auditDate` | string | N | 감리 일정 (YYYY-MM-DD) | `"2026-06-15"` |
 | `assets` | object | N | 기존 자산 경로 정보 | 아래 참조 |
+| `sourcePriority` | string[] | N | 표준용어사전 출처 우선순위. 실제 가용 출처와 프로젝트 도메인을 확인해 결정 | `["BLDG_ENGY", "MOIS_STD"]` |
 | `policy` | object | N | 질문 정책 4개. `/gx-명세일괄` Step 0-4 가 묻고 저장한다 | 아래 참조 |
 | `createdAt` | string | Y | 프로파일 생성일 (YYYY-MM-DD) | `"2026-03-31"` |
 | `lastUsed` | string | Y | 마지막 사용일 (YYYY-MM-DD) | `"2026-03-31"` |
@@ -50,20 +52,20 @@ DE-13 의 `입력` 칸이 그 경로를 가리킨다. 규칙의 정본은
 ### policy 객체
 
 `templates/pipeline-protocol.md` §질문 정책의 정책 층 4개를 담는다.
-**선택 필드다** — 없으면 `/gx-명세일괄` 이 Step 0-4 에서 묻고 저장하며, 단독 커맨드는
-기본값(권장안)으로 돈다. 기존 프로파일이 이 필드 없이도 계속 동작해야 한다.
+**선택 필드다** — 없으면 원문을 읽고 이번 산출물에 필요한 정책만 확인·저장한다.
+단독 실행에도 같은 원칙을 적용하며 후속 문서 전용 선택은 미룬다. 필드 부재만으로 옛 프로파일을 거부하지 않는다.
 
 | 필드 | 타입 | 값 | 뜻 |
 |------|------|-----|-----|
 | `splitCriterion` | string | `"verification-unit"`(권장) · `"rfp-one-to-one"` · `"function-domain"` | 요구사항 행 분할 기준 |
-| `assumptionFill` | boolean | `true`(권장) · `false` | RFP 미규정 항목을 `[가정]` 으로 채울지. `false` 면 자동 보강이 돌지 않아 DE-13 밀도가 얇아진다 |
+| `assumptionFill` | boolean | `false`(권장) · `true` | 미규정 설계값을 초안에 제안할지. `false`는 미정을 질문으로 남긴다. `true`도 `[가정]`·추천 근거를 표시하고 실제 승인을 받아야 한다. 업무 정책·수치·권한을 임의 확정하지 않는다 |
 | `testDensity` | number \| null | `null`(권장) · `3` · `5` | 기능당 케이스 수 **경고 임계값**. 하한 패딩이 아니다 — 못 미치는 기능을 게이트에 올려 사람이 판단하게 한다. 수로 채우면 근거 없는 케이스가 생겨 `[가정]` 규율과 충돌하고, 그때는 **`[가정]` 규율이 이긴다** |
 | `nonFunctionalVerification` | string | `"measurement-procedure"`(권장) · `"design-review"` · `"tool"` | 비기능 요구사항 검증 방법 |
 
 ```json
 "policy": {
   "splitCriterion": "verification-unit",
-  "assumptionFill": true,
+  "assumptionFill": false,
   "testDensity": null,
   "nonFunctionalVerification": "measurement-procedure"
 }
@@ -118,6 +120,29 @@ DE-13 의 `입력` 칸이 그 경로를 가리킨다. 규칙의 정본은
 없다면 위 세 곳을 **함께** 고쳐 제거한다. 한 곳만 고치면 프로파일을 읽지 못한다.
 
 ---
+
+## 요구사항 검토 상태 — requirements-state.json
+
+프로젝트 폴더의 내부 검토 상태 파일이다. 제출용 AN-02 10열과 확인요청서 양식은 유지한다.
+요구사항 작성·수정 시 review-confirmations가 관리하고 detect-existing-artifact·reconcile-ids·apply-confirmations가
+읽고 갱신한다. 원문·요구사항·결정의 근거를 파일에서 다시 확인하며 대화 기억이나 수정 시각만으로 판단하지 않는다.
+
+| 필드 | 내용 |
+|---|---|
+| `schemaVersion` | `1` |
+| `inputScope` | `full`(전체 개정본) / `partial`(부분 수정) / `additional`(추가 자료) |
+| `sources` | 자료별 `id`·`path`·개정/수신 기준 `revision`·실제 파일 `sha256` |
+| `requirements` | 요구사항ID별 `contentHash`·`sourceRefs`·`classification`·`priority`·`decisionRefs`. 미정값은 미정으로 기록 |
+| `decisions` | CQ별 대상 요구사항ID·필드·`basisHash`·실제 `response`·`status`. 근거가 바뀌면 영향을 받는 결정만 재확인 |
+| `idHistory` | `requirement`·`function`·`test`별 사용한 전체 ID 배열. 삭제 ID 포함, 합집합으로 누적 |
+| `documents` | `AN-02`·`AN-03`·`DE-08`·`DE-13`·`AN-05` 키별 `version`·파일 SHA-256인 `contentHash`·`status`(초안/부분확정/확정)·`openCQ` 배열·미반영 상위 변경 `upstreamChanges` 배열 |
+
+해시는 실제 파일 또는 필드 이름과 값을 정렬해 직렬화한 요구사항 행의 SHA-256으로 계산한다.
+원본 자료가 바뀌면 사본·이전 기준을 보존하고 ID·필드에 연결된 변경을 대조한다. 사람이 본문을 직접 수정해
+버전이 같아도 내용 지문이 다르면 검토 대상으로 표시한다. 파일이 없는 기존 프로젝트는 현재 파일·이력에서
+확인한 기준과 사용 번호만 이관한다. 확인할 수 없는 과거 승인을 만들어 넣지 않는다.
+쓰기 전에 기존 상태를 백업하고 JSON 구문과 대상 경로를 검증한다. 문서 저장에 실패하면 상태만 확정으로
+올리지 않는다. 사용자 응답 없이 `response`·확정 상태를 채우지 않으며 내부 상태를 고객 Excel로 내보내지 않는다.
 
 ## 프로젝트 유형 상세
 

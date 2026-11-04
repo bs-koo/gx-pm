@@ -1,6 +1,6 @@
 {
   "name": "gx-pm",
-  "version": "4.5.0",
+  "version": "4.6.0",
   "description": "공공·SI 프로젝트의 명세 작성, 요구사항 추적과 테스트 수행·결과 관리를 지원하는 PM 워크플로.",
   "author": {
     "name": "SQI"
@@ -8,12 +8,16 @@
   "homepage": "https://github.com/bs-koo/gx-pm",
   "repository": "https://github.com/bs-koo/gx-pm",
   "keywords": [
-    "product-manager",
+    "project-management",
     "public-sector",
     "SI",
     "korean",
     "requirements",
-    "traceability"
+    "specification",
+    "traceability",
+    "change-management",
+    "test-plan",
+    "data-dictionary"
   ],
   "skills": "./skills/",
   "interface": {
@@ -26,8 +30,9 @@
       "Write"
     ],
     "defaultPrompt": [
-      "$gx-pm-workflow 프로젝트 설정을 시작해줘",
-      "$gx-pm-workflow 명세 5종을 만들어줘"
+      "$gx-pm-workflow 프로젝트 설정을 시작해줘.",
+      "$gx-pm-workflow 첨부한 과업지시서로 요구사항정의서만 작성해줘.",
+      "$gx-pm-workflow 명세 5종을 일괄 작성해줘."
     ]
   }
 }

@@ -31,7 +31,7 @@ argument-hint: "<요구사항정의서 또는 파일>"
 ## Step 2-1: ID 승계
 
 직전 버전이 `backup/` 에 있으면 **reconcile-ids** 스킬로 기능ID 를 승계한다.
-백업본이 없으면 첫 생성이므로 건너뛴다.
+현재 승인본·완료 백업·사용 번호 이력을 **reconcile-ids**의 순서로 대조한다. 백업 부재만으로 최초 작성으로 간주하지 않는다.
 **승인(Step 3)보다 먼저 돈다** — 사용자가 검토하는 표에 최종 ID 가 실려 있어야 한다
 (`skills/reconcile-ids/SKILL.md` §언제 도는가).
 
@@ -54,7 +54,7 @@ argument-hint: "<요구사항정의서 또는 파일>"
 ## Step 5: xlsx 추출
 
 `utils/export-xlsx.py` 로 추출한다. 이 산출물에 미결이 남아 있으면 최종본을 보류하며,
-요청받은 검토용 초안은 `--draft --separate`로 제공한다
+요청받은 검토용 초안은 `--strict --draft --separate`로 제공한다
 (`templates/confirmation-request.md` §미확정이 0이어야 최종본을 낸다).
 
 ## 다음 제안
