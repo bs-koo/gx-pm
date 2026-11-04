@@ -1,21 +1,33 @@
 {
   "name": "gx-pm",
   "version": "4.5.0",
-  "description": "공공/SI 명세 작성과 계획서 기반 로컬 API·브라우저 시험, 결과·이력·증적 기록을 돕는 PM 플러그인",
+  "description": "공공·SI 프로젝트의 명세 작성, 요구사항 추적과 테스트 수행·결과 관리를 지원하는 PM 워크플로.",
   "author": {
     "name": "SQI"
   },
   "homepage": "https://github.com/bs-koo/gx-pm",
   "repository": "https://github.com/bs-koo/gx-pm",
-  "keywords": ["product-manager", "public-sector", "SI", "korean", "requirements", "traceability"],
+  "keywords": [
+    "product-manager",
+    "public-sector",
+    "SI",
+    "korean",
+    "requirements",
+    "traceability"
+  ],
   "skills": "./skills/",
   "interface": {
-    "displayName": "gx-pm",
-    "shortDescription": "공공/SI 프로젝트 명세 5종과 추적 관리",
-    "longDescription": "프로젝트 설정부터 요구사항·기능·테이블·단위테스트·추적매트릭스까지 Codex에서 작성합니다. 계획서 각 행을 로컬 API·브라우저로 실제 수행하고 결과서·개정이력·수행대장·실행 증적을 기록합니다.",
+    "displayName": "GX PM",
+    "shortDescription": "공공·SI 명세 작성과 요구사항·테스트 관리",
+    "longDescription": "공공·SI 프로젝트의 명세 작성, 요구사항 추적과 테스트 수행·결과 관리를 지원하는 PM 워크플로.",
     "developerName": "SQI",
     "category": "Productivity",
-    "capabilities": ["Write"],
-    "defaultPrompt": ["$gx-pm-workflow 프로젝트 설정을 시작해줘", "$gx-pm-workflow 명세 5종을 만들어줘"]
+    "capabilities": [
+      "Write"
+    ],
+    "defaultPrompt": [
+      "$gx-pm-workflow 프로젝트 설정을 시작해줘",
+      "$gx-pm-workflow 명세 5종을 만들어줘"
+    ]
   }
 }

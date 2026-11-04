@@ -1,9 +1,9 @@
 ---
 name: load-project-profile
-description: 작업 폴더에서 프로젝트 프로파일(profile.json)을 탐지·로드하고 활성 프로젝트를 설정합니다.
+description: "작업 폴더의 프로젝트 프로파일(profile.json)을 확인하고 활성 프로젝트를 설정할 때 사용한다."
 ---
 
-# 프로젝트 프로파일 로드 (load-project-profile)
+# 프로젝트 프로파일 불러오기
 
 모든 커맨드의 **Step 0**에서 자동 호출되는 스킬.
 작업 폴더에서 프로젝트 프로파일을 찾아 로드하고, 이후 커맨드가 프로파일 정보를 활용할 수 있게 한다.

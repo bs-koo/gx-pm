@@ -1163,17 +1163,22 @@ class VersionConsistencyTest(unittest.TestCase):
         )
 
     def test_설명문의_스킬_커맨드_수가_실제와_같다(self):
+        # 개수는 README 배지·트리에서 필수로 검증한다. 짧은 제품 소개는
+        # 개수 나열을 강제하지 않되, 표기했다면 실제 구성과 대조한다.
+        codex = json.loads((PLUGIN_ROOT / ".codex-plugin/plugin.json").read_text(encoding="utf-8"))
         for label, description in [
             ("plugin.json", self.plugin_json["description"]),
             ("marketplace.json", self.marketplace["plugins"][0]["description"]),
+            ("codex-plugin.json", codex["description"]),
+            ("marketplace metadata", self.marketplace["metadata"]["description"]),
         ]:
             with self.subTest(매니페스트=label):
-                self.assertEqual(
-                    int(re.search(r"(\d+)개 스킬", description).group(1)), self.skill_count
-                )
-                self.assertEqual(
-                    int(re.search(r"커맨드 (\d+)개", description).group(1)), self.command_count
-                )
+                self.assertTrue(description.strip())
+                self.assertEqual(description, self.plugin_json["description"])
+                for pattern, expected in ((r"(\d+)개 스킬", self.skill_count),
+                                          (r"커맨드 (\d+)개", self.command_count)):
+                    for match in re.finditer(pattern, description):
+                        self.assertEqual(int(match.group(1)), expected)
 
 
 class EvidenceRuleTest(unittest.TestCase):
