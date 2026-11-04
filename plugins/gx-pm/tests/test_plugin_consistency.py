@@ -1159,7 +1159,12 @@ class VersionConsistencyTest(unittest.TestCase):
             ("marketplace metadata", self.marketplace["metadata"]["description"]),
         ]:
             with self.subTest(매니페스트=label):
+                self.assertTrue(description.strip())
                 self.assertEqual(description, canonical)
+                for pattern, expected in ((r"(\d+)개 스킬", self.skill_count),
+                                          (r"커맨드 (\d+)개", self.command_count)):
+                    for match in re.finditer(pattern, description):
+                        self.assertEqual(int(match.group(1)), expected)
 
 
 class EvidenceRuleTest(unittest.TestCase):
