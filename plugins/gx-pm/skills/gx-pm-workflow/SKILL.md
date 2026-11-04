@@ -1,9 +1,9 @@
 ---
 name: gx-pm-workflow
-description: Use in Codex for gx-pm public-sector/SI project setup, the five-document specification pipeline, individual specification documents, or executing a unit-test plan against a local application through APIs and browser interactions and recording observed results. Also use for 프로젝트 설정, 명세일괄, 요구사항정의서, 기능명세서, 테이블정의서, 단위테스트계획서, 추적매트릭스, 수행 결과 반영.
+description: "Codex에서 공공·SI 프로젝트 설정, 명세일괄 또는 요구사항정의서·기능명세서·테이블정의서·단위테스트계획서·추적매트릭스 작성과 로컬 테스트 실행·결과 반영을 요청할 때 사용한다."
 ---
 
-# gx-pm Codex 진입점
+# GX PM 프로젝트·명세 워크플로
 
 이 스킬은 기존 gx-pm 커맨드의 Codex 어댑터다. 업무 규칙은 복제하지 않는다.
 

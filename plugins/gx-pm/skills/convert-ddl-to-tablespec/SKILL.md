@@ -1,9 +1,9 @@
 ---
 name: convert-ddl-to-tablespec
-description: DDL(Create Table SQL)을 DE-08 테이블정의서 형식으로 변환합니다. ERDCloud, DataGrip, DBeaver 등에서 복사한 DDL을 지원합니다.
+description: "DDL을 테이블정의서(DE-08)로 변환할 때 사용한다. ERDCloud·DataGrip·DBeaver 등에서 추출한 DDL을 지원한다."
 ---
 
-# DDL → 테이블정의서 변환 (convert-ddl-to-tablespec)
+# DDL 기반 테이블정의서 작성
 
 DDL(Create Table SQL)을 파싱하여, DE-08 테이블정의서 양식에 맞는 구조화된 데이터를 생성한다.
 ERDCloud, DataGrip, DBeaver 등 다양한 출처의 DDL을 지원한다.

@@ -1,9 +1,9 @@
 ---
 name: generate-function-spec
-description: 승인된 요구사항정의서(AN-02)에서 기능을 도출하여 AN-03 기능명세서를 생성합니다. 입력항목·처리내용·출력결과를 채웁니다.
+description: "승인된 요구사항정의서(AN-02)에서 기능을 도출하고 입력항목·처리내용·출력결과를 기능명세서(AN-03)에 정의할 때 사용한다."
 ---
 
-# 기능명세 생성 (generate-function-spec)
+# 기능명세서 작성
 
 승인된 AN-02 요구사항정의서를 읽어 기능 단위로 재구성한다.
 양식 정본은 `templates/AN-03-function-spec.md` 다.

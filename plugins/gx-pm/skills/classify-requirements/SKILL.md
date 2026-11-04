@@ -1,9 +1,9 @@
 ---
 name: classify-requirements
-description: 추출된 요구사항의 비기능 세부 유형을 가르고, 업무 대분류/중분류와 공공/SI 5단계 우선순위를 자동 지정합니다. 기능/비기능 판정 자체는 extract-requirements 가 정본입니다.
+description: "추출된 요구사항의 업무 분류, 비기능 세부 유형과 공공·SI 우선순위를 정리할 때 사용한다. 기능·비기능 판정은 extract-requirements를 따른다."
 ---
 
-# 요구사항 분류 (classify-requirements)
+# 요구사항 분류
 
 추출된 요구사항 목록의 비기능 세부 유형을 가르고, 업무 영역별 대분류/중분류를 키워드 기반으로 자동 추론한다. 공공/SI 프로젝트 특화 5단계 우선순위를 함께 부여한다.
 **기능/비기능 판정 자체는 이 스킬이 정하지 않는다** — `skills/extract-requirements/SKILL.md` 의 「기능 / 비기능 판정 (정본)」 이 정본이고, 이 스킬은 그 결과를 인계받는다.

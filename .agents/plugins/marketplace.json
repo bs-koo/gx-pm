@@ -1,7 +1,7 @@
 {
   "name": "gx-pm",
   "interface": {
-    "displayName": "gx-pm"
+    "displayName": "GX PM"
   },
   "plugins": [
     {
