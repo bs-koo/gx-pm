@@ -19,6 +19,9 @@ import io
 import argparse
 import math
 import unicodedata
+import hashlib
+import tempfile
+import json
 from pathlib import Path
 
 # 목록 표지는 마커 뒤에 공백이 온다("- 항목", "1. 항목").
@@ -220,9 +223,21 @@ def parse_markdown_tables(text: str) -> list[tuple[str, list[str]]]:
     lines = text.split("\n")
     current_table: list[str] = []
     table_title = ""
+    fence = None
 
     for i, line in enumerate(lines):
         stripped = line.strip()
+        marker = re.match(r"^(`{3,}|~{3,})(.*)$", stripped)
+        if fence:
+            if marker and marker[1][0] == fence[0] and len(marker[1]) >= len(fence) and not marker[2].strip():
+                fence = None
+            continue
+        if marker:
+            if current_table:
+                tables.append((table_title, current_table))
+                current_table, table_title = [], ""
+            fence = marker[1]
+            continue
         if stripped.startswith("|") and stripped.endswith("|"):
             if not current_table:
                 # 표 직전의 제목(### 등)을 찾는다.
@@ -294,7 +309,19 @@ def table_lines_to_rows(table_lines: list[str]) -> list[list[str]]:
     rows = []
     for line in table_lines:
         # 구분선 ( |---|---| ) 건너뛰기
-        cells = [strip_markdown(c.strip()) for c in line.split("|")[1:-1]]
+        # 홀수 개의 역슬래시 뒤 파이프는 구분자가 아니라 셀 내용이다.
+        cells, cell, slashes = [], [], 0
+        for char in line.strip()[1:-1]:
+            if char == "|" and slashes % 2 == 0:
+                cells.append(strip_markdown("".join(cell).strip()))
+                cell = []
+            elif char == "|":
+                cell.pop()  # 파이프를 이스케이프한 역슬래시만 제거한다.
+                cell.append(char)
+            else:
+                cell.append(char)
+            slashes = slashes + 1 if char == "\\" else 0
+        cells.append(strip_markdown("".join(cell).strip()))
         if cells and not all(re.match(r"^[\s\-:]+$", c) for c in cells):
             rows.append(cells)
     return rows
@@ -671,16 +698,126 @@ def _fit_row_heights(ws, header_row):
               "원문은 보존되어 있으며 수식 입력줄에서 전체 내용을 확인할 수 있습니다.", file=sys.stderr)
 
 
+def _validate_tables(file_tables, draft):
+    """최종 산출물의 구조와 식별자를 변환 전에 검증한다. 보조 표는 양식을 강제하지 않는다."""
+    keys = {"요구사항정의서": ("요구사항ID",), "기능명세서": ("기능ID",),
+            "단위테스트계획서": ("테스트ID",), "단위테스트결과서": ("테스트ID",),
+            "테이블정의서": ("테이블명", "컬럼명")}
+    for filename, tables in file_tables:
+        primary = detect_document_type(filename)
+        found, seen = set(), set()
+        for title, lines in tables:
+            rows = table_lines_to_rows(lines)
+            if not rows:
+                continue
+            header = rows[0]
+            if len(header) != len(set(header)) or any(not c for c in header):
+                raise ValueError(f"{filename} / {title}: 비어 있거나 중복된 헤더")
+            for number, row in enumerate(rows[1:], 2):
+                if len(row) != len(header):
+                    raise ValueError(f"{filename} / {title} {number}행: 열 수 {len(row)} ≠ {len(header)}")
+            kind = resolve_doc_type(header, primary)
+            index, columns = _best_column_set(header, kind)
+            if index is None:
+                continue
+            missing = [c for c in columns if c not in header]
+            if missing:
+                raise ValueError(f"{filename} / {title}: 필수 열 누락 — {', '.join(missing)}")
+            unexpected = [c for c in header if c not in columns]
+            if unexpected:
+                raise ValueError(f"{filename} / {title}: 양식에 없는 열 — {', '.join(unexpected)}")
+            if kind == primary:
+                found.add(index)
+            prior_table = ""
+            for row in rows[1:]:
+                rec = dict(zip(header, row))
+                if not draft and kind not in ("확인요청서", "개정이력") and any(
+                    re.search(r"\[(?:미확정|가정)(?:\s*[:：][^\]]*)?\]", value) for value in row
+                ):
+                    raise ValueError(f"{filename}: 미확정·가정이 남았습니다. 확인 후 확정하거나 --draft로 출력하세요")
+                if kind in keys:
+                    if kind == "테이블정의서":
+                        table_name = rec.get("테이블명", "")
+                        if table_name and table_name != "〃":
+                            prior_table = table_name
+                        rec["테이블명"] = prior_table
+                    identity = tuple(rec.get(c, "") for c in keys[kind])
+                    if not all(identity):
+                        raise ValueError(f"{filename}: 식별자 공란 — {identity}")
+                    token = (kind, identity)
+                    if token in seen:
+                        raise ValueError(f"{filename}: 중복 식별자 — {' / '.join(identity)}")
+                    seen.add(token)
+        if primary:
+            expected = set(range(len(DOCUMENT_PROFILES[primary]["columns"])))
+            if found != expected:
+                raise ValueError(f"{filename}: 산출물 본문 표가 없거나 필수 시트가 누락됐습니다")
+
+
+def _file_hash(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
+
+
+def _confirmation_records(rows):
+    """제목 행 유무와 무관하게 응답 시트에서 (종류, CQ)별 원문 행을 읽는다."""
+    columns = DOCUMENT_PROFILES["확인요청서"]["columns"]
+    for i, row in enumerate(rows[:3]):
+        header = [str(v or "") for v in row]
+        for index in (1, 2):
+            target = columns[index]
+            if not set(target).issubset(header):
+                continue
+            for values in rows[i + 1:]:
+                rec = dict(zip(header, [str(v) if v is not None else "" for v in values]))
+                cq = rec.get("항목번호", "")
+                if not cq:
+                    continue
+                answer_cols = ("판정", "정정값", "비고") if index == 1 else ("상태", "응답", "확정일")
+                answered = any(rec.get(c, "") and not (c == "상태" and rec[c] == "대기")
+                               for c in answer_cols)
+                yield (index, cq), (tuple(rec.get(c, "") for c in target), answered)
+            return
+
+
+def _check_confirmation_overwrite(path, file_tables, baseline_hash):
+    current_hash = _file_hash(path)
+    if baseline_hash is not None and baseline_hash != current_hash:
+        raise ValueError("확인요청서 기준 해시가 현재 파일과 다릅니다. 최신 응답을 다시 읽으세요")
+    if not path.exists():
+        return current_hash
+    incoming = {}
+    for _, tables in file_tables:
+        for _, lines in tables:
+            incoming.update(_confirmation_records(table_lines_to_rows(lines)))
+    wb = ensure_openpyxl().load_workbook(path, read_only=True, data_only=False)
+    try:
+        protected = []
+        for ws in wb:
+            for key, (original, answered) in _confirmation_records(list(ws.values)):
+                if answered and incoming.get(key, (None,))[0] != original:
+                    protected.append(key[1])
+        if protected and baseline_hash is None:
+            raise ValueError(f"확인요청서 응답 덮어쓰기 차단: {', '.join(protected)}. "
+                             "최신 응답을 읽어 반영·백업한 뒤 기준 SHA-256을 지정하세요")
+    finally:
+        wb.close()
+    return current_hash
+
+
 def create_xlsx(
     file_tables: list[tuple[str, list[tuple[str, list[str]]]]],
     output_path: str,
     draft: bool = False,
+    strict: bool = False,
+    confirmation_base_hash: str | None = None,
 ) -> tuple[str, int]:
     """
     file_tables: [(파일명, [(표제목, 표라인[]), ...]), ...]
 
     동일 파일 내 같은 컬럼 구조의 표는 하나의 시트로 병합한다.
     """
+    if strict:
+        _validate_tables(file_tables, draft)
     openpyxl = ensure_openpyxl()
     from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
     from openpyxl.utils import get_column_letter
@@ -813,9 +950,14 @@ def create_xlsx(
             for row_idx, row in enumerate(rows):
                 sheet_row = row_idx + 1 + row_offset
                 for col_idx, value in enumerate(row):
+                    if len(value) > 32767:
+                        raise ValueError(f"{filename} / {sheet_name} {sheet_row}행 {col_idx + 1}열: "
+                                         f"{len(value)}자는 Excel 셀 한도 32767자를 넘습니다. 원문을 분리하세요")
                     cell = ws.cell(
                         row=sheet_row, column=col_idx + 1, value=value
                     )
+                    # 명세에 쓰인 '=1+1' 같은 입력도 수식이 아닌 원문으로 보존한다.
+                    cell.data_type = "s"
                     cell.border = thin_border
 
                     if row_idx == 0:
@@ -882,13 +1024,60 @@ def create_xlsx(
             ws.evenHeader.center.text = ws.oddHeader.center.text
             ws.firstHeader.center.text = ws.oddHeader.center.text
 
-    wb.save(output_path)
+    target = Path(output_path)
+    response_headers = DOCUMENT_PROFILES["확인요청서"]["columns"][1:3]
+    is_confirmation = False
+    for filename, tables in file_tables:
+        if detect_document_type(filename) == "확인요청서":
+            is_confirmation = True
+        for _, lines in tables:
+            rows = table_lines_to_rows(lines)
+            if rows and any(set(header).issubset(rows[0]) for header in response_headers):
+                is_confirmation = True
+    before_hash = _check_confirmation_overwrite(target, file_tables, confirmation_base_hash) if is_confirmation else None
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=target.parent, suffix=".xlsx", delete=False) as handle:
+            temporary = Path(handle.name)
+        wb.save(temporary)
+        if is_confirmation and _file_hash(target) != before_hash:
+            raise ValueError("확인요청서 저장 중 응답 파일이 변경됐습니다. 최신 응답을 다시 읽으세요")
+        os.replace(temporary, target)
+    finally:
+        wb.close()
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
     return output_path, len(wb.sheetnames)
 
 
 # ──────────────────────────────────────
 # 메인
 # ──────────────────────────────────────
+
+def _validate_review_state(path, text, draft):
+    if draft or detect_document_type(path.name) in (None, "개정이력", "확인요청서"):
+        return
+    if re.search(r"^>\s*검토상태:\s*(?:초안|부분확정)", text, re.MULTILINE):
+        raise ValueError(f"{path.name}: 검토가 끝나지 않았습니다. --draft로 출력하세요")
+    state_path = path.parent / "requirements-state.json"
+    if not state_path.exists():
+        return  # 기존 프로젝트에는 태그·표 구조 검증을 적용한다.
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        if state.get("schemaVersion") != 1 or not isinstance(state.get("documents", {}), dict):
+            raise ValueError("지원하지 않는 상태 구조")
+        code = {"요구사항정의서": "AN-02", "기능명세서": "AN-03", "테이블정의서": "DE-08",
+                "단위테스트계획서": "DE-13", "단위테스트결과서": "IM-03", "추적매트릭스": "AN-05"}
+        rec = state.get("documents", {}).get(code.get(detect_document_type(path.name)), {})
+        if not isinstance(rec, dict):
+            raise ValueError("문서 상태 형식 오류")
+        if rec.get("status") in ("초안", "부분확정") or rec.get("openCQ") or rec.get("upstreamChanges"):
+            raise ValueError("미결 확인 항목 또는 미반영 상위 변경")
+        if rec.get("contentHash") and rec["contentHash"] != _file_hash(path):
+            raise ValueError("승인 기준과 현재 문서의 내용이 다름")
+    except (ValueError, TypeError, AttributeError) as error:
+        raise ValueError(f"{path.name}: 검토 상태를 확인하세요 — {error}") from error
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -920,6 +1109,8 @@ def main():
         help="각 md 파일을 별도 xlsx로 생성 (기본: 하나의 xlsx에 통합)",
     )
     parser.add_argument("--draft", action="store_true", help="검토용초안 파일명·시트 제목·인쇄 머리말로 출력 (최종본 보존)")
+    parser.add_argument("--strict", action="store_true", help="양식·식별자·미결 항목·검토 상태를 검증 (업무 산출물 권장)")
+    parser.add_argument("--confirmation-base-sha256", help="응답을 읽어 반영·백업한 기존 확인요청서의 SHA-256")
 
     args = parser.parse_args()
 
@@ -945,7 +1136,8 @@ def main():
         text = sys.stdin.read()
         tables = parse_markdown_tables(text)
         out = args.output or "output.xlsx"
-        result, total_sheets = create_xlsx([("stdin", tables)], out, draft=args.draft)
+        result, total_sheets = create_xlsx([("stdin", tables)], out, draft=args.draft,
+                                          strict=args.strict, confirmation_base_hash=args.confirmation_base_sha256)
         print(f"✅ 생성 완료: {result} ({total_sheets}개 시트)")
         return
 
@@ -963,13 +1155,16 @@ def main():
             out_dir.mkdir(parents=True, exist_ok=True)
         for md_file in md_files:
             text = md_file.read_text(encoding="utf-8")
+            if args.strict:
+                _validate_review_state(md_file, text, args.draft)
             tables = parse_markdown_tables(text)
             if out_dir is not None:
                 out = out_dir / f"{md_file.stem}.xlsx"
             else:
                 out = md_file.with_suffix(".xlsx")
             if tables:
-                result, total_sheets = create_xlsx([(md_file.name, tables)], str(out), draft=args.draft)
+                result, total_sheets = create_xlsx([(md_file.name, tables)], str(out), draft=args.draft,
+                                                  strict=args.strict, confirmation_base_hash=args.confirmation_base_sha256)
                 print(f"✅ {md_file.name} → {result} ({total_sheets}개 시트)")
             else:
                 print(f"⚠ {md_file.name}: 표가 없어 건너뜁니다")
@@ -978,6 +1173,8 @@ def main():
         all_tables = []
         for md_file in md_files:
             text = md_file.read_text(encoding="utf-8")
+            if args.strict:
+                _validate_review_state(md_file, text, args.draft)
             tables = parse_markdown_tables(text)
             if tables:
                 all_tables.append((md_file.name, tables))
@@ -995,9 +1192,14 @@ def main():
             prefix = prefix_match.group(1) if prefix_match else "output"
             out = f"{prefix}-산출물.xlsx"
 
-        result, total_sheets = create_xlsx(all_tables, out, draft=args.draft)
+        result, total_sheets = create_xlsx(all_tables, out, draft=args.draft,
+                                          strict=args.strict, confirmation_base_hash=args.confirmation_base_sha256)
         print(f"✅ 생성 완료: {result} ({total_sheets}개 시트)")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except ValueError as error:
+        print(f"오류: {error}", file=sys.stderr)
+        sys.exit(2)

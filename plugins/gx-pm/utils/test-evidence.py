@@ -98,7 +98,9 @@ def _resolve(head: list[str], rows: list[tuple[int, list[str], bool]]) -> list[d
 
 
 def fingerprint(rec: dict) -> str:
-    parts = [re.sub(r"\s+", " ", rec.get(f, "") or "").strip() for f in CASE_FIELDS]
+    # 입력 문자열의 공백도 테스트 데이터다. 내부 공백이 바뀐 이전 증적을 재사용하지 않는다.
+    parts = [((rec.get(f, "") or "").strip() if f == "입력" else
+              re.sub(r"\s+", " ", rec.get(f, "") or "").strip()) for f in CASE_FIELDS]
     return hashlib.sha256("\x1f".join(parts).encode("utf-8")).hexdigest()[:8]
 
 

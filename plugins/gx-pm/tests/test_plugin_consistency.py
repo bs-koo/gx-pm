@@ -483,25 +483,11 @@ class CommandStructureTest(unittest.TestCase):
             "— 커맨드 이름은 `gx-` 뒤가 전부 한글이어야 합니다",
         )
 
-    def test_파이프라인과_설정_커맨드가_순서를_보여준다(self):
-        """목록은 가나다순으로 뜨므로 실행 순서가 드러나지 않는다.
-
-        제일 먼저 써야 할 `/gx-프로젝트설정` 이 ㅍ이라 맨 아래로 가고,
-        두 번째인 `/gx-명세일괄` 은 중간에 묻힌다. description 앞머리의
-        번호가 목록에서 그 순서를 대신 알려준다.
-        """
-        for 커맨드, 번호 in (("gx-프로젝트설정", "①"), ("gx-명세일괄", "②")):
-            with self.subTest(커맨드=커맨드):
-                본문 = (PLUGIN_ROOT / "commands" / f"{커맨드}.md").read_text(
-                    encoding="utf-8"
-                )
-                설명 = re.search(r"^description:\s*\"?(.*)$", 본문, re.M)
-                self.assertIsNotNone(설명, f"{커맨드} 의 description 을 찾지 못했습니다")
-                self.assertTrue(
-                    설명.group(1).lstrip().startswith(번호),
-                    f"{커맨드} description 이 {번호} 로 시작하지 않습니다 "
-                    "— 가나다순 목록에서 실행 순서가 안 보입니다",
-                )
+    def test_README가_등록된_모든_커맨드를_안내한다(self):
+        """설치 후 작업을 선택하는 공개 안내가 실제 커맨드 목록과 일치해야 한다."""
+        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        documented = set(re.findall(r"`/(gx-[가-힣A-Za-z-]+)`", readme))
+        self.assertEqual(documented, command_names())
 
     def test_다음_제안의_커맨드가_백틱으로_감싸져_있다(self):
         맨커맨드 = re.compile(r"(?<![`/\w])/gx-[가-힣A-Za-z-]+")
@@ -1162,18 +1148,18 @@ class VersionConsistencyTest(unittest.TestCase):
             "— 스킬을 추가/삭제했다면 트리의 주석과 디렉터리 목록도 함께 갱신하세요",
         )
 
-    def test_설명문의_스킬_커맨드_수가_실제와_같다(self):
+    def test_플러그인_소개가_두_환경과_마켓플레이스에서_일치한다(self):
+        codex = json.loads(
+            (PLUGIN_ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8")
+        )
+        canonical = self.plugin_json["description"]
         for label, description in [
-            ("plugin.json", self.plugin_json["description"]),
+            ("Codex", codex["description"]),
             ("marketplace.json", self.marketplace["plugins"][0]["description"]),
+            ("marketplace metadata", self.marketplace["metadata"]["description"]),
         ]:
             with self.subTest(매니페스트=label):
-                self.assertEqual(
-                    int(re.search(r"(\d+)개 스킬", description).group(1)), self.skill_count
-                )
-                self.assertEqual(
-                    int(re.search(r"커맨드 (\d+)개", description).group(1)), self.command_count
-                )
+                self.assertEqual(description, canonical)
 
 
 class EvidenceRuleTest(unittest.TestCase):
@@ -1627,13 +1613,14 @@ class RequirementStatusValueTest(unittest.TestCase):
         )
         self.assertNotIn("신규", 상태열값, "판정표의 상태 열에 `신규`가 남아 있습니다")
 
-    def test_상태_판정표가_네_갈래를_모두_덮는다(self):
+    def test_상태_판정표가_전체본과_부분본을_구분한다(self):
         갈래 = self._상태_판정표_행()
         대조결과들 = "\n".join(행[0] for 행 in 갈래)
-        for 표지 in ("입력에만 있음", "동일", "다름", "기존에만 있음"):
+        for 표지 in ("입력에만 있음", "동일", "다름", "전체 개정본", "부분 수정·추가 자료"):
             with self.subTest(갈래=표지):
                 self.assertIn(표지, 대조결과들, f"'{표지}' 갈래가 판정표에 없습니다")
-        self.assertEqual(len(갈래), 4, f"판정표 행이 4개가 아닙니다: {len(갈래)}개")
+        부분행 = next(행 for 행 in 갈래 if "부분 수정·추가 자료" in 행[0])
+        self.assertNotIn("`삭제`", 부분행[1], "부분 자료 누락을 삭제로 처리합니다")
 
     def test_최초_작성도_유지로_성립한다는_근거가_있다(self):
         """`유지`가 '이번 개정에서 손대지 않음'으로 정의되어 최초 작성에도 성립함을
@@ -3075,8 +3062,8 @@ class CounterQuestionTest(unittest.TestCase):
         행 = re.search(r"^\|[^\n|]*값 대신 질문[^\n|]*\|[^\n]*$", 절, re.M)
         self.assertIsNotNone(행, "분기표에 「값 대신 질문」 행이 없습니다")
         self.assertIn(
-            "파일로 답한다", 행.group(0),
-            "되질문에 대화로 답하지 않는다는 것이 분기표에 없습니다",
+            "실제 판단을 받는다", 행.group(0),
+            "설명 요청을 값 확정으로 처리하지 않도록 실제 판단을 받아야 합니다",
         )
 
     def test_되질문_절이_세_성격을_가른다(self):
@@ -3085,12 +3072,10 @@ class CounterQuestionTest(unittest.TestCase):
         )
         self.assertIsNotNone(구간, "§되질문에 답한다 절이 없습니다")
         절 = 구간.group(1)
-        self.assertRegex(
-            절, r"대화로 답하지 않는다",
-            "대화로 답하지 않는다는 규칙이 없습니다",
-        )
-        for 성격, 처리 in (("설명해달라", "답을 먼저 적고"), ("네가 정해라", "가정"),
-                          ("선택지", "근거")):
+        self.assertNotIn("대화로 답하지 않는다", 절)
+        self.assertIn("그 답도 파일 이력에 남긴다", 절)
+        for 성격, 처리 in (("설명해달라", "AI 추천"), ("네가 정해라", "가정"),
+                          ("선택지", "직접 의견")):
             with self.subTest(성격=성격):
                 행 = re.search(rf"^\|[^\n|]*{re.escape(성격)}[^\n|]*\|[^\n]*$", 절, re.M)
                 self.assertIsNotNone(행, f"「{성격}」 갈래가 없습니다")

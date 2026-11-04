@@ -1,9 +1,9 @@
 ---
 name: load-project-profile
-description: 작업 폴더에서 프로젝트 프로파일(profile.json)을 탐지·로드하고 활성 프로젝트를 설정합니다.
+description: "작업 폴더의 프로젝트 프로파일(profile.json)을 확인하고 활성 프로젝트를 설정할 때 사용한다."
 ---
 
-# 프로젝트 프로파일 로드 (load-project-profile)
+# 프로젝트 프로파일 불러오기
 
 모든 커맨드의 **Step 0**에서 자동 호출되는 스킬.
 작업 폴더에서 프로젝트 프로파일을 찾아 로드하고, 이후 커맨드가 프로파일 정보를 활용할 수 있게 한다.
@@ -42,7 +42,7 @@ Glob 패턴: profile.json, */profile.json
 profile.json 파일이 존재하지만 JSON 파싱에 실패하거나, 필수 필드(`name`, `type`, `systemCode`, `prefix`, `framework`, `db`, `author`, `networkType`)가 누락된 경우:
 
 **`idNaming`·`assets`·`policy` 는 선택 필드다** — 없어도 여기서 막지 않는다.
-`policy` 는 `/gx-명세일괄` Step 0-4 가 묻고 저장하며, 단독 커맨드는 기본값으로 돈다
+`policy`는 일괄·단독 모두 원문을 읽고 이번 작성에 필요한 미정 정책만 확인·저장한다
 (`templates/pipeline-protocol.md` §질문 정책). 기존 프로파일이 이 필드 없이도
 계속 동작해야 한다.
 

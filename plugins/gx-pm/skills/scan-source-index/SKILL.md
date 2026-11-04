@@ -1,9 +1,9 @@
 ---
 name: scan-source-index
-description: 소스코드를 3단계로 점진 스캔하여 source-index.json에 캐싱합니다. 토큰을 최소화하면서 프로젝트 구조를 파악합니다.
+description: "프로젝트 구조를 단계적으로 조사하고 source-index.json에 색인을 작성·캐시할 때 사용한다."
 ---
 
-# 소스코드 스캔 인덱서 (scan-source-index)
+# 소스 코드 색인 관리
 
 소스코드 프로젝트를 점진적으로 스캔하여 구조를 파악한다.
 풀스캔 대신 3단계 점진 스캔으로 토큰 사용을 최소화한다.

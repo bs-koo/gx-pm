@@ -1,9 +1,9 @@
 ---
 name: gx-pm-workflow
-description: Use in Codex for gx-pm public-sector/SI project setup, the five-document specification pipeline, individual specification documents, or executing a unit-test plan against a local application through APIs and browser interactions and recording observed results. Also use for 프로젝트 설정, 명세일괄, 요구사항정의서, 기능명세서, 테이블정의서, 단위테스트계획서, 추적매트릭스, 수행 결과 반영.
+description: "Codex에서 공공·SI 프로젝트 설정, 명세일괄 또는 요구사항정의서·기능명세서·테이블정의서·단위테스트계획서·추적매트릭스 작성과 로컬 테스트 실행·결과 반영을 요청할 때 사용한다."
 ---
 
-# gx-pm Codex 진입점
+# GX PM 프로젝트·명세 워크플로
 
 이 스킬은 기존 gx-pm 커맨드의 Codex 어댑터다. 업무 규칙은 복제하지 않는다.
 
@@ -26,6 +26,6 @@ description: Use in Codex for gx-pm public-sector/SI project setup, the five-doc
 4. `templates/approval-protocol.md`의 필요한 판단과 파이프라인 게이트를 유지한다. 단순 안내를 질문으로 바꾸거나 본문·개정이력·출력 형식 승인을 중복하지 않는다. Codex의 시스템·개발자·사용자 지시가 도구 선택이나 승인 권한을 다르게 정하면 그 지시를 우선하되, 산출물 확정에 필요한 실제 사용자 응답은 생략하지 않는다.
 5. 테이블정의서와 명세일괄은 `templates/prerequisites.md`에 따라 `sqi-comn-term` MCP가 하드 선행조건이다. 정본의 실제 연결 확인을 적용하고, 도구 부재·호출 실패 시 `docs/표준용어-mcp-연계.md`의 Codex CLI / 앱 설치·도메인 전환·재연결 안내를 보여주고 해당 워크플로를 중단한다. 서버를 임의로 대체하거나 표준 용어를 추측하지 않는다.
 6. 단위테스트 수행 결과 반영은 공통 커맨드·스킬에 따라 로컬 프로젝트를 기동하고 현재 제공된 실행·HTTP·브라우저 도구로 계획서 행을 수행한다. `utils/test-evidence.py`(Python 3.10+, 표준 라이브러리)는 플러그인 루트 기준으로 호출하여 계획서 읽기와 실행 증적 검증·문서 기록에 사용한다. 사용 가능한 브라우저 도구가 없으면 공통 스킬의 미검증 규칙을 따른다. 원본 소스와 계획서는 수정하지 않으며, 로컬 빌드·시험 데이터·실행 증적은 실제 수행 과정에서 생성될 수 있다.
-7. xlsx 추출을 요청받으면 원본 커맨드와 `templates/approval-protocol.md`에 지정된 시점에 `utils/export-xlsx.py`를 사용한다. 명령 경로 역시 설치된 플러그인 루트 기준이다.
+7. xlsx 추출을 요청받으면 원본 커맨드와 `templates/approval-protocol.md`에 지정된 시점에 `utils/export-xlsx.py --strict --separate`를 사용한다. 명령 경로 역시 설치된 플러그인 루트 기준이다. 검토용 초안·확인요청서 응답 보존도 같은 공통 규칙을 따른다.
 
 확인요청서는 명세 5개 커맨드 모두 **review-confirmations**를 통해 수집·발행한다. Codex의 비동기 입력은 질문 호출 완료가 응답 완료가 아니므로, 그 답에 의존하는 저장·확정은 기다린다. 자유 입력 질문은 도구가 지원하면 옵션 없이 구성한다.

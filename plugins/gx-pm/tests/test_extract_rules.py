@@ -182,9 +182,11 @@ class ExtractRuleDocTest(unittest.TestCase):
     def test_중복_제거_규칙이_있다(self):
         self.assertIn("중복 제거", self.text)
         self.assertIn(
-            "같은 원문 ID 는 요구사항 **1건**으로 센다", self.text,
-            "중복 제거 규칙이 몇 건으로 세라고 말하지 않습니다",
+            "같은 자료·원문 ID·내용을 두 번 추출한 경우만 중복으로 제거", self.text,
+            "자료·판본이 다른 같은 ID를 잘못 합칠 수 있습니다",
         )
+        self.assertIn("충돌 후보로 보존", self.text)
+        self.assertIn("분할한 여러 요구에 원문 ID", self.text)
 
     def test_기능_비기능_판정_순서가_있다(self):
         """판정 순서를 실제로 검사한다.
