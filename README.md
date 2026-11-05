@@ -1,6 +1,6 @@
 <div align="center">
 
-# gx-pm
+# GX PM
 
 **요구사항부터 테스트까지, 바뀌어도 이어지는 프로젝트 문서.**
 
@@ -11,7 +11,7 @@
 [![Commands](https://img.shields.io/badge/commands-9-orange.svg)](#커맨드)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#license)
 
-[동작 방식](#플러그인-동작) · [시작하기](#시작하기) · [커맨드](#커맨드) · [스킬](#스킬-구성)
+[동작 방식](#플러그인-동작) · [시작하기](#시작하기) · [커맨드](#커맨드) · [스킬](#스킬-구성) · [상세 가이드](USAGE.md)
 
 </div>
 
@@ -28,9 +28,25 @@
 3. **문서를 연결합니다.** 확정된 요구사항을 기능·데이터·테스트 명세로 구체화하고, 문서 사이의 연계와 누락을 검토합니다.
 4. **검토한 결과를 전달합니다.** Markdown을 기준으로 관리하고 Excel로 제공합니다. 미결이 남은 문서는 최종본과 검토용 초안을 구분합니다.
 
-**요구사항정의서만 먼저 작성해도 됩니다.** 명세일괄은 요구사항정의서·기능명세서·테이블정의서·단위테스트계획서·추적매트릭스 **5종**을 작성합니다. 이후 요구사항이 바뀌면 기존 ID와 유효한 응답을 유지하고, 영향받는 문서와 미반영 변경을 확인합니다.
+**요구사항정의서만 먼저 작성해도 됩니다.** 명세일괄은 아래 명세 5종을 작성합니다. 이후 요구사항이 바뀌면 기존 ID와 유효한 응답을 유지하고, 영향받는 문서와 미반영 변경을 확인합니다.
 
 계획서 작성 후 실제 시험을 요청하면 로컬 프로젝트의 API·필요한 화면을 조작하고, 관측 결과와 증적을 **단위테스트결과서(IM-03)**에 기록합니다.
+
+<details>
+<summary>받을 수 있는 문서</summary>
+
+| 산출물 | 담는 내용 |
+|---|---|
+| 요구사항정의서 · AN-02 | 요구사항, 출처, 분류와 변경 근거 |
+| 기능명세서 · AN-03 | 기능별 입력·처리·출력과 요구사항 연계 |
+| 테이블정의서 · DE-08 | DDL 기반 스키마, 제약과 표준 검토 |
+| 단위테스트계획서 · DE-13 | 실행 조건, 입력과 기대결과 |
+| 추적매트릭스 · AN-05 | 문서 간 연계, 누락과 검증 현황 |
+| 단위테스트결과서 · IM-03 | 실제 시험의 결과·판정·증적 |
+
+앞의 명세 5종을 먼저 작성하며, 결과서(IM-03)는 실제 시험을 수행할 때 별도로 작성합니다.
+
+</details>
 
 <details>
 <summary>질문과 확인요청서는 어떻게 제공하나요?</summary>
@@ -89,7 +105,7 @@ codex.cmd mcp add sqi-comn-term --url https://term.sqisoft.com/api/v1/mcp
 codex.cmd mcp list
 ```
 
-등록 후 새 세션에서 연결을 확인합니다. Claude 설정과 재연결 방법은 [표준용어 MCP 연계 안내](plugins/gx-pm/docs/표준용어-mcp-연계.md)를 참고하세요.
+등록 후 새 세션에서 `list_categories` 호출이 성공하는지 확인합니다. Claude 설정과 재연결 방법은 [표준용어 MCP 연계 안내](plugins/gx-pm/docs/표준용어-mcp-연계.md)를 참고하세요.
 
 </details>
 
@@ -137,6 +153,8 @@ Claude Code에서는 아래 커맨드를 사용합니다. Codex에서는 `$gx-pm
 | 추적성 | [추적매트릭스 작성](plugins/gx-pm/skills/trace-requirements/SKILL.md) | 문서 간 연계와 누락·검증 현황 대조 |
 
 ## 더 알아보기
+
+요청 예시·기존 문서 수정·확인요청서·Excel 출력·FAQ는 [사용 가이드](USAGE.md)에서 확인할 수 있습니다.
 
 [변경 이력](plugins/gx-pm/CHANGELOG.md) · [공통 실행 안내](plugins/gx-pm/CLAUDE.md) · [문서 작성 기준](plugins/gx-pm/templates/approval-protocol.md) · [보관 문서](plugins/gx-pm/archive/README.md)
 
